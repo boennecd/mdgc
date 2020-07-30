@@ -1,0 +1,122 @@
+---
+output: github_document
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "man/figures/README-",
+  out.width = "100%"
+)
+options(digits = 3)
+```
+# mdgc
+
+TODO: The goal of mdgc is to ...
+
+## Example
+
+```{r sim_dat}
+library(mdgc)
+
+# simulates a data set and puts into a format to pass to C++
+#
+# Args: 
+#   n: number of observations. 
+#   p: number of variables. 
+# 
+# Returns: 
+#   Simluated mask data set in the format needed to pass to C++.
+sim_dat <- function(n, p = 4){
+  # get the covariance matrix
+  Sb <- diag(p)
+  Sb[lower.tri(Sb)] <- Sb[upper.tri(Sb)] <- .5
+  Sb <- Sb / p / 5
+  Sig <- cov2cor(drop(rWishart(1L, 5L * p, Sb)))
+  
+  # draw the observations
+  Z <- truth <- crossprod(chol(Sig), matrix(rnorm(n * p), p))
+  
+  # mask 
+  is_mask <- matrix(runif(n * p) < .33, p)
+  is_int <- ceiling(p / 3):p
+  is_mask[is_int, ] <- is_mask[is_int, ] & Z[is_int, ] < 0
+  
+  Z[ is_int, ][is_mask[ is_int, ]] <- 0
+  Z[-is_int, ][is_mask[-is_int, ]] <- NA_real_
+  
+  # create matrix in the Z format to pass to c++
+  lower <- matrix(-Inf, p, n)
+  upper <- Z
+  # codes are: 
+  #  0: latent Z is observed (upper is the observed point).
+  #  1: latent Z can be anything.. 
+  #  2: latent Z is in an interval. 
+  code <- matrix(0L, p, n)
+  code[-is_int, ][is_mask[-is_int, ]] <- 1L 
+  code[ is_int, ][is_mask[ is_int, ]] <- 2L 
+  
+  list(lower = lower, upper = upper, code = code, Sigma = Sig, 
+       truth = truth)
+}
+
+set.seed(2)
+p <- 4L
+dat <- sim_dat(2000L, p = p)
+dat$lower[, 1:10]
+dat$upper[, 1:10]
+dat$code [, 1:10]
+dat$truth[, 1:10]
+
+# Get pointers to objects in C++
+ptr <- mdgc:::get_log_lm_terms(lower = dat$lower, upper = dat$upper, 
+                               code = dat$code)
+
+# define log marginal likelihood function
+log_ml <- function(vcov, releps = 1e-3, n_threads = 1L)
+  mdgc:::eval_log_lm_terms(
+    ptr = ptr, vcov = vcov, indices = 0:(NCOL(dat$lower) - 1L), 
+    maxpts = 100000L, abseps = -1, releps = releps, n_threads = n_threads)
+
+# print the marginal likelihood at the true parameters
+set.seed(1)
+print(log_ml(dat$Sigma), digits = 7)
+print(log_ml(dat$Sigma, n_threads = 4L), digits = 7)
+sd(replicate(20, log_ml(dat$Sigma, n_threads = 4L)))
+
+# check computation time
+library(microbenchmark)
+microbenchmark(
+  `1 thread`     = log_ml(dat$Sigma), 
+  `2 threads`    = log_ml(dat$Sigma, n_threads = 2L),
+  `4 threads`    = log_ml(dat$Sigma, n_threads = 4L),
+  `lower releps` = log_ml(dat$Sigma, releps = 1e-4), times = 10)
+
+# estimate the parameters
+par_fn <- function(par){
+  set.seed(1)
+  # use log-cholesky parametrization
+  log_sds <- par[1:p]
+  L <- diag(exp(log_sds), p)
+  L[lower.tri(L)] <- par[-(1:p)]
+  Arg <- tcrossprod(L)
+  
+  -log_ml(cov2cor(Arg), n_threads = 4L)
+}
+
+start_val <- c(rep(log(1), p), numeric(p * (p - 1) / 2))
+system.time(opt_out <- optim(start_val, par_fn))
+
+# check the result
+local({
+  par <- opt_out$par
+  log_sds <- par[1:p]
+  L <- diag(exp(log_sds), p)
+  L[lower.tri(L)] <- par[-(1:p)]
+  cov2cor(tcrossprod(L))
+})
+dat$Sigma # the truth 
+```

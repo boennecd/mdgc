@@ -44,11 +44,6 @@ output approximate_integral(
   return out;
 }
 
-int likelihood::get_n_integrands
-(arma::vec const &mu, arma::mat const &sigma) {
-  return 1L;
-}
-
 void likelihood::integrand
 (arma::vec const &draw, likelihood::comp_dat const& dat, arma::vec &out){
 #ifdef DO_CHECKS

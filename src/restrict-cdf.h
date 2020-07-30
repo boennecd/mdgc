@@ -49,12 +49,12 @@ struct output {
 typedef void (*mvkbrv_ptr)(int const*, double*, int const*, double*);
 
 /**
- * sets the function to be approximated.
+ * Sets the function to be approximated.
  */
 void set_mvkbrv_ptr(mvkbrv_ptr);
 
 /**
- * approximates the function set by mvkbrv_ptr.
+ * Approximates the function set by mvkbrv_ptr.
  *
  * @param ndim Dimension of the integral.
  * @param n_integrands Dimension of the integrand.
@@ -68,7 +68,7 @@ output approximate_integral(
 
 /**
  * Approximates the integrals of the multivariate normal cdf over a
- * rectangle from (-Inf, 0)^[# of random effects] where the PDF is
+ * rectangle from (-Inf, 0)^[# of random effects] where the density is
  * multiplied by some function in the integrand.
  *
  * First, call this constructor. Then call the member functions to perform
@@ -110,7 +110,7 @@ class cdf {
 
 public:
   /**
-   * function to be called from mvkbrv.
+   * Function to be called from mvkbrv.
    *
    * @param ndim_in Passed dimension of the integral.
    * @param unifs (0, 1) variables.
@@ -220,6 +220,9 @@ public:
       return out;
     }
 
+    // TODO: there is no variable reordering at the moment. This may reduce
+    // the variance of the estimators.
+
     /* set pointer to this class' member function */
     set_mvkbrv_ptr(&cdf<funcs>::eval_integrand);
     output out =
@@ -240,7 +243,9 @@ public:
     comp_dat(arma::vec const&, arma::mat const&, arma::vec const&) { }
   };
 
-  static int get_n_integrands(arma::vec const&, arma::mat const&);
+  static int constexpr get_n_integrands(arma::vec const&, arma::mat const&){
+    return 1L;
+  }
   static void integrand(arma::vec const&, comp_dat const&,arma::vec&);
   static void post_process(arma::vec&, comp_dat const&);
   constexpr static bool needs_last_unif() {
