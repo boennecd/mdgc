@@ -19,7 +19,7 @@ TODO: The goal of mdgc is to ...
 
 ## Example
 
-```{r sim_dat}
+```{r sim_dat, cache = 1}
 library(mdgc)
 
 # simulates a data set and puts into a format to pass to C++
@@ -64,25 +64,36 @@ sim_dat <- function(n, p = 4){
 }
 
 set.seed(2)
-p <- 4L
+p <- 15L
 dat <- sim_dat(2000L, p = p)
-dat$lower[, 1:10]
-dat$upper[, 1:10]
-dat$code [, 1:10]
-dat$truth[, 1:10]
+dat$lower[, 1:5]
+dat$upper[, 1:5]
+dat$code [, 1:5]
+dat$truth[, 1:5]
 
-# Get pointers to objects in C++
+#####
+# get pointers to objects in C++
 ptr <- mdgc:::get_log_lm_terms(lower = dat$lower, upper = dat$upper, 
                                code = dat$code)
 
-# define log marginal likelihood function
-log_ml <- function(vcov, releps = 1e-3, n_threads = 1L)
+# approximates the log marginal likelihood function
+#
+# Args: 
+#   vcov: correlation matrix
+#   releps: relative error for each term. 
+#   n_threads: number of threads. 
+#   comp_derivs: logical for whether to approximate the gradient. 
+#   indices: integer vector with which terms to include. 
+log_ml <- function(vcov, releps = 1e-2, n_threads = 1L, comp_derivs = FALSE, 
+                   indices = 0:(NCOL(dat$lower) - 1L))
   mdgc:::eval_log_lm_terms(
-    ptr = ptr, vcov = vcov, indices = 0:(NCOL(dat$lower) - 1L), 
-    maxpts = 100000L, abseps = -1, releps = releps, n_threads = n_threads)
+    ptr = ptr, vcov = vcov, indices = indices, 
+    maxpts = 100000L, abseps = -1, releps = releps, n_threads = n_threads, 
+    comp_derivs = comp_derivs)
 
-# print the marginal likelihood at the true parameters
+# print the approximate log marginal likelihood at the true parameters
 set.seed(1)
+print(log_ml(dat$Sigma), digits = 7)
 print(log_ml(dat$Sigma), digits = 7)
 print(log_ml(dat$Sigma, n_threads = 4L), digits = 7)
 sd(replicate(20, log_ml(dat$Sigma, n_threads = 4L)))
@@ -92,31 +103,216 @@ library(microbenchmark)
 microbenchmark(
   `1 thread`     = log_ml(dat$Sigma), 
   `2 threads`    = log_ml(dat$Sigma, n_threads = 2L),
-  `4 threads`    = log_ml(dat$Sigma, n_threads = 4L),
-  `lower releps` = log_ml(dat$Sigma, releps = 1e-4), times = 10)
+  `4 threads`    = log_ml(dat$Sigma, n_threads = 4L), times = 5)
 
-# estimate the parameters
-par_fn <- function(par){
-  set.seed(1)
+#####
+# we can also get an approximation of the gradient
+t1 <- log_ml(dat$Sigma, comp_derivs = TRUE)
+t2 <- log_ml(dat$Sigma, comp_derivs = TRUE, n_threads = 4L)
+all.equal(t1, t2, tolerance = 1e-2)
+
+microbenchmark(
+  `1 thread`     = log_ml(dat$Sigma, comp_derivs = TRUE), 
+  `2 threads`    = log_ml(dat$Sigma, comp_derivs = TRUE, n_threads = 2L),
+  `4 threads`    = log_ml(dat$Sigma, comp_derivs = TRUE, n_threads = 4L),
+  times = 5)
+
+# we create a wrapper function which takes in a log-Cholesky decomposition
+# 
+# Args:
+#   par: p (p + 1) / 2 elements in the log-Cholesky decomposition.
+get_lchol_inv <- function(par){
   # use log-cholesky parametrization
-  log_sds <- par[1:p]
-  L <- diag(exp(log_sds), p)
-  L[lower.tri(L)] <- par[-(1:p)]
-  Arg <- tcrossprod(L)
-  
-  -log_ml(cov2cor(Arg), n_threads = 4L)
+  p <- (sqrt(8 * length(par) + 1) - 1) / 2
+  L <- matrix(0, p, p)
+  L[lower.tri(L, TRUE)] <- par
+  diag(L) <- exp(diag(L))
+  tcrossprod(L)
 }
 
-start_val <- c(rep(log(1), p), numeric(p * (p - 1) / 2))
-system.time(opt_out <- optim(start_val, par_fn))
+# creates the log-Cholesky decomposition. 
+# 
+# Args: 
+#   par: positive definite matrix to decompose
+get_lchol <- function(par){
+  lSig <- t(chol(par))
+  diag(lSig) <- log(diag(lSig))
+  lSig[lower.tri(lSig, TRUE)]
+}
 
-# check the result
-local({
-  par <- opt_out$par
-  log_sds <- par[1:p]
-  L <- diag(exp(log_sds), p)
-  L[lower.tri(L)] <- par[-(1:p)]
-  cov2cor(tcrossprod(L))
-})
-dat$Sigma # the truth 
+Jac_dum <- matrixcalc::commutation.matrix(p)
+diag(Jac_dum) <- diag(Jac_dum) + 1
+
+# computes the approximate log marginal likelihood. 
+#
+# Args:
+#   par: log-Cholesky decomposition.
+#   seed: seed to use.  
+#   comp_derivs: logical for whether to approximate the gradient. 
+#   n_threads: number of threads. 
+#   releps: relative error for each term.
+#   indices: integer vector with which terms to include. 
+par_fn <- function(par, seed = NULL, comp_derivs = FALSE, 
+                   n_threads = 1L, releps = 1e-2, 
+                   indices = 0:(NCOL(dat$lower) - 1L)){
+  if(!is.null(seed))
+    set.seed(seed)
+  Arg <- get_lchol_inv(par)
+  
+  res <- log_ml(Arg, comp_derivs = comp_derivs, indices = indices,
+                n_threads = n_threads, releps = releps)
+  log_ml <- c(res)
+  if(comp_derivs){
+    gr <- attr(res, "grad")
+    tmp <- matrix(0, p, p)
+    tmp[lower.tri(tmp, TRUE)] <- par
+    diag(tmp) <- exp(diag(tmp))
+    gr <- (c(gr) %*% Jac_dum) %*% (tmp %x% diag(p))
+    gr <- gr[, lower.tri(tmp, TRUE)]
+    idx_diag <- c(1L, 1L + cumsum(NCOL(tmp):2)) 
+    gr[idx_diag] <- gr[idx_diag] * diag(tmp)
+      
+    attr(log_ml, "grad") <- gr
+    
+  }
+  
+  log_ml
+}
+
+# check that the function gives the correct log marginal likelihood
+# approximation and gradient approximation.
+lSig <- get_lchol(dat$Sigma)
+r1 <- par_fn(lSig, comp_derivs = TRUE, n_threads = 4L, releps = 1e-3)
+r2 <- numDeriv::jacobian(par_fn, lSig, seed = 1L, n_threads = 4L)
+all.equal(attr(r1, "grad"), drop(r2), tolerance = 1e-3)
+
+#####
+# performs gradient descent. 
+# 
+# Args: 
+#   val: starting value. 
+#   step_start: starting value for the step length. 
+#   n_threads: number of threads to use. 
+#   maxit: maximum number of iteration. 
+#   eps: convergence threshold to use. 
+#   seed: seed to use.
+naiv_gradient_descent <- function(val, step_start, n_threads = 4L, 
+                                  maxit = 10L, eps = 1e-3, seed = 1L){
+  fun_vals <- step_sizes <- rep(NA_real_, maxit)
+  
+  for(i in 1:maxit){
+    gr <- par_fn(val, comp_derivs = TRUE, n_threads = n_threads, 
+                 seed = seed)
+    fun_vals[i] <- prev_fun <- c(gr)
+    dir <- attr(gr, "grad")
+    step <- step_start
+    if(sqrt(sum(dir^2)) < eps)
+      break
+    
+    max_j <- 11L
+    for(j in 1:max_j){
+      if(j == max_j)
+        warning("Failed to find a decrease")
+      new_val <- val + step * dir
+      new_val <- get_lchol(cov2cor(get_lchol_inv(new_val)))
+      new_fun <- par_fn(new_val, comp_derivs = FALSE, n_threads = n_threads, 
+                        seed = seed)
+      if(new_fun > prev_fun){
+        val <- new_val
+        break
+      }
+      step <- step / 2
+    }
+    
+    step_sizes[i] <- step
+  }
+  
+  list(result = get_lchol_inv(val), logml = prev_fun, 
+       nit = i, step_sizes = step_sizes, fun_vals = fun_vals)
+}
+
+# estimate model parameters
+start_val <- numeric(p * (p + 1) / 2)
+system.time(res <- naiv_gradient_descent(val = start_val, step_start = .001, 
+                                         maxit = 20L, eps = 1e-2))
+
+# compare estimates with truth
+res$result
+dat$Sigma
+
+# or plot both of them and compare
+do_plot <- function(x, main){
+  sc <- colorRampPalette(c("Red", "White", "Blue"))(30)
+  image(x, main = main, col = sc, zlim = c(-1, 1), xaxt = "n", yaxt = "n", 
+        bty = "n")
+}
+par(mfcol = c(1, 2), mar  = c(1, 1, 4, 1))
+do_plot(res$result, "Estimates")
+do_plot(dat$Sigma, "Truth")
+
+res$fun_vals # log marginal likelihood estimates at each iteration
+
+#####
+# performs stochastic gradient descent instead (using ADAM).
+# 
+# Args: 
+#   val: starting value. 
+#   batch_size: number of observations in each batch. 
+#   n_threads: number of threads to use. 
+#   maxit: maximum number of iteration. 
+#   seed: seed to use.
+#   epsilon, alpha, beta_1, beta_2: ADAM parameters.
+adam <- function(val, batch_size, n_threads = 4L, maxit = 10L, 
+                 seed = 1L, epsilon = 1e-8, alpha = .001, beta_1 = .9, 
+                 beta_2 = .999){
+  indices <- sample(0:(NCOL(dat$lower) - 1L), replace = FALSE)
+  blocks <- tapply(indices, (seq_along(indices) - 1L) %/% batch_size, 
+                   identity, simplify = FALSE)
+  
+  n_blocks <- length(blocks)
+  nit <- n_blocks * maxit
+  n_par <- length(val)
+  m <- v <- numeric(n_par)
+  fun_vals <- numeric(maxit)
+  for(i in 1:nit - 1L){
+    idx_b <- (i %% n_blocks) + 1L
+    m_old <- m
+    v_old <- v
+    res <- par_fn(val, comp_derivs = TRUE, n_threads = n_threads, 
+                  seed = seed, indices = blocks[[idx_b]])
+    fun_vals[(i %/% n_blocks) + 1L] <- 
+      fun_vals[(i %/% n_blocks) + 1L] + c(res)
+    
+    gr <- attr(res, "grad")
+    
+    m <- beta_1 * m_old + (1 - beta_1) * gr
+    v <- beta_2 * v_old + (1 - beta_2) * gr^2
+    
+    m_hat <- m / (1 - beta_1^(i + 1))
+    v_hat <- v / (1 - beta_2^(i + 1))
+    
+    val <- val + alpha * m_hat / (sqrt(v_hat) + epsilon)
+    val <- get_lchol(cov2cor(get_lchol_inv(val)))
+  }
+  
+  list(result = get_lchol_inv(val), fun_vals = fun_vals)
+}
+
+# estimate the model parameters
+set.seed(1)
+system.time(res_adam  <- adam(
+  val = start_val, alpha = 1e-2, maxit = 10L, batch_size = 100L))
+
+# compare estimates with the truth
+res_adam$result
+dat$Sigma
+
+# use plot instead
+par(mfcol = c(1, 2), mar  = c(1, 1, 4, 1))
+do_plot(res_adam$result, "Estimates (ADAM)")
+do_plot(dat$Sigma, "Truth")
+
+# look at the maximum log marginal likelihood
+log_ml(res_adam$result)
+res_adam$fun_vals # likely lower bounds on the log-marginal likelihood
 ```

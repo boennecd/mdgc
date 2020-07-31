@@ -202,6 +202,12 @@ public:
    * @param maxvls Maximum number of function evaluations allowed.
    * @param abseps Required absolute accuracy.
    * @param releps Required relative accuracy.
+   *
+   * @return Either a one-dimension or a (1 + p + p(p + 1)/2)-dimensional
+   * vector. The latter contains the likelihood approximation, derivative
+   * with respect to the mean, and a (p(p + 1) /2)-dimensional vector
+   * containing an upper diagonal matrix with derivatives with respect to
+   * the covariance matrix. Notice that the latter are not scaled by 2.
    */
   static output approximate
   (int const maxvls, double const abseps, double const releps){

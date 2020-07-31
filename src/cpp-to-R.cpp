@@ -97,10 +97,10 @@ SEXP get_log_lm_terms(arma::mat const &lower, arma::mat const &upper,
 }
 
 // [[Rcpp::export]]
-double eval_log_lm_terms(
+Rcpp::NumericVector eval_log_lm_terms(
     SEXP ptr, arma::ivec const &indices, arma::mat const &vcov,
     int const maxpts, double const abseps, double const releps,
-    size_t const n_threads){
+    size_t const n_threads, bool const comp_derivs){
   Rcpp::XPtr<ml_terms> obj(ptr);
   std::vector<log_ml_term> const &terms = obj->terms;
 
@@ -114,7 +114,7 @@ double eval_log_lm_terms(
     throw std::invalid_argument("eval_log_lm_terms: invalid indices");
 #endif
 
-  arma::mat derivs; // not used yet
+  arma::mat derivs = comp_derivs ? mat(p, p, arma::fill::zeros) : mat();
 #ifdef _OPENMP
   omp_set_num_threads(n_threads);
 #endif
@@ -123,10 +123,30 @@ double eval_log_lm_terms(
   double out(0.);
   size_t const n_indices = indices.n_elem;
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static) reduction(+:out)
+#pragma omp parallel
 #endif
-  for(size_t i = 0; i < n_indices; ++i)
-    out += terms[i].approximate(vcov, derivs, maxpts, abseps, releps);
+  {
+    arma::mat my_derivs(comp_derivs ? p : 0L, comp_derivs ? p : 0L,
+                        arma::fill::zeros);
 
-  return out;
+#ifdef _OPENMP
+#pragma omp for schedule(static) reduction(+:out)
+#endif
+    for(size_t i = 0; i < n_indices; ++i)
+      out += terms[indices[i]].approximate(
+        vcov, my_derivs, maxpts, abseps, releps, comp_derivs);
+
+    if(comp_derivs)
+#ifdef _OPENMP
+#pragma omp critical(add_derivs)
+#endif
+      derivs += my_derivs;
+  }
+
+  Rcpp::NumericVector res(1);
+  res[0] = out;
+  if(comp_derivs)
+    res.attr("grad") = derivs;
+
+  return res;
 }

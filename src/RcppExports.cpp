@@ -20,8 +20,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // eval_log_lm_terms
-double eval_log_lm_terms(SEXP ptr, arma::ivec const& indices, arma::mat const& vcov, int const maxpts, double const abseps, double const releps, size_t const n_threads);
-RcppExport SEXP _mdgc_eval_log_lm_terms(SEXP ptrSEXP, SEXP indicesSEXP, SEXP vcovSEXP, SEXP maxptsSEXP, SEXP absepsSEXP, SEXP relepsSEXP, SEXP n_threadsSEXP) {
+Rcpp::NumericVector eval_log_lm_terms(SEXP ptr, arma::ivec const& indices, arma::mat const& vcov, int const maxpts, double const abseps, double const releps, size_t const n_threads, bool const comp_derivs);
+RcppExport SEXP _mdgc_eval_log_lm_terms(SEXP ptrSEXP, SEXP indicesSEXP, SEXP vcovSEXP, SEXP maxptsSEXP, SEXP absepsSEXP, SEXP relepsSEXP, SEXP n_threadsSEXP, SEXP comp_derivsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -32,7 +32,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double const >::type abseps(absepsSEXP);
     Rcpp::traits::input_parameter< double const >::type releps(relepsSEXP);
     Rcpp::traits::input_parameter< size_t const >::type n_threads(n_threadsSEXP);
-    rcpp_result_gen = Rcpp::wrap(eval_log_lm_terms(ptr, indices, vcov, maxpts, abseps, releps, n_threads));
+    Rcpp::traits::input_parameter< bool const >::type comp_derivs(comp_derivsSEXP);
+    rcpp_result_gen = Rcpp::wrap(eval_log_lm_terms(ptr, indices, vcov, maxpts, abseps, releps, n_threads, comp_derivs));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -41,7 +42,7 @@ RcppExport SEXP run_testthat_tests();
 
 static const R_CallMethodDef CallEntries[] = {
     {"_mdgc_get_log_lm_terms", (DL_FUNC) &_mdgc_get_log_lm_terms, 3},
-    {"_mdgc_eval_log_lm_terms", (DL_FUNC) &_mdgc_eval_log_lm_terms, 7},
+    {"_mdgc_eval_log_lm_terms", (DL_FUNC) &_mdgc_eval_log_lm_terms, 8},
     {"run_testthat_tests", (DL_FUNC) &run_testthat_tests, 0},
     {NULL, NULL, 0}
 };

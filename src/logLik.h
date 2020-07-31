@@ -51,12 +51,13 @@ public:
    * @param maxpts Maximum number of integrand evaluations.
    * @param abseps Absolute convergence threshold.
    * @param releps Relative convergence threshold.
+   * @param comp_deriv true if the derivative should be computed.
    *
    * @return the log marginal likelihood approximation.
    */
   double approximate(arma::mat const &vcov, arma::mat &derivs,
                      int const maxpts, double const abseps,
-                     double const releps) const;
+                     double const releps, bool const comp_deriv) const;
 };
 
 } // namespace mdgc
