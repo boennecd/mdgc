@@ -242,7 +242,7 @@ dat$Sigma
 
 # or plot both of them and compare
 do_plot <- function(x, main){
-  sc <- colorRampPalette(c("Red", "White", "Blue"))(30)
+  sc <- colorRampPalette(c("Red", "White", "Blue"))(50)
   image(x, main = main, col = sc, zlim = c(-1, 1), xaxt = "n", yaxt = "n", 
         bty = "n")
 }

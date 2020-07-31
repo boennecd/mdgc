@@ -78,18 +78,21 @@ void deriv::integrand
   double * const mean_part_begin = out.memptr() + 1L;
   /* Multiplying by the inverse matrix is fast but not smart numerically.
    * TODO: much of this computation can be done later */
-  {
-    for(unsigned c = 0; c < p; ++c)
-      for(unsigned r = 0; r <= c; ++r)
-        *(mean_part_begin + r) += dat.sigma_chol_inv.at(r, c) * draw[c];
+  for(unsigned c = 0; c < p; ++c){
+    double const mult = draw[c],
+                  *r1 = dat.sigma_chol_inv.colptr(c),
+          * const end = mean_part_begin + c + 1L;
+    for(double *rhs = mean_part_begin; rhs != end; ++r1, ++rhs)
+      *rhs += mult * *r1;
   }
 
   {
     double *o = out.memptr() + 1L + p;
     for(unsigned c = 0; c < p; c++){
-      double const mean_part_c = *(mean_part_begin + c);
-      for(unsigned r = 0; r <= c; r++)
-        *o++ = mean_part_c * *(mean_part_begin + r);
+      double const mult = *(mean_part_begin + c),
+            * const end = mean_part_begin + c + 1;
+      for(double *lhs = mean_part_begin; lhs != end; ++o, ++lhs)
+        *o = mult * *lhs;
     }
   }
 }

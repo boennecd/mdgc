@@ -582,8 +582,6 @@
       PARAMETER ( ZERO = 0, TWOPI = 6.283185307179586D0 )
       DOUBLE PRECISION X(10,3), W(10,3), AS, A, B, C, D, RS, XS
       DOUBLE PRECISION MVPHI, SN, ASR, H, K, BS, HS, HK
-      SAVE X, W
-!$OMP THREADPRIVATE(X, W)
 *     Gauss Legendre Points and Weights, N =  6
       DATA ( W(I,1), X(I,1), I = 1, 3 ) /
      *  0.1713244923791705D+00,-0.9324695142031522D+00,
@@ -998,8 +996,6 @@
       DOUBLE PRECISION DIFINT, FINVAL(FLIM), VARSQR(FLIM), VAREST(FLIM),
      &     VARPRD, X(NLIM), R(NLIM), VK(NLIM), VALUES(FLIM), FS(FLIM)
       PARAMETER ( ONE = 1 )
-      SAVE P, C, SAMPLS, NP, VAREST
-!$OMP THREADPRIVATE(P, C, SAMPLS, NP, VAREST)
 *
 *    Optimal Parameters for Lattice Rules
 *

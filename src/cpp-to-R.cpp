@@ -5,6 +5,8 @@
 #include <omp.h>
 #endif
 
+#include "prof.h"
+
 using namespace mdgc;
 using namespace arma;
 
@@ -101,6 +103,8 @@ Rcpp::NumericVector eval_log_lm_terms(
     SEXP ptr, arma::ivec const &indices, arma::mat const &vcov,
     int const maxpts, double const abseps, double const releps,
     size_t const n_threads, bool const comp_derivs){
+  profiler pp("eval_log_lm_terms");
+
   Rcpp::XPtr<ml_terms> obj(ptr);
   std::vector<log_ml_term> const &terms = obj->terms;
 

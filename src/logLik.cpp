@@ -93,14 +93,12 @@ double log_ml_term::approximate
 
       if(n_obs > 0){
         arma::mat tmp = arma::kron(obs_scaled, S_oo_inv_S_oi);
-        arma::inplace_trans(tmp);
-        arma::mat inc = d_mu.t() * tmp;
+        arma::mat inc = tmp * d_mu;
         inc.reshape(n_obs, n_obs);
         derivs(idx_obs, idx_obs) -= (inc + inc.t()) / 2.;
 
         tmp = arma::kron(obs_scaled, dum_diag_mat);
-        arma::inplace_trans(tmp);
-        inc = d_mu.t() * tmp;
+        inc = tmp * d_mu;
         inc /= 2.;
         inc.reshape(n_int, n_obs);
         derivs(idx_int, idx_obs) += inc;
@@ -116,16 +114,15 @@ double log_ml_term::approximate
 
       if(n_obs > 0){
         arma::mat tmp = arma::kron(S_oo_inv_S_oi, S_oo_inv_S_oi);
-        arma::inplace_trans(tmp);
-        arma::mat inc = d_V_full.t() * tmp;
+        arma::mat inc = tmp * d_V_full;
         inc.reshape(n_obs, n_obs);
         derivs(idx_obs, idx_obs) += inc;
 
         arma::mat const K = get_commutation(
           S_oo_inv_S_oi.n_cols, S_oo_inv_S_oi.n_rows);
-        tmp = arma::kron(S_oo_inv_S_oi, dum_diag_mat).t() +
-          arma::kron(dum_diag_mat, S_oo_inv_S_oi).t() * K;
-        inc = d_V_full.t() * tmp;
+        tmp = arma::kron(S_oo_inv_S_oi, dum_diag_mat) +
+          K.t() * arma::kron(dum_diag_mat, S_oo_inv_S_oi);
+        inc = tmp * d_V_full;
 
         inc.reshape(n_int, n_obs);
 

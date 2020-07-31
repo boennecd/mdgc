@@ -161,10 +161,10 @@ microbenchmark(
   `2 threads`    = log_ml(dat$Sigma, n_threads = 2L),
   `4 threads`    = log_ml(dat$Sigma, n_threads = 4L), times = 5)
 #> Unit: milliseconds
-#>       expr   min    lq  mean median    uq   max neval
-#>   1 thread 148.2 148.5 149.3  148.6 149.2 152.1     5
-#>  2 threads  74.7  75.4  76.0   76.2  76.4  77.4     5
-#>  4 threads  38.4  39.8  40.5   41.0  41.5  41.6     5
+#>       expr min    lq  mean median    uq   max neval
+#>   1 thread 146 146.9 147.4  147.1 147.2 149.7     5
+#>  2 threads  74  74.2  74.5   74.3  74.7  75.1     5
+#>  4 threads  38  38.1  38.7   38.9  39.0  39.5     5
 
 #####
 # we can also get an approximation of the gradient
@@ -180,9 +180,9 @@ microbenchmark(
   times = 5)
 #> Unit: milliseconds
 #>       expr  min   lq mean median   uq  max neval
-#>   1 thread 1078 1098 1103   1100 1117 1120     5
-#>  2 threads  553  554  558    559  561  562     5
-#>  4 threads  284  293  304    295  319  327     5
+#>   1 thread 1092 1101 1108   1106 1115 1127     5
+#>  2 threads  559  560  568    565  575  579     5
+#>  4 threads  290  293  299    302  303  306     5
 
 # we create a wrapper function which takes in a log-Cholesky decomposition
 # 
@@ -304,7 +304,7 @@ start_val <- numeric(p * (p + 1) / 2)
 system.time(res <- naiv_gradient_descent(val = start_val, step_start = .001, 
                                          maxit = 20L, eps = 1e-2))
 #>    user  system elapsed 
-#>  36.594   0.008   9.304
+#>  36.907   0.008   9.356
 
 # compare estimates with truth
 res$result
@@ -376,7 +376,7 @@ dat$Sigma
 
 # or plot both of them and compare
 do_plot <- function(x, main){
-  sc <- colorRampPalette(c("Red", "White", "Blue"))(30)
+  sc <- colorRampPalette(c("Red", "White", "Blue"))(50)
   image(x, main = main, col = sc, zlim = c(-1, 1), xaxt = "n", yaxt = "n", 
         bty = "n")
 }
@@ -444,7 +444,7 @@ set.seed(1)
 system.time(res_adam  <- adam(
   val = start_val, alpha = 1e-2, maxit = 10L, batch_size = 100L))
 #>    user  system elapsed 
-#>  14.935   0.028   3.775
+#>  15.038   0.028   3.798
 
 # compare estimates with the truth
 res_adam$result
