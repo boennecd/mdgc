@@ -101,6 +101,92 @@ context("restrictcdf unit tests") {
     }
   }
 
+  test_that("cdf<likelihood> gives similar output to R (1D)") {
+/*
+ lbs <- c(-1, -Inf, -.5)
+ ubs <- c(Inf, 1, 2)
+ mu <- .5
+ va <- .8
+
+ dput(mapply(function(l, u){
+ f <- function(mu, va)
+ pnorm(u, mean = mu, sd = sqrt(va)) - pnorm(l, mean = mu, sd = sqrt(va))
+ f(mu, va)
+ }, l = lbs, u = ubs))
+ */
+    arma::vec lbs, ubs, expect;
+    constexpr double const Inf = std::numeric_limits<double>::infinity();
+    lbs << -1  << -Inf << -.5;
+    ubs << Inf << 1    << 2;
+    expect << 0.953233743655453 << 0.711924938984711 << 0.821457505013967;
+    double const mu(.5);
+    double const va(.8);
+
+    double const eps = std::pow(std::numeric_limits<double>::epsilon(), .5);
+    for(size_t i = 0; i < 3; ++i){
+      arma::vec l(1), u(1), m(1);
+      arma::mat s(1, 1);
+      l[0] = lbs[i];
+      u[0] = ubs[i];
+      m[0] = mu;
+      s[0] = va;
+
+      auto res = restrictcdf::cdf<restrictcdf::likelihood>(
+        l, u, m, s, false).approximate(1000000L, 1e-8, -1);
+
+      expect_true(res.inform == 0L);
+      expect_true(res.abserr                           <= 0);
+      expect_true(std::abs(res.finest[0L] - expect[i]) <  eps);
+    }
+  }
+
+  test_that("cdf<deriv> gives similar output to R (1D)") {
+  /*
+   lbs <- c(-1, -Inf, -.5)
+   ubs <- c(Inf, 1, 2)
+   mu <- .5
+   va <- .8
+
+   dput(mapply(function(l, u){
+   f <- function(mu, va)
+   pnorm(u, mean = mu, sd = sqrt(va)) - pnorm(l, mean = mu, sd = sqrt(va))
+   v1 <- f(mu, va)
+   v2 <- numDeriv::grad(function(x) f(x[1], x[2]), c(mu, va))
+   c(v1, v2)
+   }, l = lbs, u = ubs))
+   */
+    arma::vec lbs, ubs;
+    arma::mat expect;
+    constexpr double const Inf = std::numeric_limits<double>::infinity();
+    lbs << -1  << -Inf << -.5;
+    ubs << Inf << 1    << 2;
+    expect << 0.953233743655453 << 0.109304604505804  << -0.102473066720416
+           << 0.711924938984711 << -0.381510556527341 << -0.119222048911591
+           << 0.821457505013967 << 0.129438601257233  << -0.251687570316064;
+    expect.reshape(3, 3);
+    double const mu(.5);
+    double const va(.8);
+
+    double const eps = std::pow(std::numeric_limits<double>::epsilon(), .5);
+    for(size_t i = 0; i < 3; ++i){
+      arma::vec l(1), u(1), m(1);
+      arma::mat s(1, 1);
+      l[0] = lbs[i];
+      u[0] = ubs[i];
+      m[0] = mu;
+      s[0] = va;
+
+      auto res = restrictcdf::cdf<restrictcdf::deriv>(
+        l, u, m, s, false).approximate(1000000L, 1e-8, -1);
+
+      expect_true(res.inform == 0L);
+      expect_true(res.abserr                           <= 0);
+      expect_true(std::abs(res.finest[0L] - expect.at(0L, i)) <  eps);
+      expect_true(std::abs(res.finest[1L] - expect.at(1L, i)) <  eps);
+      expect_true(std::abs(res.finest[2L] - expect.at(2L, i)) <  eps);
+    }
+  }
+
   test_that("cdf<deriv> gives similar output to R") {
     /*
      set.seed(2)

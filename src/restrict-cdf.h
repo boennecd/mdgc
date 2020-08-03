@@ -145,6 +145,8 @@ output approximate_integral(
  *
  * needs_last_unif returns a boolean for whether the last truncated normal
  * variable is needed.
+ *
+ * univariate handles the univariate case.
  */
 template<class funcs>
 class cdf {
@@ -389,10 +391,19 @@ public:
       out.finest.fill(std::numeric_limits<double>::quiet_NaN());
       out.inform = -1L;
       return out;
+
+    } else if(ndim == 1L){
+      /* handle the one-dimensional case as a special case */
+      double const lw = *map_obj.lower,
+                   up = *map_obj.upper;
+      output out;
+      out.finest = funcs::univariate(lw, up, map_obj.child_mem);
+      out.inform = 0L;
+      out.abserr = 0;
+      return out;
+
     }
 
-    // TODO: there is no variable reordering at the moment. This may reduce
-    // the variance of the estimators.
 
     /* set pointer to this class' member function */
     wk_mem = get_working_memory();
@@ -422,6 +433,15 @@ public:
   constexpr static bool needs_last_unif() {
     return false;
   }
+
+  static arma::vec univariate(double const lw, double const ub,
+                              double const * const wk_mem){
+    arma::vec out(1L);
+    double const p_ub = std::isinf(ub) ? 1 : pnorm_std(ub, 1L, 0L),
+                 p_lb = std::isinf(lw) ? 0 : pnorm_std(lw, 1L, 0L);
+    out[0] = p_ub - p_lb;
+    return out;
+  }
 };
 
 /**
@@ -447,6 +467,30 @@ public:
   static void post_process(arma::vec&, int const, double const * const);
   constexpr static bool needs_last_unif() {
     return true;
+  }
+
+  static arma::vec univariate(double const lw, double const ub,
+                              double const * const wk_mem){
+    arma::vec out(3L);
+    static double const sqrt_2_pi = std::sqrt(2 * M_PI);
+    auto dnrm = [&](double const x){
+      return std::exp(-x * x / 2.) / sqrt_2_pi;
+    };
+
+    bool const f_ub = std::isinf(ub),
+               f_lb = std::isinf(lw);
+
+    double const p_ub = f_ub ? 1 : pnorm_std(ub, 1L, 0L),
+                 p_lb = f_lb ? 0 : pnorm_std(lw, 1L, 0L),
+               sig_inv = *wk_mem,
+                  d_ub = f_ub ? 0 : dnrm(ub),
+                  d_lb = f_lb ? 0 : dnrm(lw),
+               d_ub_ub = f_ub ? 0 : ub * d_ub,
+               d_lb_lb = f_lb ? 0 : lw * d_lb;
+    out[0L] = p_ub - p_lb;
+    out[1L] = -(d_ub - d_lb) * sig_inv;
+    out[2L] = -(d_ub_ub - d_lb_lb) / 2 * sig_inv * sig_inv;
+    return out;
   }
 };
 
