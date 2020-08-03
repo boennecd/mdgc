@@ -1,3 +1,5 @@
+#ifndef MVTNORM_WRAPPER_H
+#define MVTNORM_WRAPPER_H
 #include "arma-wrap.h"
 
 namespace pmvnorm {
@@ -45,7 +47,7 @@ cdf_res cdf(arma::vec lower, arma::vec upper, arma::vec mean,
  * @param upper Upper bounds.
  * @param infin infin argument for the mvtdst subroutine.
  * @param mean Mean vector.
- * @param cor_vec upper diagonal of the correlation matrix.
+ * @param cor_vec upper triangle of the correlation matrix.
  * @param maxpts Maximum number of integrand evaluations.
  * @param abseps Absolute convergence threshold.
  * @param releps Relative convergence threshold.
@@ -55,3 +57,5 @@ cdf_res cdf(arma::vec const &lower, arma::vec const &upper,
             arma::vec const &cor_vec, int const maxpts = -1L,
             double const abseps = -1, double const releps = 1e-5);
 }
+
+#endif

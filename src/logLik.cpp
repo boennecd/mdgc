@@ -142,4 +142,14 @@ double log_ml_term::approximate
   return out;
 }
 
+void log_ml_term::set_working_memory(
+    std::vector<log_ml_term> const &terms, size_t const n_threads){
+  size_t max_n_int = 0L;
+  for(auto const &t : terms)
+    if(t.n_int > max_n_int)
+      max_n_int = t.n_int;
+
+  cdf<deriv>::set_working_memory(max_n_int, n_threads);
+}
+
 } // namespace mdgc

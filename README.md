@@ -161,10 +161,10 @@ microbenchmark(
   `2 threads`    = log_ml(dat$Sigma, n_threads = 2L),
   `4 threads`    = log_ml(dat$Sigma, n_threads = 4L), times = 5)
 #> Unit: milliseconds
-#>       expr min    lq  mean median    uq   max neval
-#>   1 thread 146 146.9 147.4  147.1 147.2 149.7     5
-#>  2 threads  74  74.2  74.5   74.3  74.7  75.1     5
-#>  4 threads  38  38.1  38.7   38.9  39.0  39.5     5
+#>       expr   min    lq  mean median    uq   max neval
+#>   1 thread 152.9 153.0 153.4  153.3 153.5 154.3     5
+#>  2 threads  76.9  77.0  77.6   77.2  78.4  78.6     5
+#>  4 threads  39.1  39.8  40.0   40.2  40.3  40.6     5
 
 #####
 # we can also get an approximation of the gradient
@@ -180,9 +180,9 @@ microbenchmark(
   times = 5)
 #> Unit: milliseconds
 #>       expr  min   lq mean median   uq  max neval
-#>   1 thread 1092 1101 1108   1106 1115 1127     5
-#>  2 threads  559  560  568    565  575  579     5
-#>  4 threads  290  293  299    302  303  306     5
+#>   1 thread 1129 1139 1155   1139 1171 1199     5
+#>  2 threads  572  581  586    586  594  594     5
+#>  4 threads  297  302  304    304  306  313     5
 
 # we create a wrapper function which takes in a log-Cholesky decomposition
 # 
@@ -304,7 +304,7 @@ start_val <- numeric(p * (p + 1) / 2)
 system.time(res <- naiv_gradient_descent(val = start_val, step_start = .001, 
                                          maxit = 20L, eps = 1e-2))
 #>    user  system elapsed 
-#>  36.907   0.008   9.356
+#>  39.347   0.003  10.027
 
 # compare estimates with truth
 res$result
@@ -444,7 +444,7 @@ set.seed(1)
 system.time(res_adam  <- adam(
   val = start_val, alpha = 1e-2, maxit = 10L, batch_size = 100L))
 #>    user  system elapsed 
-#>  15.038   0.028   3.798
+#>  15.810   0.044   3.997
 
 # compare estimates with the truth
 res_adam$result

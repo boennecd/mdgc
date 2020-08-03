@@ -54,10 +54,21 @@ public:
    * @param comp_deriv true if the derivative should be computed.
    *
    * @return the log marginal likelihood approximation.
+   *
    */
   double approximate(arma::mat const &vcov, arma::mat &derivs,
                      int const maxpts, double const abseps,
                      double const releps, bool const comp_deriv) const;
+
+  /**
+   * sets the working memory. Must be called prior to calling approximate.
+   *
+   * @param terms Vector with terms to be approximated.
+   * @param n_threads Number of threads that will be used in the
+   * approximation.
+   */
+  static void set_working_memory(
+      std::vector<log_ml_term> const &terms, size_t const n_threads);
 };
 
 } // namespace mdgc

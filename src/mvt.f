@@ -94,7 +94,7 @@
       INTEGER N, NF, NUIN, INFIN(*), NL
       DOUBLE PRECISION W(*),F(*), LOWER(*),UPPER(*), CORREL(*), DELTA(*)
       PARAMETER ( NL = 1000 )
-      INTEGER INFI(NL), NU, ND, INFORM, NY
+      INTEGER INFI(NL), NU, ND, INFORM, NY, IDX(NL)
       DOUBLE PRECISION COV(NL*(NL+1)/2), A(NL), B(NL), DL(NL), Y(NL)
       DOUBLE PRECISION MVCHNV, SNU, R, VL, ER, DI, EI
       SAVE NU, SNU, INFI, A, B, DL, COV
@@ -116,7 +116,8 @@
 *     Initialization and computation of covariance Cholesky factor.
 *
       CALL MVSORT( N, LOWER, UPPER, DELTA, CORREL, INFIN, Y, .TRUE.,
-     &            ND,     A,     B,    DL,    COV,  INFI, INFORM )
+     &            ND,     A,     B,    DL,    COV,  INFI, INFORM,
+     &            IDX )
       NU = NUIN
       CALL MVSPCL( ND, NU, A, B, DL, COV, INFI, SNU, VL, ER, INFORM )
       END
@@ -255,15 +256,19 @@
       END
 *
       SUBROUTINE MVSORT( N, LOWER, UPPER, DELTA, CORREL, INFIN, Y,PIVOT,
-     &                  ND,     A,     B,    DL,    COV,  INFI, INFORM )
+     &                  ND,     A,     B,    DL,    COV,  INFI, INFORM,
+     &                  IDX )
 *
 *     Subroutine to sort integration limits and determine Cholesky factor.
 *
+*     Benjamin Christoffersen added the IDX argument. It keeps track of the
+*
+#     original indices.
       INTEGER N, ND, INFIN(*), INFI(*), INFORM
       LOGICAL PIVOT
       DOUBLE PRECISION     A(*),     B(*),    DL(*),    COV(*),
      &                 LOWER(*), UPPER(*), DELTA(*), CORREL(*), Y(*)
-      INTEGER I, J, K, L, M, II, IJ, IL, JL, JMIN
+      INTEGER I, J, K, L, M, II, IJ, IL, JL, JMIN, IDX(*)
       DOUBLE PRECISION SUMSQ, AJ, BJ, SUM, EPS, EPSI, D, E
       DOUBLE PRECISION CVDIAG, AMIN, BMIN, DEMIN, MVTDNS
       PARAMETER ( EPS = 1D-10 )
@@ -299,7 +304,7 @@
             IF ( INFI(I) .GE. 0 ) THEN
                DO J = 1, I-1
                   IF ( INFI(J) .LT. 0 ) THEN
-                     CALL MVSWAP( J, I, A, B, DL, INFI, N, COV )
+                     CALL MVSWAP( J, I, A, B, DL, INFI, N, COV, IDX )
                      GO TO 10
                   ENDIF
                END DO
@@ -343,7 +348,7 @@
                IJ = IJ + J
             END DO
             IF ( JMIN .GT. I ) THEN
-               CALL MVSWAP( I, JMIN, A, B, DL, INFI, N, COV )
+               CALL MVSWAP( I, JMIN, A, B, DL, INFI, N, COV, IDX )
             END IF
             IF ( COV(II+I) .LT. -EPSI ) THEN
                INFORM = 3
@@ -478,18 +483,24 @@
       Y = T
       END
 *
-      SUBROUTINE MVSWAP( P, Q, A, B, D, INFIN, N, C )
+      SUBROUTINE MVSWAP( P, Q, A, B, D, INFIN, N, C, IDX )
 *
 *     Swaps rows and columns P and Q in situ, with P <= Q.
 *
+*     Benjamin Christoffersen added the IDX argument to keep track
+*     of the original indices.
+*
       DOUBLE PRECISION A(*), B(*), C(*), D(*)
-      INTEGER INFIN(*), P, Q, N, I, J, II, JJ
+      INTEGER INFIN(*), IDX(*), P, Q, N, I, J, II, JJ
       CALL MVSSWP( A(P), A(Q) )
       CALL MVSSWP( B(P), B(Q) )
       CALL MVSSWP( D(P), D(Q) )
       J = INFIN(P)
       INFIN(P) = INFIN(Q)
       INFIN(Q) = J
+      J = IDX(P)
+      IDX(P) = IDX(Q)
+      IDX(Q) = J
       JJ = ( P*( P - 1 ) )/2
       II = ( Q*( Q - 1 ) )/2
       CALL MVSSWP( C(JJ+P), C(II+Q) )

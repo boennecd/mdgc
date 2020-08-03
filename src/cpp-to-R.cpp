@@ -108,8 +108,8 @@ Rcpp::NumericVector eval_log_lm_terms(
   Rcpp::XPtr<ml_terms> obj(ptr);
   std::vector<log_ml_term> const &terms = obj->terms;
 
-#ifdef DO_CHECKS
   size_t const p = obj->n_variables;
+#ifdef DO_CHECKS
   if(vcov.n_cols != p or vcov.n_rows != p)
     throw std::invalid_argument("eval_log_lm_terms: invalid vcov");
   if(n_threads < 1L)
@@ -117,6 +117,7 @@ Rcpp::NumericVector eval_log_lm_terms(
   if(indices.n_elem > terms.size())
     throw std::invalid_argument("eval_log_lm_terms: invalid indices");
 #endif
+  log_ml_term::set_working_memory(terms, n_threads);
 
   arma::mat derivs = comp_derivs ? mat(p, p, arma::fill::zeros) : mat();
 #ifdef _OPENMP
