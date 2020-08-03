@@ -90,6 +90,8 @@ void cdf<funcs>::set_working_memory
   // sharing by having 2 x 128 bytes per thread.
   constexpr size_t const mult = 128L / 8L,
                      min_size = 2L * mult;
+  size_t const upper_tri_size = (max_dim * (max_dim + 1L)) / 2L;
+  max_dim = 3L * max_dim + 3L * upper_tri_size;
   max_dim = std::max(max_dim, min_size);
   max_dim = (max_dim + mult - 1L) / mult;
   max_dim *= mult;
@@ -118,15 +120,14 @@ output approximate_integral(
 }
 
 void likelihood::integrand
-(arma::vec const &draw, likelihood::comp_dat const& dat, arma::vec &out){
+(arma::vec const &draw, int const ndim, arma::vec &out,
+ double const * const){
 #ifdef DO_CHECKS
   if(out.n_elem != 1L)
     throw invalid_argument("likelihood::integrand: invalid out");
 #endif
   out[0] = 1;
 }
-
-void likelihood::post_process(arma::vec &finest, comp_dat const &dat) { }
 
 int deriv::get_n_integrands
 (arma::vec const &mu, arma::mat const &sigma) {
@@ -135,13 +136,12 @@ int deriv::get_n_integrands
 }
 
 void deriv::integrand
-(arma::vec const &draw, deriv::comp_dat const& dat, arma::vec &out){
-  arma::uword const p = dat.mu->n_elem;
+(arma::vec const &draw, int const ndim, arma::vec &out,
+ double const * const wk_mem){
+  arma::uword const p = ndim;
 
 #ifdef DO_CHECKS
   size_t const n_elem = 1L + p + (p * (p + 1L)) / 2L;
-  if(!dat.mu)
-    throw std::runtime_error("deriv::integrand: mu is not set");
   if(out.n_elem != n_elem)
     throw invalid_argument("deriv::integrand: invalid out");
 #endif
@@ -151,12 +151,12 @@ void deriv::integrand
   double * const mean_part_begin = out.memptr() + 1L;
   /* Multiplying by the inverse matrix is fast but not smart numerically.
    * TODO: much of this computation can be done later */
+  double const * sigma_chol_inv = wk_mem;
   for(unsigned c = 0; c < p; ++c){
     double const mult = draw[c],
-                  *r1 = dat.sigma_chol_inv.colptr(c),
           * const end = mean_part_begin + c + 1L;
-    for(double *rhs = mean_part_begin; rhs != end; ++r1, ++rhs)
-      *rhs += mult * *r1;
+    for(double *rhs = mean_part_begin; rhs != end; ++rhs, ++sigma_chol_inv)
+      *rhs += mult * *sigma_chol_inv;
   }
 
   {
@@ -170,16 +170,17 @@ void deriv::integrand
   }
 }
 
-void deriv::post_process(arma::vec &finest, comp_dat const &dat) {
-  arma::uword const p = dat.mu->n_elem;
-  auto const &sig_inv = dat.signa_inv;
+void deriv::post_process(arma::vec &finest, int const ndim,
+                         double const * const wk_mem) {
+  arma::uword const p = ndim;
 
   double phat = finest[0L];
   double *o = finest.memptr() + 1L + p;
+  double const * sig_inv = wk_mem + (p * (p + 1L)) / 2L;
   for(unsigned c = 0; c < p; c++){
-    double const * const end = sig_inv.colptr(c) + c + 1L;
-    for(auto rhs = sig_inv.colptr(c); rhs != end; ++rhs, ++o){
-      *o -= phat * *rhs;
+    double const * const end = sig_inv + c + 1L;
+    for(; sig_inv != end; ++sig_inv, ++o){
+      *o -= phat * *sig_inv;
       *o /= 2.;
     }
   }

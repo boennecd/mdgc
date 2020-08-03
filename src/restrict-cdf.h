@@ -95,6 +95,19 @@ typedef void (*mvkbrv_ptr)(int const*, double*, int const*, double*);
 void set_mvkbrv_ptr(mvkbrv_ptr);
 
 /**
+ * copies the upper upper triangular matrix.
+ *
+ * @param X Matrix top copy.
+ * @param x Pointer to copy to.
+ */
+inline void copy_upper_tri(arma::mat const &X, double *x){
+  size_t const p = X.n_cols;
+  for(unsigned c = 0; c < p; c++)
+    for(unsigned r = 0; r <= c; r++, x++)
+      *x = X.at(r, c);
+}
+
+/**
  * Approximates the function set by mvkbrv_ptr.
  *
  * @param ndim Dimension of the integral.
@@ -118,9 +131,9 @@ output approximate_integral(
  * @tparam funcs Class with static member functions which determines the
  * type of integral which is approximated.
  *
- * The funcs class needs a nested class comp_dat to store the data needed
- * to perform the approximation. It also needs the following static member
- * functions:
+ * It also needs the following static member functions.
+ *
+ * set_child_wk_mem should setup needed intermediaries.
  *
  * get_n_integrands should return the dimension of the integral.
  *
@@ -135,20 +148,39 @@ output approximate_integral(
  */
 template<class funcs>
 class cdf {
-  using comp_dat = typename funcs::comp_dat;
+  /** maps working memory to vectors */
+  class ptr_to_dat {
+    double * const wk_mem;
+    int const ndim;
+
+  public:
+    /// objects for the parent clas
+    double * const lower,
+           * const upper,
+           * const draw,
+           * const sigma_chol,
+    /// objects for the child class
+           * const child_mem;
+
+
+    ptr_to_dat(double * const wk_mem, int const ndim):
+      wk_mem(wk_mem), ndim(ndim),
+      lower     (wk_mem            ),
+      upper     (wk_mem + ndim     ),
+      draw      (wk_mem + 2L * ndim),
+      sigma_chol(wk_mem + 3L * ndim),
+      child_mem (wk_mem + 3L * ndim + (ndim * (ndim + 1L)) / 2L)
+      { }
+  };
 
   static int ndim, n_integrands;
-  static arma::vec lower, upper;
   static arma::ivec infin;
-  static arma::vec sigma_chol;
   static double * wk_mem;
-  /* TODO: use omp threadprivate... */
-  thread_local static std::unique_ptr<comp_dat> dat;
   static constexpr bool const needs_last_unif =
     funcs::needs_last_unif();
 
 #ifdef _OPENMP
-#pragma omp threadprivate(ndim, n_integrands, lower, upper, infin, sigma_chol, wk_mem)
+#pragma omp threadprivate(ndim, n_integrands, infin, wk_mem)
 #endif
 
   static double * get_working_memory();
@@ -181,21 +213,28 @@ public:
       throw std::invalid_argument("cdf::eval_integrand: invalid 'n_integrands_in'");
 #endif
 
-    arma::vec u(unifs        , ndim        , false),
-            out(integrand_val, n_integrands, false),
-           draw(wk_mem       , ndim        , false);
+    ptr_to_dat map_obj(wk_mem, ndim);
+    arma::vec u(unifs        , ndim        , false, false),
+            out(integrand_val, n_integrands, false, false),
+           draw(map_obj.draw , ndim        , false, false);
+    double const * const lower      = map_obj.lower,
+                 * const upper      = map_obj.upper,
+                 * const sigma_chol = map_obj.sigma_chol;
 
-    double w(1.), *sc = sigma_chol.memptr();
+    double w(1.);
+    double const * sc = sigma_chol,
+                 * lw = lower,
+                 * up = upper;
     /* loop over variables and transform them to truncated normal
      * variables */
-    for(size_t j = 0; j < static_cast<size_t>(ndim); ++j, ++sc){
+    for(size_t j = 0; j < static_cast<size_t>(ndim); ++j, ++sc, ++lw, ++up){
       auto const draw_n_p = ([&](){
         bool const needs_q =
           needs_last_unif or j + 1 < static_cast<size_t>(ndim);
         double const * const draw_end = draw.begin() + j;
 
        if(infin[j] == 0L){
-          double b(upper[j]);
+          double b(*up);
           for(double const *d = draw.begin(); d != draw_end; ){
             double const term = *sc++ * *d++;
             b -= term;
@@ -205,7 +244,7 @@ public:
           return draw_trunc_mean<0L>(0, b, u[j], needs_q);
 
         } else if(infin[j] == 1L){
-          double a(lower[j]);
+          double a(*lw);
           for(double const *d = draw.begin(); d != draw_end; ){
             double const term = *sc++ * *d++;
             a -= term;
@@ -215,8 +254,8 @@ public:
           return draw_trunc_mean<1L>(a, 0, u[j], needs_q);
 
         } else if(infin[j] == 2L){
-          double a(lower[j]),
-                 b(upper[j]);
+          double a(*lw),
+                 b(*up);
           for(double const *d = draw.begin(); d != draw_end; ){
             double const term = *sc++ * *d++;
             a -= term;
@@ -243,7 +282,7 @@ public:
     }
 
     /* evaluate the integrand and weigth the result. */
-    funcs::integrand(draw, *dat, out);
+    funcs::integrand(draw, ndim, out, map_obj.child_mem);
     out *= w;
   }
 
@@ -274,34 +313,36 @@ public:
 #endif
 
     infin = pmvnorm::get_infin(lower_in, upper_in);
+    wk_mem = get_working_memory();
+    ptr_to_dat map_obj(wk_mem, ndim);
+    arma::vec lower     (map_obj.lower     , ndim, false, false),
+              upper     (map_obj.upper     , ndim, false, false),
+              sigma_chol(map_obj.sigma_chol, (ndim * (ndim + 1L)) / 2L, false, false);
 
     /* re-scale */
     arma::vec const sds = arma::sqrt(arma::diagvec(sigma_in)),
                     mu = mu_in / sds;
-    lower = lower_in / sds - mu;
-    upper = upper_in / sds - mu;
 
-    sigma_chol = ([&]{
-      arma::uword const p = sigma_in.n_cols;
-      arma::vec out((p * (p + 1L)) / 2L);
+    lower  = lower_in;
+    lower /= sds;
+    lower -= mu;
 
+    upper  = upper_in;
+    upper /= sds;
+    upper -= mu;
+
+    {
       arma::mat tmp = sigma_in;
       tmp.each_row() /= sds.t();
       tmp.each_col() /= sds;
-      if(!arma::chol(tmp, tmp)){
-        out += std::numeric_limits<double>::infinity();
-        return out;
-      }
+      if(!arma::chol(tmp, tmp))
+        sigma_chol += std::numeric_limits<double>::infinity();
+      else
+        copy_upper_tri(tmp, sigma_chol.memptr());
 
-      double *o = out.memptr();
-      for(unsigned c = 0; c < p; c++)
-        for(unsigned r = 0; r <= c; r++)
-          *o++ = tmp.at(r, c);
+    }
 
-      return out;
-    })();
-
-    dat.reset(new comp_dat(mu_in, sigma_in, sigma_chol));
+    funcs::set_child_wk_mem(mu_in, sigma_in, map_obj.child_mem);
   }
 
   /**
@@ -341,7 +382,8 @@ public:
       throw std::invalid_argument("cdf::approximate: invalid 'maxvls'");
 #endif
 
-    if(std::isinf(sigma_chol[0])){
+    ptr_to_dat map_obj(wk_mem, ndim);
+    if(std::isinf(map_obj.sigma_chol[0])){
       output out;
       out.finest.resize(n_integrands);
       out.finest.fill(std::numeric_limits<double>::quiet_NaN());
@@ -358,7 +400,7 @@ public:
     output out =
       approximate_integral(ndim, n_integrands, maxvls, abseps, releps);
 
-    funcs::post_process(out.finest, *dat);
+    funcs::post_process(out.finest, ndim, map_obj.child_mem);
     return out;
   }
 };
@@ -368,16 +410,15 @@ public:
  * likelihood. */
 class likelihood {
 public:
-  class comp_dat {
-  public:
-    comp_dat(arma::vec const&, arma::mat const&, arma::vec const&) { }
-  };
+  static void set_child_wk_mem
+  (arma::vec const&, arma::mat const&, double const * const) { }
 
   static int constexpr get_n_integrands(arma::vec const&, arma::mat const&){
     return 1L;
   }
-  static void integrand(arma::vec const&, comp_dat const&,arma::vec&);
-  static void post_process(arma::vec&, comp_dat const&);
+  static void integrand(arma::vec const&, int const, arma::vec&,
+                        double const * const);
+  static void post_process(arma::vec&, int const, double const * const) { }
   constexpr static bool needs_last_unif() {
     return false;
   }
@@ -389,26 +430,21 @@ public:
  * covariance matrix. */
 class deriv {
 public:
-  /**
-   * stores data need to perform the approximation.
-   */
-  class comp_dat {
-  public:
-    arma::vec const *mu;
-    arma::mat const *sigma,
-                     signa_inv,
-                     sigma_chol_inv;
+  static void set_child_wk_mem
+  (arma::vec const &mu, arma::mat const &sigma,
+   double * const wk_mem){
+    size_t const p = mu.n_elem;
+    arma::mat signa_inv(arma::inv(sigma)),
+    sigma_chol_inv(arma::inv(arma::trimatu(arma::chol(sigma))));
 
-    comp_dat(arma::vec const &mu_in, arma::mat const &sigma_in,
-             arma::vec const &sigma_chol):
-      mu(&mu_in), sigma(&sigma_in), signa_inv(arma::inv(sigma_in)),
-      sigma_chol_inv(arma::inv(arma::trimatu(
-        arma::chol(sigma_in)))) { }
-  };
+    copy_upper_tri(sigma_chol_inv, wk_mem);
+    copy_upper_tri(signa_inv     , wk_mem + (p * (p + 1L)) / 2L);
+  }
 
   static int get_n_integrands(arma::vec const&, arma::mat const&);
-  static void integrand(arma::vec const&, comp_dat const&, arma::vec&);
-  static void post_process(arma::vec&, comp_dat const&);
+  static void integrand(arma::vec const&, int const, arma::vec&,
+                        double const * const);
+  static void post_process(arma::vec&, int const, double const * const);
   constexpr static bool needs_last_unif() {
     return true;
   }
@@ -420,18 +456,9 @@ int cdf<funcs>::ndim = 0L;
 template<class funcs>
 int cdf<funcs>::n_integrands = 0L;
 template<class funcs>
-arma::vec cdf<funcs>::lower = arma::vec();
-template<class funcs>
-arma::vec cdf<funcs>::upper = arma::vec();
-template<class funcs>
 arma::ivec cdf<funcs>::infin = arma::ivec();
 template<class funcs>
-arma::vec cdf<funcs>::sigma_chol = arma::vec();
-template<class funcs>
 double * cdf<funcs>::wk_mem = nullptr;
-template<class funcs>
-thread_local std::unique_ptr<typename cdf<funcs>::comp_dat >
-  cdf<funcs>::dat = std::unique_ptr<cdf<funcs>::comp_dat>();
 }
 
 #endif
