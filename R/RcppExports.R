@@ -13,3 +13,7 @@ get_z_hat <- function(lower, upper, code, n_threads) {
     .Call(`_mdgc_get_z_hat`, lower, upper, code, n_threads)
 }
 
+get_commutation <- function(n, m) {
+    .Call(`_mdgc_get_commutation_to_R`, n, m)
+}
+

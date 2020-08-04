@@ -1,24 +1,71 @@
 
-<!-- README.md is generated from README.Rmd. Please edit that file -->
-
 # mdgc
 
-TODO: The goal of mdgc is to …
+This package contains a marginal likelihood approach to estimating the
+model discussed by D. Hoff (2007) and Zhao and Udell (2019). We have
+modified the Fortran code by Genz and Bretz (2002) to supply an
+approximation gradient for the log marginal likelihood and to use an
+approximation of the marginal likelihood similar to the CDF
+approximation in Genz and Bretz (2002).
+
+However, the package can be useful for a lot of other models. For
+instance, the methods are directly applicable to other Gaussian copula
+models and some mixed effect models. All methods are implemented in C++,
+support computation in parallel, and should easily be able to be ported
+to other languages.
 
 ## Example
+
+Below, we provide an example similar to Zhao and Udell (2019 Section
+7.1). The authors use a data set with a random correlation matrix, 5
+continuous variables, 5 binary variables, and 5 ordinal variables with 5
+levels. There is a total of 2000 observations and 30% of the variables
+are missing completely at random.
+
+To summarize Zhao and Udell (2019) results, they show that their
+approximate EM algorithm converges in what seems to be 20-25 seconds
+while it takes more than 150 seconds for the MCMC algorithm used by D.
+Hoff (2007). In essence, these figures should be kept in mind when
+looking at the results below. Importantly, Zhao and Udell (2019) use an
+approximation in the E-step of the EM algorithm which is fast but might
+be crude is some settings. Using a potentially arbitrarily precise
+approximation of the marginal likelihood is useful if this can be done
+quickly enough.
+
+To summarize, we do the following below:
+
+1.  simulate the data set we will use.
+2.  show how to use the C++ functions and that these provide an
+    approximation of the log marginal likelihood and its gradient.
+    Moreover, we show that the methods scales well in the number of
+    threads.
+3.  define functions to perform maximum likelihood estimation.
+4.  estimate the parameters using a simple gradient descent algorithm
+    and stochastic gradient descent using ADAM.
+5.  show how to improve 4. by using better starting values which are
+    quick to compute. As of this writing, this reduces the estimation
+    time to less than 5 seconds using four threads and less than 13.5
+    seconds using one thread.
+
+Presumably/likely, computing the marginals of each variable should be
+extremely fast, as should the imputation once the model parameters are
+estimated. Given that this is true, then the main concern should be the
+time it takes to estimate the model parameters. As we show, this can be
+done quickly using our code.
 
 ``` r
 library(mdgc)
 
-# simulates a data set and puts into a format to pass to C++
+# simulates a data set and puts it into a format to pass to C++.
 #
 # Args: 
 #   n: number of observations. 
 #   p: number of variables. 
+#   n_lvls: number of levels for the ordinal variables. 
 # 
 # Returns: 
-#   Simluated mask data set in the format needed to pass to C++.
-sim_dat <- function(n, p = 4){
+#   Simluated masked data set in the format needed to pass to C++.
+sim_dat <- function(n, p = 4, n_lvls = 5L){
   # get the covariance matrix
   Sb <- diag(p)
   Sb[lower.tri(Sb)] <- Sb[upper.tri(Sb)] <- .5
@@ -28,110 +75,128 @@ sim_dat <- function(n, p = 4){
   # draw the observations
   Z <- truth <- crossprod(chol(Sig), matrix(rnorm(n * p), p))
   
-  # mask 
-  is_mask <- matrix(runif(n * p) < .33, p)
-  is_int <- ceiling(p / 3):p
-  is_mask[is_int, ] <- is_mask[is_int, ] & Z[is_int, ] < 0
+  # determine the type
+  type <- rep(1:3, each = floor((p + 3 - 1) / 3))[1:p]
+  is_con <- type == 1L
+  is_bin <- type == 2L
+  is_ord <- type == 3L
   
-  Z[ is_int, ][is_mask[ is_int, ]] <- 0
-  Z[-is_int, ][is_mask[-is_int, ]] <- NA_real_
+  # mask data 
+  is_mask <- matrix(runif(n * p) < .3, p)
+  Z[is_mask] <- NA_real_
   
-  # create matrix in the Z format to pass to c++
-  lower <- matrix(-Inf, p, n)
-  upper <- Z
-  # codes are: 
+  # set code arugment. Codes are:
   #  0: latent Z is observed (upper is the observed point).
-  #  1: latent Z can be anything.. 
-  #  2: latent Z is in an interval. 
+  #  1: latent Z can be anything.
+  #  2: latent Z is in an interval given by lower and upper.
   code <- matrix(0L, p, n)
-  code[-is_int, ][is_mask[-is_int, ]] <- 1L 
-  code[ is_int, ][is_mask[ is_int, ]] <- 2L 
+  code[is_ord | is_bin, ] <- 2L
+  code[is_mask] <- 1L
+  
+  # create upper and lower bounds
+  upper <- lower <- matrix(NA_real_, p, n)
+  lower[is_con, ] <- upper[is_con, ] <- truth[is_con, ]
+  
+  bs <- c(-Inf, 0, Inf)
+  lower[is_bin, ] <- head(bs, -1)[cut(truth[is_bin, ], breaks = bs)]
+  upper[is_bin, ] <- bs[-1]      [cut(truth[is_bin, ], breaks = bs)]
+  
+  bs <- qnorm(seq(0, 1, length.out = n_lvls + 1L))
+  lower[is_ord, ] <- head(bs, -1)[cut(truth[is_ord, ], breaks = bs)]
+  upper[is_ord, ] <- bs[-1]      [cut(truth[is_ord, ], breaks = bs)]
+  
+  lower[is_mask] <- upper[is_mask] <- NA_real_
   
   list(lower = lower, upper = upper, code = code, Sigma = Sig, 
        truth = truth)
 }
 
-set.seed(2)
+# simulate and show the data. Data is stored in 
+# [# variables] x [# observations] format
+set.seed(1)
 p <- 15L
 dat <- sim_dat(2000L, p = p)
-dat$lower[, 1:5]
+dat$lower[, 1:5] # lower bounds
+#>          [,1]   [,2]   [,3]    [,4]   [,5]
+#>  [1,] -0.1796 -0.652 -0.929      NA -1.467
+#>  [2,]      NA -0.396 -1.754  0.0985     NA
+#>  [3,]  0.5360 -1.967 -1.683  2.0384     NA
+#>  [4,]  0.0677 -0.136     NA      NA     NA
+#>  [5,]  0.1167     NA -1.279      NA     NA
+#>  [6,]    -Inf   -Inf   -Inf  0.0000   -Inf
+#>  [7,]      NA   -Inf  0.000  0.0000   -Inf
+#>  [8,]      NA   -Inf     NA  0.0000     NA
+#>  [9,]    -Inf  0.000     NA      NA   -Inf
+#> [10,]  0.0000   -Inf     NA      NA   -Inf
+#> [11,]    -Inf     NA -0.842      NA -0.253
+#> [12,] -0.2533     NA   -Inf      NA   -Inf
+#> [13,]    -Inf -0.842     NA -0.8416   -Inf
+#> [14,]      NA   -Inf   -Inf      NA  0.253
+#> [15,] -0.8416   -Inf   -Inf      NA   -Inf
+dat$upper[, 1:5] # upper bounds
+#>          [,1]   [,2]   [,3]    [,4]   [,5]
+#>  [1,] -0.1796 -0.652 -0.929      NA -1.467
+#>  [2,]      NA -0.396 -1.754  0.0985     NA
+#>  [3,]  0.5360 -1.967 -1.683  2.0384     NA
+#>  [4,]  0.0677 -0.136     NA      NA     NA
+#>  [5,]  0.1167     NA -1.279      NA     NA
+#>  [6,]  0.0000  0.000  0.000     Inf  0.000
+#>  [7,]      NA  0.000    Inf     Inf  0.000
+#>  [8,]      NA  0.000     NA     Inf     NA
+#>  [9,]  0.0000    Inf     NA      NA  0.000
+#> [10,]     Inf  0.000     NA      NA  0.000
+#> [11,] -0.8416     NA -0.253      NA  0.253
+#> [12,]  0.2533     NA -0.842      NA -0.842
+#> [13,] -0.8416 -0.253     NA -0.2533 -0.842
+#> [14,]      NA -0.842 -0.842      NA  0.842
+#> [15,] -0.2533 -0.842 -0.842      NA -0.842
+dat$code [, 1:5] # code for type of data
 #>       [,1] [,2] [,3] [,4] [,5]
-#>  [1,] -Inf -Inf -Inf -Inf -Inf
-#>  [2,] -Inf -Inf -Inf -Inf -Inf
-#>  [3,] -Inf -Inf -Inf -Inf -Inf
-#>  [4,] -Inf -Inf -Inf -Inf -Inf
-#>  [5,] -Inf -Inf -Inf -Inf -Inf
-#>  [6,] -Inf -Inf -Inf -Inf -Inf
-#>  [7,] -Inf -Inf -Inf -Inf -Inf
-#>  [8,] -Inf -Inf -Inf -Inf -Inf
-#>  [9,] -Inf -Inf -Inf -Inf -Inf
-#> [10,] -Inf -Inf -Inf -Inf -Inf
-#> [11,] -Inf -Inf -Inf -Inf -Inf
-#> [12,] -Inf -Inf -Inf -Inf -Inf
-#> [13,] -Inf -Inf -Inf -Inf -Inf
-#> [14,] -Inf -Inf -Inf -Inf -Inf
-#> [15,] -Inf -Inf -Inf -Inf -Inf
-dat$upper[, 1:5]
-#>         [,1]    [,2]  [,3]   [,4]    [,5]
-#>  [1,] -0.367 -0.7334    NA  0.897 -1.8727
-#>  [2,] -1.431  1.4377    NA     NA -2.7109
-#>  [3,]     NA  0.4762 -1.67     NA -0.8421
-#>  [4,] -2.598  2.1653 -2.34 -0.250      NA
-#>  [5,] -1.781  1.3680 -1.20  1.775  0.7809
-#>  [6,] -1.172  0.2892 -2.01  0.230  0.0000
-#>  [7,] -2.277 -0.2717 -2.08  0.342 -0.3497
-#>  [8,] -1.541  0.6310 -2.20  1.410 -1.5887
-#>  [9,] -1.380  0.7548 -2.36  1.187  0.0000
-#> [10,]  0.000 -0.3765 -1.91  0.375  0.0607
-#> [11,] -1.011  0.0349 -2.60  0.261  0.0000
-#> [12,] -0.370  0.4684  0.00  0.000  0.3963
-#> [13,] -1.346  1.2315 -1.76 -0.790 -1.5000
-#> [14,]  0.000 -0.9943  0.00  0.246 -1.2516
-#> [15,] -1.903  0.8470 -1.64 -1.161 -0.0939
-dat$code [, 1:5]
-#>       [,1] [,2] [,3] [,4] [,5]
-#>  [1,]    0    0    1    0    0
-#>  [2,]    0    0    1    1    0
-#>  [3,]    1    0    0    1    0
-#>  [4,]    0    0    0    0    1
-#>  [5,]    0    0    0    0    0
-#>  [6,]    0    0    0    0    2
-#>  [7,]    0    0    0    0    0
-#>  [8,]    0    0    0    0    0
-#>  [9,]    0    0    0    0    2
-#> [10,]    2    0    0    0    0
-#> [11,]    0    0    0    0    2
-#> [12,]    0    0    2    2    0
-#> [13,]    0    0    0    0    0
-#> [14,]    2    0    2    0    0
-#> [15,]    0    0    0    0    0
-dat$truth[, 1:5]
-#>         [,1]    [,2]   [,3]   [,4]    [,5]
-#>  [1,] -0.367 -0.7334 -1.688  0.897 -1.8727
-#>  [2,] -1.431  1.4377 -0.817  1.323 -2.7109
-#>  [3,] -1.884  0.4762 -1.671 -1.275 -0.8421
-#>  [4,] -2.598  2.1653 -2.343 -0.250 -0.4971
-#>  [5,] -1.781  1.3680 -1.198  1.775  0.7809
-#>  [6,] -1.172  0.2892 -2.013  0.230 -1.7725
-#>  [7,] -2.277 -0.2717 -2.083  0.342 -0.3497
-#>  [8,] -1.541  0.6310 -2.198  1.410 -1.5887
-#>  [9,] -1.380  0.7548 -2.362  1.187 -0.9730
-#> [10,] -0.960 -0.3765 -1.912  0.375  0.0607
-#> [11,] -1.011  0.0349 -2.604  0.261 -0.1402
-#> [12,] -0.370  0.4684 -0.981 -0.445  0.3963
-#> [13,] -1.346  1.2315 -1.761 -0.790 -1.5000
-#> [14,] -0.741 -0.9943 -2.671  0.246 -1.2516
-#> [15,] -1.903  0.8470 -1.638 -1.161 -0.0939
+#>  [1,]    0    0    0    1    0
+#>  [2,]    1    0    0    0    1
+#>  [3,]    0    0    0    0    1
+#>  [4,]    0    0    1    1    1
+#>  [5,]    0    1    0    1    1
+#>  [6,]    2    2    2    2    2
+#>  [7,]    1    2    2    2    2
+#>  [8,]    1    2    1    2    1
+#>  [9,]    2    2    1    1    2
+#> [10,]    2    2    1    1    2
+#> [11,]    2    1    2    1    2
+#> [12,]    2    1    2    1    2
+#> [13,]    2    2    1    2    2
+#> [14,]    1    2    2    1    2
+#> [15,]    2    2    2    1    2
+dat$truth[, 1:5] # true values
+#>          [,1]   [,2]    [,3]    [,4]   [,5]
+#>  [1,] -0.1796 -0.652 -0.9294 -0.1444 -1.467
+#>  [2,] -0.1805 -0.396 -1.7539  0.0985 -0.342
+#>  [3,]  0.5360 -1.967 -1.6828  2.0384 -0.592
+#>  [4,]  0.0677 -0.136 -0.5009  0.8403  0.399
+#>  [5,]  0.1167 -2.124 -1.2791  1.1416 -1.058
+#>  [6,] -0.4768 -1.189 -1.9331  0.5362 -0.906
+#>  [7,] -0.1970 -1.779  0.1310  0.5243 -1.221
+#>  [8,]  0.0299 -1.685 -0.8426  0.5991 -0.911
+#>  [9,] -0.4405  0.572 -1.1092  1.1539 -0.309
+#> [10,]  0.3715 -1.284  0.0287  2.1279 -1.265
+#> [11,] -1.0883 -1.854 -0.3069  1.7843 -0.092
+#> [12,]  0.0737 -2.347 -1.6364  1.2509 -1.619
+#> [13,] -1.3447 -0.675  0.8154 -0.2623 -1.528
+#> [14,] -0.6888 -1.128 -0.9740  1.3349  0.280
+#> [15,] -0.7121 -0.895 -1.2615  0.7079 -1.448
 
 #####
 # get pointers to objects in C++
-ptr <- mdgc:::get_log_lm_terms(lower = dat$lower, upper = dat$upper, 
-                               code = dat$code)
+system.time(
+  ptr <- mdgc:::get_log_lm_terms(lower = dat$lower, upper = dat$upper, 
+                                 code = dat$code))
+#>    user  system elapsed 
+#>       0       0       0
 
-# approximates the log marginal likelihood function
+# approximates the log marginal likelihood function.
 #
 # Args: 
-#   vcov: correlation matrix
+#   vcov: correlation matrix.
 #   releps: relative error for each term. 
 #   n_threads: number of threads. 
 #   comp_derivs: logical for whether to approximate the gradient. 
@@ -147,19 +212,19 @@ log_ml <- function(vcov, releps = 1e-2, n_threads = 1L, comp_derivs = FALSE,
 # print the approximate log marginal likelihood at the true parameters
 set.seed(1)
 print(log_ml(dat$Sigma), digits = 7)
-#> [1] -30273.89
+#> [1] -22290.21
 
 # check standard error
 sd(replicate(20, log_ml(dat$Sigma, n_threads = 4L)))
-#> [1] 0.00655
+#> [1] 0.0282
 
 # without reordering
 print(log_ml(dat$Sigma, n_threads = 4L, do_reorder = FALSE), digits = 7)
-#> [1] -30273.89
+#> [1] -22290.13
 
 # check standard error
 sd(replicate(20, log_ml(dat$Sigma, n_threads = 4L, do_reorder = FALSE)))
-#> [1] 0.011
+#> [1] 0.0637
 
 # check computation time
 library(microbenchmark)
@@ -178,13 +243,13 @@ microbenchmark(
     log_ml(dat$Sigma, do_reorder = FALSE, n_threads = 4L), 
   times = 5)
 #> Unit: milliseconds
-#>                       expr   min    lq  mean median    uq   max neval
-#>  1 thread                  124.2 124.3 124.9  125.1 125.3 125.6     5
-#>  1 thread  (w/o rordering) 122.4 123.1 123.5  123.6 124.1 124.2     5
-#>  2 threads                  63.5  63.5  63.6   63.5  63.7  63.8     5
-#>  2 threads (w/o rordering)  62.7  62.8  63.3   63.5  63.6  64.2     5
-#>  4 threads                  32.2  32.4  32.6   32.6  32.6  33.0     5
-#>  4 threads (w/o rordering)  32.6  32.9  33.1   33.2  33.3  33.3     5
+#>                       expr min  lq mean median  uq max neval
+#>  1 thread                  547 548  550    550 550 554     5
+#>  1 thread  (w/o rordering) 815 826  831    835 836 840     5
+#>  2 threads                 284 286  290    286 291 303     5
+#>  2 threads (w/o rordering) 421 426  437    433 444 459     5
+#>  4 threads                 141 145  149    147 154 159     5
+#>  4 threads (w/o rordering) 223 226  229    227 233 236     5
 
 #####
 # we can also get an approximation of the gradient
@@ -192,7 +257,7 @@ t1 <- log_ml(dat$Sigma, comp_derivs = TRUE)
 t2 <- log_ml(dat$Sigma, comp_derivs = TRUE, n_threads = 4L)
 all.equal(t1, t2, tolerance = 1e-2)
 #> [1] TRUE
-
+  
 microbenchmark(
   `1 thread                 ` = 
     log_ml(dat$Sigma, comp_derivs = TRUE), 
@@ -208,15 +273,15 @@ microbenchmark(
     log_ml(dat$Sigma, comp_derivs = TRUE, do_reorder = FALSE, n_threads = 4L), 
   times = 5)
 #> Unit: milliseconds
-#>                       expr min  lq mean median   uq  max neval
-#>  1 thread                  991 993  998    999 1002 1005     5
-#>  1 thread  (w/o rordering) 947 950  963    959  971  988     5
-#>  2 threads                 493 494  502    500  510  512     5
-#>  2 threads (w/o rordering) 483 497  497    500  502  505     5
-#>  4 threads                 257 262  265    264  266  274     5
-#>  4 threads (w/o rordering) 249 257  259    257  258  273     5
+#>                       expr  min   lq mean median   uq  max neval
+#>  1 thread                  2462 2471 2514   2503 2566 2570     5
+#>  1 thread  (w/o rordering) 4303 4316 4376   4367 4409 4485     5
+#>  2 threads                 1233 1266 1279   1285 1301 1311     5
+#>  2 threads (w/o rordering) 2185 2209 2243   2222 2251 2348     5
+#>  4 threads                  670  679  693    684  700  730     5
+#>  4 threads (w/o rordering) 1210 1213 1238   1230 1261 1277     5
 
-# we create a wrapper function which takes in a log-Cholesky decomposition
+# creates a matrix from a log-Cholesky decomposition.
 # 
 # Args:
 #   par: p (p + 1) / 2 elements in the log-Cholesky decomposition.
@@ -239,7 +304,7 @@ get_lchol <- function(par){
   lSig[lower.tri(lSig, TRUE)]
 }
 
-Jac_dum <- matrixcalc::commutation.matrix(p)
+Jac_dum <- mdgc:::get_commutation(p, p)
 diag(Jac_dum) <- diag(Jac_dum) + 1
 
 # computes the approximate log marginal likelihood. 
@@ -281,9 +346,11 @@ par_fn <- function(par, seed = NULL, comp_derivs = FALSE,
 # check that the function gives the correct log marginal likelihood
 # approximation and gradient approximation.
 lSig <- get_lchol(dat$Sigma)
-r1 <- par_fn(lSig, comp_derivs = TRUE, n_threads = 4L, releps = 1e-3)
-r2 <- numDeriv::jacobian(par_fn, lSig, seed = 1L, n_threads = 4L)
-all.equal(attr(r1, "grad"), drop(r2), tolerance = 1e-3)
+r1 <- par_fn(lSig, comp_derivs = TRUE, n_threads = 4L, releps = 1e-3, 
+             indices = 1:100)
+r2 <- numDeriv::jacobian(par_fn, lSig, seed = 1L, n_threads = 6L, 
+                         releps = 1e-3, indices = 1:100)
+all.equal(attr(r1, "grad"), drop(r2), tolerance = 1e-2)
 #> [1] TRUE
 
 #####
@@ -336,77 +403,77 @@ start_val <- numeric(p * (p + 1) / 2)
 system.time(res <- naiv_gradient_descent(val = start_val, step_start = .001, 
                                          maxit = 20L, eps = 1e-2))
 #>    user  system elapsed 
-#>   29.55    0.00    7.47
+#>    78.5     0.0    20.2
 
 # compare estimates with truth
 norm(res$result - dat$Sigma)
-#> [1] 0.309
+#> [1] 0.373
 res$result
 #>        [,1]  [,2]  [,3]  [,4]  [,5]  [,6]  [,7]  [,8]  [,9] [,10] [,11] [,12]
-#>  [1,] 1.000 0.381 0.412 0.358 0.274 0.433 0.361 0.428 0.464 0.316 0.499 0.411
-#>  [2,] 0.381 1.000 0.344 0.269 0.530 0.435 0.182 0.498 0.470 0.324 0.264 0.338
-#>  [3,] 0.412 0.344 1.000 0.335 0.219 0.533 0.386 0.398 0.420 0.553 0.535 0.496
-#>  [4,] 0.358 0.269 0.335 1.000 0.431 0.318 0.280 0.342 0.496 0.340 0.338 0.393
-#>  [5,] 0.274 0.530 0.219 0.431 1.000 0.506 0.351 0.379 0.428 0.449 0.344 0.351
-#>  [6,] 0.433 0.435 0.533 0.318 0.506 1.000 0.446 0.350 0.466 0.444 0.494 0.453
-#>  [7,] 0.361 0.182 0.386 0.280 0.351 0.446 1.000 0.298 0.388 0.273 0.371 0.369
-#>  [8,] 0.428 0.498 0.398 0.342 0.379 0.350 0.298 1.000 0.450 0.377 0.250 0.340
-#>  [9,] 0.464 0.470 0.420 0.496 0.428 0.466 0.388 0.450 1.000 0.459 0.370 0.356
-#> [10,] 0.316 0.324 0.553 0.340 0.449 0.444 0.273 0.377 0.459 1.000 0.439 0.366
-#> [11,] 0.499 0.264 0.535 0.338 0.344 0.494 0.371 0.250 0.370 0.439 1.000 0.559
-#> [12,] 0.411 0.338 0.496 0.393 0.351 0.453 0.369 0.340 0.356 0.366 0.559 1.000
-#> [13,] 0.404 0.508 0.462 0.298 0.497 0.530 0.309 0.428 0.449 0.493 0.502 0.483
-#> [14,] 0.550 0.454 0.414 0.352 0.496 0.551 0.392 0.380 0.397 0.557 0.579 0.606
-#> [15,] 0.523 0.412 0.530 0.418 0.513 0.519 0.432 0.395 0.432 0.484 0.501 0.542
+#>  [1,] 1.000 0.539 0.410 0.503 0.456 0.557 0.491 0.517 0.497 0.439 0.433 0.509
+#>  [2,] 0.539 1.000 0.438 0.483 0.318 0.431 0.465 0.503 0.439 0.494 0.534 0.534
+#>  [3,] 0.410 0.438 1.000 0.544 0.472 0.492 0.581 0.470 0.426 0.485 0.548 0.413
+#>  [4,] 0.503 0.483 0.544 1.000 0.455 0.539 0.475 0.458 0.521 0.446 0.432 0.466
+#>  [5,] 0.456 0.318 0.472 0.455 1.000 0.505 0.367 0.414 0.485 0.422 0.422 0.493
+#>  [6,] 0.557 0.431 0.492 0.539 0.505 1.000 0.474 0.487 0.468 0.411 0.399 0.568
+#>  [7,] 0.491 0.465 0.581 0.475 0.367 0.474 1.000 0.516 0.434 0.560 0.527 0.491
+#>  [8,] 0.517 0.503 0.470 0.458 0.414 0.487 0.516 1.000 0.502 0.630 0.376 0.523
+#>  [9,] 0.497 0.439 0.426 0.521 0.485 0.468 0.434 0.502 1.000 0.462 0.448 0.438
+#> [10,] 0.439 0.494 0.485 0.446 0.422 0.411 0.560 0.630 0.462 1.000 0.530 0.434
+#> [11,] 0.433 0.534 0.548 0.432 0.422 0.399 0.527 0.376 0.448 0.530 1.000 0.437
+#> [12,] 0.509 0.534 0.413 0.466 0.493 0.568 0.491 0.523 0.438 0.434 0.437 1.000
+#> [13,] 0.549 0.455 0.454 0.479 0.488 0.505 0.563 0.532 0.546 0.468 0.472 0.449
+#> [14,] 0.477 0.427 0.551 0.518 0.524 0.551 0.454 0.437 0.488 0.423 0.451 0.428
+#> [15,] 0.610 0.474 0.476 0.627 0.441 0.511 0.536 0.456 0.499 0.539 0.478 0.478
 #>       [,13] [,14] [,15]
-#>  [1,] 0.404 0.550 0.523
-#>  [2,] 0.508 0.454 0.412
-#>  [3,] 0.462 0.414 0.530
-#>  [4,] 0.298 0.352 0.418
-#>  [5,] 0.497 0.496 0.513
-#>  [6,] 0.530 0.551 0.519
-#>  [7,] 0.309 0.392 0.432
-#>  [8,] 0.428 0.380 0.395
-#>  [9,] 0.449 0.397 0.432
-#> [10,] 0.493 0.557 0.484
-#> [11,] 0.502 0.579 0.501
-#> [12,] 0.483 0.606 0.542
-#> [13,] 1.000 0.512 0.611
-#> [14,] 0.512 1.000 0.574
-#> [15,] 0.611 0.574 1.000
+#>  [1,] 0.549 0.477 0.610
+#>  [2,] 0.455 0.427 0.474
+#>  [3,] 0.454 0.551 0.476
+#>  [4,] 0.479 0.518 0.627
+#>  [5,] 0.488 0.524 0.441
+#>  [6,] 0.505 0.551 0.511
+#>  [7,] 0.563 0.454 0.536
+#>  [8,] 0.532 0.437 0.456
+#>  [9,] 0.546 0.488 0.499
+#> [10,] 0.468 0.423 0.539
+#> [11,] 0.472 0.451 0.478
+#> [12,] 0.449 0.428 0.478
+#> [13,] 1.000 0.608 0.614
+#> [14,] 0.608 1.000 0.535
+#> [15,] 0.614 0.535 1.000
 dat$Sigma
 #>        [,1]  [,2]  [,3]  [,4]  [,5]  [,6]  [,7]  [,8]  [,9] [,10] [,11] [,12]
-#>  [1,] 1.000 0.404 0.400 0.364 0.344 0.461 0.393 0.443 0.458 0.336 0.514 0.424
-#>  [2,] 0.404 1.000 0.343 0.255 0.532 0.438 0.189 0.483 0.460 0.306 0.274 0.361
-#>  [3,] 0.400 0.343 1.000 0.336 0.209 0.543 0.369 0.401 0.410 0.546 0.548 0.503
-#>  [4,] 0.364 0.255 0.336 1.000 0.429 0.330 0.293 0.321 0.484 0.340 0.349 0.360
-#>  [5,] 0.344 0.532 0.209 0.429 1.000 0.490 0.339 0.396 0.447 0.445 0.349 0.360
-#>  [6,] 0.461 0.438 0.543 0.330 0.490 1.000 0.423 0.355 0.450 0.426 0.514 0.450
-#>  [7,] 0.393 0.189 0.369 0.293 0.339 0.423 1.000 0.275 0.365 0.233 0.354 0.348
-#>  [8,] 0.443 0.483 0.401 0.321 0.396 0.355 0.275 1.000 0.459 0.375 0.267 0.357
-#>  [9,] 0.458 0.460 0.410 0.484 0.447 0.450 0.365 0.459 1.000 0.480 0.391 0.369
-#> [10,] 0.336 0.306 0.546 0.340 0.445 0.426 0.233 0.375 0.480 1.000 0.440 0.373
-#> [11,] 0.514 0.274 0.548 0.349 0.349 0.514 0.354 0.267 0.391 0.440 1.000 0.567
-#> [12,] 0.424 0.361 0.503 0.360 0.360 0.450 0.348 0.357 0.369 0.373 0.567 1.000
-#> [13,] 0.420 0.511 0.444 0.275 0.504 0.545 0.286 0.428 0.458 0.485 0.501 0.489
-#> [14,] 0.583 0.448 0.419 0.353 0.519 0.536 0.382 0.394 0.423 0.559 0.570 0.616
-#> [15,] 0.544 0.424 0.540 0.404 0.504 0.526 0.423 0.411 0.442 0.481 0.499 0.537
+#>  [1,] 1.000 0.534 0.394 0.521 0.449 0.536 0.469 0.508 0.528 0.457 0.446 0.504
+#>  [2,] 0.534 1.000 0.417 0.500 0.319 0.414 0.486 0.524 0.473 0.504 0.521 0.517
+#>  [3,] 0.394 0.417 1.000 0.570 0.509 0.461 0.551 0.516 0.467 0.502 0.528 0.461
+#>  [4,] 0.521 0.500 0.570 1.000 0.489 0.540 0.500 0.458 0.550 0.474 0.471 0.504
+#>  [5,] 0.449 0.319 0.509 0.489 1.000 0.484 0.383 0.426 0.491 0.456 0.451 0.496
+#>  [6,] 0.536 0.414 0.461 0.540 0.484 1.000 0.475 0.459 0.461 0.393 0.409 0.555
+#>  [7,] 0.469 0.486 0.551 0.500 0.383 0.475 1.000 0.500 0.438 0.556 0.523 0.516
+#>  [8,] 0.508 0.524 0.516 0.458 0.426 0.459 0.500 1.000 0.502 0.612 0.416 0.507
+#>  [9,] 0.528 0.473 0.467 0.550 0.491 0.461 0.438 0.502 1.000 0.475 0.506 0.452
+#> [10,] 0.457 0.504 0.502 0.474 0.456 0.393 0.556 0.612 0.475 1.000 0.514 0.420
+#> [11,] 0.446 0.521 0.528 0.471 0.451 0.409 0.523 0.416 0.506 0.514 1.000 0.420
+#> [12,] 0.504 0.517 0.461 0.504 0.496 0.555 0.516 0.507 0.452 0.420 0.420 1.000
+#> [13,] 0.517 0.469 0.445 0.465 0.498 0.454 0.545 0.531 0.569 0.469 0.480 0.450
+#> [14,] 0.476 0.445 0.565 0.533 0.548 0.544 0.474 0.473 0.513 0.421 0.515 0.433
+#> [15,] 0.627 0.506 0.495 0.638 0.481 0.535 0.514 0.511 0.539 0.537 0.493 0.488
 #>       [,13] [,14] [,15]
-#>  [1,] 0.420 0.583 0.544
-#>  [2,] 0.511 0.448 0.424
-#>  [3,] 0.444 0.419 0.540
-#>  [4,] 0.275 0.353 0.404
-#>  [5,] 0.504 0.519 0.504
-#>  [6,] 0.545 0.536 0.526
-#>  [7,] 0.286 0.382 0.423
-#>  [8,] 0.428 0.394 0.411
-#>  [9,] 0.458 0.423 0.442
-#> [10,] 0.485 0.559 0.481
-#> [11,] 0.501 0.570 0.499
-#> [12,] 0.489 0.616 0.537
-#> [13,] 1.000 0.535 0.615
-#> [14,] 0.535 1.000 0.578
-#> [15,] 0.615 0.578 1.000
+#>  [1,] 0.517 0.476 0.627
+#>  [2,] 0.469 0.445 0.506
+#>  [3,] 0.445 0.565 0.495
+#>  [4,] 0.465 0.533 0.638
+#>  [5,] 0.498 0.548 0.481
+#>  [6,] 0.454 0.544 0.535
+#>  [7,] 0.545 0.474 0.514
+#>  [8,] 0.531 0.473 0.511
+#>  [9,] 0.569 0.513 0.539
+#> [10,] 0.469 0.421 0.537
+#> [11,] 0.480 0.515 0.493
+#> [12,] 0.450 0.433 0.488
+#> [13,] 1.000 0.598 0.615
+#> [14,] 0.598 1.000 0.548
+#> [15,] 0.615 0.548 1.000
 
 # or plot both of them and compare
 do_plot <- function(x, main){
@@ -414,9 +481,10 @@ do_plot <- function(x, main){
   image(x, main = main, col = sc, zlim = c(-1, 1), xaxt = "n", yaxt = "n", 
         bty = "n")
 }
-par(mfcol = c(1, 2), mar  = c(1, 1, 4, 1))
+par(mfcol = c(1, 3), mar  = c(1, 1, 4, 1))
 do_plot(res$result, "Estimates")
 do_plot(dat$Sigma, "Truth")
+do_plot(res$result - dat$Sigma, "Difference")
 ```
 
 <img src="man/figures/README-sim_dat-1.png" width="100%" />
@@ -424,8 +492,8 @@ do_plot(dat$Sigma, "Truth")
 ``` r
 
 res$fun_vals # log marginal likelihood estimates at each iteration
-#>  [1] -36569 -32300 -31737 -31250 -31164 -30892 -30412 -30385 -30298 -30263
-#> [11] -30254 -30249 -30244 -30241 -30240 -30238 -30237 -30236 -30235 -30235
+#>  [1] -26054 -23001 -22643 -22430 -22298 -22284 -22264 -22260 -22254 -22253
+#> [11] -22251 -22250 -22250 -22249 -22249 -22249 -22249 -22249 -22249 -22249
 
 #####
 # performs stochastic gradient descent instead (using ADAM).
@@ -484,84 +552,85 @@ adam <- function(val, batch_size, n_threads = 4L, maxit = 10L,
 # estimate the model parameters
 set.seed(1)
 system.time(res_adam  <- adam(
-  val = start_val, alpha = 2e-2, maxit = 10L, batch_size = 200L))
+  val = start_val, alpha = 1e-2, maxit = 10L, batch_size = 100L))
 #>    user  system elapsed 
-#>  12.358   0.003   3.155
+#>  36.989   0.012  10.031
 
 # compare estimates with the truth
 norm(res_adam$result - dat$Sigma)
-#> [1] 0.287
+#> [1] 0.378
 res_adam$result
 #>        [,1]  [,2]  [,3]  [,4]  [,5]  [,6]  [,7]  [,8]  [,9] [,10] [,11] [,12]
-#>  [1,] 1.000 0.392 0.434 0.380 0.293 0.444 0.371 0.436 0.475 0.332 0.512 0.431
-#>  [2,] 0.392 1.000 0.357 0.283 0.533 0.438 0.191 0.500 0.475 0.327 0.269 0.347
-#>  [3,] 0.434 0.357 1.000 0.345 0.230 0.538 0.387 0.407 0.430 0.554 0.539 0.502
-#>  [4,] 0.380 0.283 0.345 1.000 0.431 0.322 0.283 0.353 0.502 0.340 0.340 0.392
-#>  [5,] 0.293 0.533 0.230 0.431 1.000 0.509 0.359 0.383 0.426 0.450 0.348 0.356
-#>  [6,] 0.444 0.438 0.538 0.322 0.509 1.000 0.448 0.349 0.467 0.446 0.494 0.456
-#>  [7,] 0.371 0.191 0.387 0.283 0.359 0.448 1.000 0.301 0.392 0.275 0.376 0.373
-#>  [8,] 0.436 0.500 0.407 0.353 0.383 0.349 0.301 1.000 0.455 0.379 0.254 0.345
-#>  [9,] 0.475 0.475 0.430 0.502 0.426 0.467 0.392 0.455 1.000 0.464 0.374 0.359
-#> [10,] 0.332 0.327 0.554 0.340 0.450 0.446 0.275 0.379 0.464 1.000 0.441 0.363
-#> [11,] 0.512 0.269 0.539 0.340 0.348 0.494 0.376 0.254 0.374 0.441 1.000 0.562
-#> [12,] 0.431 0.347 0.502 0.392 0.356 0.456 0.373 0.345 0.359 0.363 0.562 1.000
-#> [13,] 0.418 0.511 0.467 0.300 0.499 0.531 0.310 0.433 0.451 0.494 0.503 0.482
-#> [14,] 0.563 0.463 0.423 0.356 0.500 0.554 0.396 0.384 0.400 0.558 0.582 0.608
-#> [15,] 0.536 0.416 0.534 0.422 0.512 0.516 0.433 0.396 0.434 0.481 0.501 0.545
+#>  [1,] 1.000 0.540 0.400 0.497 0.445 0.555 0.490 0.517 0.493 0.435 0.436 0.501
+#>  [2,] 0.540 1.000 0.435 0.485 0.314 0.434 0.471 0.510 0.439 0.493 0.540 0.535
+#>  [3,] 0.400 0.435 1.000 0.532 0.461 0.489 0.575 0.465 0.421 0.480 0.545 0.409
+#>  [4,] 0.497 0.485 0.532 1.000 0.443 0.539 0.473 0.457 0.519 0.446 0.430 0.458
+#>  [5,] 0.445 0.314 0.461 0.443 1.000 0.505 0.361 0.403 0.480 0.414 0.422 0.487
+#>  [6,] 0.555 0.434 0.489 0.539 0.505 1.000 0.475 0.488 0.467 0.409 0.402 0.569
+#>  [7,] 0.490 0.471 0.575 0.473 0.361 0.475 1.000 0.518 0.431 0.560 0.524 0.494
+#>  [8,] 0.517 0.510 0.465 0.457 0.403 0.488 0.518 1.000 0.498 0.632 0.378 0.515
+#>  [9,] 0.493 0.439 0.421 0.519 0.480 0.467 0.431 0.498 1.000 0.457 0.446 0.431
+#> [10,] 0.435 0.493 0.480 0.446 0.414 0.409 0.560 0.632 0.457 1.000 0.522 0.430
+#> [11,] 0.436 0.540 0.545 0.430 0.422 0.402 0.524 0.378 0.446 0.522 1.000 0.438
+#> [12,] 0.501 0.535 0.409 0.458 0.487 0.569 0.494 0.515 0.431 0.430 0.438 1.000
+#> [13,] 0.540 0.451 0.444 0.473 0.485 0.502 0.560 0.531 0.541 0.465 0.473 0.439
+#> [14,] 0.469 0.434 0.553 0.512 0.512 0.549 0.451 0.434 0.484 0.421 0.451 0.429
+#> [15,] 0.607 0.481 0.478 0.622 0.431 0.511 0.540 0.458 0.495 0.536 0.484 0.477
 #>       [,13] [,14] [,15]
-#>  [1,] 0.418 0.563 0.536
-#>  [2,] 0.511 0.463 0.416
-#>  [3,] 0.467 0.423 0.534
-#>  [4,] 0.300 0.356 0.422
-#>  [5,] 0.499 0.500 0.512
-#>  [6,] 0.531 0.554 0.516
-#>  [7,] 0.310 0.396 0.433
-#>  [8,] 0.433 0.384 0.396
-#>  [9,] 0.451 0.400 0.434
-#> [10,] 0.494 0.558 0.481
-#> [11,] 0.503 0.582 0.501
-#> [12,] 0.482 0.608 0.545
-#> [13,] 1.000 0.515 0.609
-#> [14,] 0.515 1.000 0.573
-#> [15,] 0.609 0.573 1.000
+#>  [1,] 0.540 0.469 0.607
+#>  [2,] 0.451 0.434 0.481
+#>  [3,] 0.444 0.553 0.478
+#>  [4,] 0.473 0.512 0.622
+#>  [5,] 0.485 0.512 0.431
+#>  [6,] 0.502 0.549 0.511
+#>  [7,] 0.560 0.451 0.540
+#>  [8,] 0.531 0.434 0.458
+#>  [9,] 0.541 0.484 0.495
+#> [10,] 0.465 0.421 0.536
+#> [11,] 0.473 0.451 0.484
+#> [12,] 0.439 0.429 0.477
+#> [13,] 1.000 0.599 0.605
+#> [14,] 0.599 1.000 0.528
+#> [15,] 0.605 0.528 1.000
 dat$Sigma
 #>        [,1]  [,2]  [,3]  [,4]  [,5]  [,6]  [,7]  [,8]  [,9] [,10] [,11] [,12]
-#>  [1,] 1.000 0.404 0.400 0.364 0.344 0.461 0.393 0.443 0.458 0.336 0.514 0.424
-#>  [2,] 0.404 1.000 0.343 0.255 0.532 0.438 0.189 0.483 0.460 0.306 0.274 0.361
-#>  [3,] 0.400 0.343 1.000 0.336 0.209 0.543 0.369 0.401 0.410 0.546 0.548 0.503
-#>  [4,] 0.364 0.255 0.336 1.000 0.429 0.330 0.293 0.321 0.484 0.340 0.349 0.360
-#>  [5,] 0.344 0.532 0.209 0.429 1.000 0.490 0.339 0.396 0.447 0.445 0.349 0.360
-#>  [6,] 0.461 0.438 0.543 0.330 0.490 1.000 0.423 0.355 0.450 0.426 0.514 0.450
-#>  [7,] 0.393 0.189 0.369 0.293 0.339 0.423 1.000 0.275 0.365 0.233 0.354 0.348
-#>  [8,] 0.443 0.483 0.401 0.321 0.396 0.355 0.275 1.000 0.459 0.375 0.267 0.357
-#>  [9,] 0.458 0.460 0.410 0.484 0.447 0.450 0.365 0.459 1.000 0.480 0.391 0.369
-#> [10,] 0.336 0.306 0.546 0.340 0.445 0.426 0.233 0.375 0.480 1.000 0.440 0.373
-#> [11,] 0.514 0.274 0.548 0.349 0.349 0.514 0.354 0.267 0.391 0.440 1.000 0.567
-#> [12,] 0.424 0.361 0.503 0.360 0.360 0.450 0.348 0.357 0.369 0.373 0.567 1.000
-#> [13,] 0.420 0.511 0.444 0.275 0.504 0.545 0.286 0.428 0.458 0.485 0.501 0.489
-#> [14,] 0.583 0.448 0.419 0.353 0.519 0.536 0.382 0.394 0.423 0.559 0.570 0.616
-#> [15,] 0.544 0.424 0.540 0.404 0.504 0.526 0.423 0.411 0.442 0.481 0.499 0.537
+#>  [1,] 1.000 0.534 0.394 0.521 0.449 0.536 0.469 0.508 0.528 0.457 0.446 0.504
+#>  [2,] 0.534 1.000 0.417 0.500 0.319 0.414 0.486 0.524 0.473 0.504 0.521 0.517
+#>  [3,] 0.394 0.417 1.000 0.570 0.509 0.461 0.551 0.516 0.467 0.502 0.528 0.461
+#>  [4,] 0.521 0.500 0.570 1.000 0.489 0.540 0.500 0.458 0.550 0.474 0.471 0.504
+#>  [5,] 0.449 0.319 0.509 0.489 1.000 0.484 0.383 0.426 0.491 0.456 0.451 0.496
+#>  [6,] 0.536 0.414 0.461 0.540 0.484 1.000 0.475 0.459 0.461 0.393 0.409 0.555
+#>  [7,] 0.469 0.486 0.551 0.500 0.383 0.475 1.000 0.500 0.438 0.556 0.523 0.516
+#>  [8,] 0.508 0.524 0.516 0.458 0.426 0.459 0.500 1.000 0.502 0.612 0.416 0.507
+#>  [9,] 0.528 0.473 0.467 0.550 0.491 0.461 0.438 0.502 1.000 0.475 0.506 0.452
+#> [10,] 0.457 0.504 0.502 0.474 0.456 0.393 0.556 0.612 0.475 1.000 0.514 0.420
+#> [11,] 0.446 0.521 0.528 0.471 0.451 0.409 0.523 0.416 0.506 0.514 1.000 0.420
+#> [12,] 0.504 0.517 0.461 0.504 0.496 0.555 0.516 0.507 0.452 0.420 0.420 1.000
+#> [13,] 0.517 0.469 0.445 0.465 0.498 0.454 0.545 0.531 0.569 0.469 0.480 0.450
+#> [14,] 0.476 0.445 0.565 0.533 0.548 0.544 0.474 0.473 0.513 0.421 0.515 0.433
+#> [15,] 0.627 0.506 0.495 0.638 0.481 0.535 0.514 0.511 0.539 0.537 0.493 0.488
 #>       [,13] [,14] [,15]
-#>  [1,] 0.420 0.583 0.544
-#>  [2,] 0.511 0.448 0.424
-#>  [3,] 0.444 0.419 0.540
-#>  [4,] 0.275 0.353 0.404
-#>  [5,] 0.504 0.519 0.504
-#>  [6,] 0.545 0.536 0.526
-#>  [7,] 0.286 0.382 0.423
-#>  [8,] 0.428 0.394 0.411
-#>  [9,] 0.458 0.423 0.442
-#> [10,] 0.485 0.559 0.481
-#> [11,] 0.501 0.570 0.499
-#> [12,] 0.489 0.616 0.537
-#> [13,] 1.000 0.535 0.615
-#> [14,] 0.535 1.000 0.578
-#> [15,] 0.615 0.578 1.000
+#>  [1,] 0.517 0.476 0.627
+#>  [2,] 0.469 0.445 0.506
+#>  [3,] 0.445 0.565 0.495
+#>  [4,] 0.465 0.533 0.638
+#>  [5,] 0.498 0.548 0.481
+#>  [6,] 0.454 0.544 0.535
+#>  [7,] 0.545 0.474 0.514
+#>  [8,] 0.531 0.473 0.511
+#>  [9,] 0.569 0.513 0.539
+#> [10,] 0.469 0.421 0.537
+#> [11,] 0.480 0.515 0.493
+#> [12,] 0.450 0.433 0.488
+#> [13,] 1.000 0.598 0.615
+#> [14,] 0.598 1.000 0.548
+#> [15,] 0.615 0.548 1.000
 
 # use plot instead
-par(mfcol = c(1, 2), mar  = c(1, 1, 4, 1))
+par(mfcol = c(1, 3), mar  = c(1, 1, 4, 1))
 do_plot(res_adam$result, "Estimates (ADAM)")
 do_plot(dat$Sigma, "Truth")
+do_plot(res_adam$result - dat$Sigma, "Difference")
 ```
 
 <img src="man/figures/README-sim_dat-2.png" width="100%" />
@@ -571,12 +640,16 @@ do_plot(dat$Sigma, "Truth")
 # look at the maximum log marginal likelihood both at the end and after 
 # each iteration
 log_ml(res_adam$result)
-#> [1] -30236
-apply(res_adam$estimates, 2L, function(x) log_ml(get_lchol_inv(x)))
-#>  [1] -31566 -30650 -30501 -30334 -30270 -30250 -30240 -30237 -30236 -30236
+#> [1] -22251
+funvals_adam_org <- 
+  apply(res_adam$estimates, 2L, function(x) log_ml(get_lchol_inv(x)))
+funvals_adam_org
+#>  [1] -23063 -22506 -22339 -22289 -22267 -22257 -22253 -22252 -22251 -22251
 res_adam$fun_vals # likely lower bounds on the log-marginal likelihood
-#>  [1] -33488 -31034 -30593 -30456 -30321 -30281 -30267 -30264 -30264 -30263
+#>  [1] -24144 -22755 -22427 -22333 -22302 -22288 -22282 -22279 -22278 -22278
+res_adam_org <- res_adam
 
+#####
 # we can use better starting values. E.g. something heuristic like: 
 #   - transform back into the [0, 1] scale. 
 #   - take the middle of the interval and map back. 
@@ -600,27 +673,28 @@ all.equal(tmp, mdgc:::get_z_hat(
   dat$lower, dat$upper, dat$code, n_threads = 4L))
 #> [1] TRUE
 
-# the latter is faster but both are fast
+# the latter is faster but both are relatively fast
 microbenchmark(
   `R version  ` = get_z_hat(dat$lower, dat$upper, dat$code), 
   `C++ verison` = mdgc:::get_z_hat(
   dat$lower, dat$upper, dat$code, n_threads = 4L), times = 10)
 #> Unit: microseconds
 #>         expr   min    lq  mean median    uq   max neval
-#>  R version   41646 43722 47225  46441 50911 53825    10
-#>  C++ verison   147   149   166    159   183   198    10
+#>  R version   66724 70352 71707  71793 72316 77844    10
+#>  C++ verison   617   631   652    651   666   704    10
 
 # then we can compute an approximation of the covariance matrix as follows
 system.time(chat <- cov2cor(cov(t(tmp), use = "pairwise.complete.obs")))
 #>    user  system elapsed 
-#>   0.001   0.000   0.001
+#>   0.003   0.000   0.003
 
 # the starting value is already quite close
-par(mfcol = c(1, 2), mar  = c(1, 1, 4, 1))
+par(mfcol = c(1, 3), mar  = c(1, 1, 4, 1))
 norm(chat - dat$Sigma)
-#> [1] 0.367
+#> [1] 2.02
 do_plot(chat, "Starting value")
 do_plot(dat$Sigma, "Truth")
+do_plot(chat - dat$Sigma, "Difference")
 ```
 
 <img src="man/figures/README-sim_dat-3.png" width="100%" />
@@ -631,16 +705,29 @@ do_plot(dat$Sigma, "Truth")
 start_val <- get_lchol(chat)
 set.seed(1)
 system.time(res_adam  <- adam(
-  val = start_val, alpha = 2e-2, maxit = 5L, batch_size = 200L))
+  val = start_val, alpha = 1e-2, maxit = 5L, batch_size = 100L))
 #>    user  system elapsed 
-#>   6.777   0.012   1.719
+#>  17.454   0.016   4.645
+
+# for comparisons, we also run the code using one thread
+set.seed(1)
+system.time(res_adam_ser  <- adam(
+  val = start_val, alpha = 1e-2, maxit = 5L, batch_size = 100L, 
+  n_threads = 1L))
+#>    user  system elapsed 
+#>  13.194   0.008  13.203
+
+# we get (roughly) the same
+norm(res_adam$result - res_adam_ser$result)
+#> [1] 0.0049
 
 # plot estimate
-par(mfcol = c(1, 2), mar  = c(1, 1, 4, 1))
+par(mfcol = c(1, 3), mar  = c(1, 1, 4, 1))
 norm(res_adam$result - dat$Sigma)
-#> [1] 0.306
+#> [1] 0.378
 do_plot(res_adam$result, "Estimates (ADAM)")
 do_plot(dat$Sigma, "Truth")
+do_plot(res_adam$result - dat$Sigma, "Difference")
 ```
 
 <img src="man/figures/README-sim_dat-4.png" width="100%" />
@@ -649,9 +736,69 @@ do_plot(dat$Sigma, "Truth")
 
 # check log marginal likelihood like before
 log_ml(res_adam$result)
-#> [1] -30236
-apply(res_adam$estimates, 2L, function(x) log_ml(get_lchol_inv(x)))
-#> [1] -30269 -30251 -30239 -30237 -30236
+#> [1] -22251
+funvals_adam <- 
+  apply(res_adam$estimates, 2L, function(x) log_ml(get_lchol_inv(x)))
+funvals_adam
+#> [1] -22265 -22253 -22251 -22251 -22251
 res_adam$fun_vals # likely lower bounds on the log-marginal likelihood
-#> [1] -30403 -30275 -30290 -30271 -30266
+#> [1] -22355 -22276 -22281 -22280 -22279
+
+#####
+# compare convergence of the different methods 
+#  line: gradient descent. 
+#  dashed: ADAM with poor starting values. 
+#  dotted: ADAM with better starting values
+lls <- matrix(NA_real_, max(length(res$fun_vals), length(funvals_adam_org), 
+                            length(funvals_adam)), 3L)
+lls[seq_along(res$fun_vals)    , 1] <- res$fun_vals
+lls[seq_along(funvals_adam_org), 2] <- funvals_adam_org
+lls[seq_along(funvals_adam)    , 3] <- funvals_adam
+
+par(mfcol = c(1, 1), mar = c(5, 5, 1, 1))
+matplot(lls, lty = 1:3, col = "black", bty = "l", type = "l", 
+        xlab = "Iteration", ylab = "Log marginal likelihood")
 ```
+
+<img src="man/figures/README-sim_dat-5.png" width="100%" />
+
+``` r
+
+# skipping the first n steps
+n_skip <- 3L
+matplot(lls, lty = 1:3, ylim = range(lls[-(1:n_skip), ], na.rm = TRUE),
+        col = "black", bty = "l", type = "l", xlab = "Iteration", 
+        ylab = "Log marginal likelihood")
+```
+
+<img src="man/figures/README-sim_dat-6.png" width="100%" />
+
+## References
+
+<div id="refs" class="references">
+
+<div id="ref-hoff07">
+
+D. Hoff, Peter. 2007. “Extending the Rank Likelihood for Semiparametric
+Copula Estimation.” *Ann. Appl. Stat.* 1 (1). The Institute of
+Mathematical Statistics: 265–83. <https://doi.org/10.1214/07-AOAS107>.
+
+</div>
+
+<div id="ref-Genz02">
+
+Genz, Alan, and Frank Bretz. 2002. “Comparison of Methods for the
+Computation of Multivariate T Probabilities.” *Journal of Computational
+and Graphical Statistics* 11 (4). Taylor & Francis: 950–71.
+<https://doi.org/10.1198/106186002394>.
+
+</div>
+
+<div id="ref-zhao19">
+
+Zhao, Yuxuan, and Madeleine Udell. 2019. “Missing Value Imputation for
+Mixed Data via Gaussian Copula.”
+
+</div>
+
+</div>

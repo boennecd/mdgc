@@ -1,10 +1,9 @@
 ---
 output: github_document
+bibliography: ref.bib
 ---
 
-<!-- README.md is generated from README.Rmd. Please edit that file -->
-
-```{r, include = FALSE}
+```{r setup, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
@@ -13,24 +12,69 @@ knitr::opts_chunk$set(
 )
 options(digits = 3)
 ```
+
 # mdgc
 
-TODO: The goal of mdgc is to ...
+This package contains a marginal likelihood approach to estimating the 
+model discussed by @hoff07 and @zhao19. We have modified the Fortran
+code by @Genz02 to supply an approximation gradient for the log 
+marginal likelihood and to use an approximation of the marginal likelihood 
+similar to the CDF approximation in @Genz02.
+
+However, the package can be useful for a lot of other models. For instance, 
+the methods are directly applicable to other Gaussian copula models and some 
+mixed effect models. All methods are implemented in C++, support computation 
+in parallel, and should easily be able to be ported to other languages. 
 
 ## Example
+Below, we provide an example similar to @zhao19 [Section 7.1]. The authors 
+use a data set with a random correlation matrix, 5 continuous variables, 
+5 binary variables, and 5 ordinal variables with 5 levels. There is a total 
+of 2000 observations and 30% of the variables are missing completely at 
+random. 
 
-```{r sim_dat, cache = 1}
+To summarize @zhao19 results, they show that their approximate EM algorithm 
+converges in what seems to be 20-25 seconds while it takes more than 150
+seconds for the MCMC algorithm used by @hoff07. In essence, these figures
+should be kept in mind when looking at the results below. Importantly, 
+@zhao19 use an approximation in the E-step of the EM algorithm which is 
+fast but might be crude is some settings. Using a potentially arbitrarily 
+precise approximation of the marginal likelihood is useful if this can 
+be done quickly enough. 
+
+To summarize, we do the following below: 
+
+ 1. simulate the data set we will use. 
+ 2. show how to use the C++ functions and that these provide an 
+    approximation of the log marginal likelihood and its gradient. Moreover, 
+    we show that the methods scales well in the number of threads.
+ 3. define functions to perform maximum likelihood estimation. 
+ 4. estimate the parameters using a simple gradient descent algorithm and 
+    stochastic gradient descent using ADAM. 
+ 5. show how to improve 4. by using better starting values which are quick 
+    to compute. As of this writing, this reduces the estimation time to 
+    less than 5 seconds using four threads and less than 13.5 seconds using 
+    one thread.
+    
+Presumably/likely, computing the marginals of each variable should be 
+extremely fast, as should 
+the imputation once the model parameters are estimated. Given that this is 
+true, then the main concern should be the time it takes to estimate the 
+model parameters. As we show, this can be done quickly using our code.
+
+```{r sim_dat, cache = 1, fig.height = 3, fig.width = 7}
 library(mdgc)
 
-# simulates a data set and puts into a format to pass to C++
+# simulates a data set and puts it into a format to pass to C++.
 #
 # Args: 
 #   n: number of observations. 
 #   p: number of variables. 
+#   n_lvls: number of levels for the ordinal variables. 
 # 
 # Returns: 
-#   Simluated mask data set in the format needed to pass to C++.
-sim_dat <- function(n, p = 4){
+#   Simluated masked data set in the format needed to pass to C++.
+sim_dat <- function(n, p = 4, n_lvls = 5L){
   # get the covariance matrix
   Sb <- diag(p)
   Sb[lower.tri(Sb)] <- Sb[upper.tri(Sb)] <- .5
@@ -40,46 +84,62 @@ sim_dat <- function(n, p = 4){
   # draw the observations
   Z <- truth <- crossprod(chol(Sig), matrix(rnorm(n * p), p))
   
-  # mask 
-  is_mask <- matrix(runif(n * p) < .33, p)
-  is_int <- ceiling(p / 3):p
-  is_mask[is_int, ] <- is_mask[is_int, ] & Z[is_int, ] < 0
+  # determine the type
+  type <- rep(1:3, each = floor((p + 3 - 1) / 3))[1:p]
+  is_con <- type == 1L
+  is_bin <- type == 2L
+  is_ord <- type == 3L
   
-  Z[ is_int, ][is_mask[ is_int, ]] <- 0
-  Z[-is_int, ][is_mask[-is_int, ]] <- NA_real_
+  # mask data 
+  is_mask <- matrix(runif(n * p) < .3, p)
+  Z[is_mask] <- NA_real_
   
-  # create matrix in the Z format to pass to c++
-  lower <- matrix(-Inf, p, n)
-  upper <- Z
-  # codes are: 
+  # set code arugment. Codes are:
   #  0: latent Z is observed (upper is the observed point).
-  #  1: latent Z can be anything.. 
-  #  2: latent Z is in an interval. 
+  #  1: latent Z can be anything.
+  #  2: latent Z is in an interval given by lower and upper.
   code <- matrix(0L, p, n)
-  code[-is_int, ][is_mask[-is_int, ]] <- 1L 
-  code[ is_int, ][is_mask[ is_int, ]] <- 2L 
+  code[is_ord | is_bin, ] <- 2L
+  code[is_mask] <- 1L
+  
+  # create upper and lower bounds
+  upper <- lower <- matrix(NA_real_, p, n)
+  lower[is_con, ] <- upper[is_con, ] <- truth[is_con, ]
+  
+  bs <- c(-Inf, 0, Inf)
+  lower[is_bin, ] <- head(bs, -1)[cut(truth[is_bin, ], breaks = bs)]
+  upper[is_bin, ] <- bs[-1]      [cut(truth[is_bin, ], breaks = bs)]
+  
+  bs <- qnorm(seq(0, 1, length.out = n_lvls + 1L))
+  lower[is_ord, ] <- head(bs, -1)[cut(truth[is_ord, ], breaks = bs)]
+  upper[is_ord, ] <- bs[-1]      [cut(truth[is_ord, ], breaks = bs)]
+  
+  lower[is_mask] <- upper[is_mask] <- NA_real_
   
   list(lower = lower, upper = upper, code = code, Sigma = Sig, 
        truth = truth)
 }
 
-set.seed(2)
+# simulate and show the data. Data is stored in 
+# [# variables] x [# observations] format
+set.seed(1)
 p <- 15L
 dat <- sim_dat(2000L, p = p)
-dat$lower[, 1:5]
-dat$upper[, 1:5]
-dat$code [, 1:5]
-dat$truth[, 1:5]
+dat$lower[, 1:5] # lower bounds
+dat$upper[, 1:5] # upper bounds
+dat$code [, 1:5] # code for type of data
+dat$truth[, 1:5] # true values
 
 #####
 # get pointers to objects in C++
-ptr <- mdgc:::get_log_lm_terms(lower = dat$lower, upper = dat$upper, 
-                               code = dat$code)
+system.time(
+  ptr <- mdgc:::get_log_lm_terms(lower = dat$lower, upper = dat$upper, 
+                                 code = dat$code))
 
-# approximates the log marginal likelihood function
+# approximates the log marginal likelihood function.
 #
 # Args: 
-#   vcov: correlation matrix
+#   vcov: correlation matrix.
 #   releps: relative error for each term. 
 #   n_threads: number of threads. 
 #   comp_derivs: logical for whether to approximate the gradient. 
@@ -127,7 +187,7 @@ microbenchmark(
 t1 <- log_ml(dat$Sigma, comp_derivs = TRUE)
 t2 <- log_ml(dat$Sigma, comp_derivs = TRUE, n_threads = 4L)
 all.equal(t1, t2, tolerance = 1e-2)
-
+  
 microbenchmark(
   `1 thread                 ` = 
     log_ml(dat$Sigma, comp_derivs = TRUE), 
@@ -143,7 +203,7 @@ microbenchmark(
     log_ml(dat$Sigma, comp_derivs = TRUE, do_reorder = FALSE, n_threads = 4L), 
   times = 5)
 
-# we create a wrapper function which takes in a log-Cholesky decomposition
+# creates a matrix from a log-Cholesky decomposition.
 # 
 # Args:
 #   par: p (p + 1) / 2 elements in the log-Cholesky decomposition.
@@ -166,7 +226,7 @@ get_lchol <- function(par){
   lSig[lower.tri(lSig, TRUE)]
 }
 
-Jac_dum <- matrixcalc::commutation.matrix(p)
+Jac_dum <- mdgc:::get_commutation(p, p)
 diag(Jac_dum) <- diag(Jac_dum) + 1
 
 # computes the approximate log marginal likelihood. 
@@ -208,9 +268,11 @@ par_fn <- function(par, seed = NULL, comp_derivs = FALSE,
 # check that the function gives the correct log marginal likelihood
 # approximation and gradient approximation.
 lSig <- get_lchol(dat$Sigma)
-r1 <- par_fn(lSig, comp_derivs = TRUE, n_threads = 4L, releps = 1e-3)
-r2 <- numDeriv::jacobian(par_fn, lSig, seed = 1L, n_threads = 4L)
-all.equal(attr(r1, "grad"), drop(r2), tolerance = 1e-3)
+r1 <- par_fn(lSig, comp_derivs = TRUE, n_threads = 4L, releps = 1e-3, 
+             indices = 1:100)
+r2 <- numDeriv::jacobian(par_fn, lSig, seed = 1L, n_threads = 6L, 
+                         releps = 1e-3, indices = 1:100)
+all.equal(attr(r1, "grad"), drop(r2), tolerance = 1e-2)
 
 #####
 # performs gradient descent. 
@@ -273,9 +335,10 @@ do_plot <- function(x, main){
   image(x, main = main, col = sc, zlim = c(-1, 1), xaxt = "n", yaxt = "n", 
         bty = "n")
 }
-par(mfcol = c(1, 2), mar  = c(1, 1, 4, 1))
+par(mfcol = c(1, 3), mar  = c(1, 1, 4, 1))
 do_plot(res$result, "Estimates")
 do_plot(dat$Sigma, "Truth")
+do_plot(res$result - dat$Sigma, "Difference")
 
 res$fun_vals # log marginal likelihood estimates at each iteration
 
@@ -336,7 +399,7 @@ adam <- function(val, batch_size, n_threads = 4L, maxit = 10L,
 # estimate the model parameters
 set.seed(1)
 system.time(res_adam  <- adam(
-  val = start_val, alpha = 2e-2, maxit = 10L, batch_size = 200L))
+  val = start_val, alpha = 1e-2, maxit = 10L, batch_size = 100L))
 
 # compare estimates with the truth
 norm(res_adam$result - dat$Sigma)
@@ -344,16 +407,21 @@ res_adam$result
 dat$Sigma
 
 # use plot instead
-par(mfcol = c(1, 2), mar  = c(1, 1, 4, 1))
+par(mfcol = c(1, 3), mar  = c(1, 1, 4, 1))
 do_plot(res_adam$result, "Estimates (ADAM)")
 do_plot(dat$Sigma, "Truth")
+do_plot(res_adam$result - dat$Sigma, "Difference")
 
 # look at the maximum log marginal likelihood both at the end and after 
 # each iteration
 log_ml(res_adam$result)
-apply(res_adam$estimates, 2L, function(x) log_ml(get_lchol_inv(x)))
+funvals_adam_org <- 
+  apply(res_adam$estimates, 2L, function(x) log_ml(get_lchol_inv(x)))
+funvals_adam_org
 res_adam$fun_vals # likely lower bounds on the log-marginal likelihood
+res_adam_org <- res_adam
 
+#####
 # we can use better starting values. E.g. something heuristic like: 
 #   - transform back into the [0, 1] scale. 
 #   - take the middle of the interval and map back. 
@@ -376,7 +444,7 @@ tmp <- get_z_hat(dat$lower, dat$upper, dat$code)
 all.equal(tmp, mdgc:::get_z_hat(
   dat$lower, dat$upper, dat$code, n_threads = 4L))
 
-# the latter is faster but both are fast
+# the latter is faster but both are relatively fast
 microbenchmark(
   `R version  ` = get_z_hat(dat$lower, dat$upper, dat$code), 
   `C++ verison` = mdgc:::get_z_hat(
@@ -386,25 +454,61 @@ microbenchmark(
 system.time(chat <- cov2cor(cov(t(tmp), use = "pairwise.complete.obs")))
 
 # the starting value is already quite close
-par(mfcol = c(1, 2), mar  = c(1, 1, 4, 1))
+par(mfcol = c(1, 3), mar  = c(1, 1, 4, 1))
 norm(chat - dat$Sigma)
 do_plot(chat, "Starting value")
 do_plot(dat$Sigma, "Truth")
+do_plot(chat - dat$Sigma, "Difference")
 
 # run ADAM again 
 start_val <- get_lchol(chat)
 set.seed(1)
 system.time(res_adam  <- adam(
-  val = start_val, alpha = 2e-2, maxit = 5L, batch_size = 200L))
+  val = start_val, alpha = 1e-2, maxit = 5L, batch_size = 100L))
+
+# for comparisons, we also run the code using one thread
+set.seed(1)
+system.time(res_adam_ser  <- adam(
+  val = start_val, alpha = 1e-2, maxit = 5L, batch_size = 100L, 
+  n_threads = 1L))
+
+# we get (roughly) the same
+norm(res_adam$result - res_adam_ser$result)
 
 # plot estimate
-par(mfcol = c(1, 2), mar  = c(1, 1, 4, 1))
+par(mfcol = c(1, 3), mar  = c(1, 1, 4, 1))
 norm(res_adam$result - dat$Sigma)
 do_plot(res_adam$result, "Estimates (ADAM)")
 do_plot(dat$Sigma, "Truth")
+do_plot(res_adam$result - dat$Sigma, "Difference")
 
 # check log marginal likelihood like before
 log_ml(res_adam$result)
-apply(res_adam$estimates, 2L, function(x) log_ml(get_lchol_inv(x)))
+funvals_adam <- 
+  apply(res_adam$estimates, 2L, function(x) log_ml(get_lchol_inv(x)))
+funvals_adam
 res_adam$fun_vals # likely lower bounds on the log-marginal likelihood
+
+#####
+# compare convergence of the different methods 
+#  line: gradient descent. 
+#  dashed: ADAM with poor starting values. 
+#  dotted: ADAM with better starting values
+lls <- matrix(NA_real_, max(length(res$fun_vals), length(funvals_adam_org), 
+                            length(funvals_adam)), 3L)
+lls[seq_along(res$fun_vals)    , 1] <- res$fun_vals
+lls[seq_along(funvals_adam_org), 2] <- funvals_adam_org
+lls[seq_along(funvals_adam)    , 3] <- funvals_adam
+
+par(mfcol = c(1, 1), mar = c(5, 5, 1, 1))
+matplot(lls, lty = 1:3, col = "black", bty = "l", type = "l", 
+        xlab = "Iteration", ylab = "Log marginal likelihood")
+
+# skipping the first n steps
+n_skip <- 3L
+matplot(lls, lty = 1:3, ylim = range(lls[-(1:n_skip), ], na.rm = TRUE),
+        col = "black", bty = "l", type = "l", xlab = "Iteration", 
+        ylab = "Log marginal likelihood")
 ```
+
+## References

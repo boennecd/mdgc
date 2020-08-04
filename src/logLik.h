@@ -23,8 +23,6 @@ class log_ml_term {
   arma::vec const lower;
   /// stores upper bounds for the CDF
   arma::vec const upper;
-  /// infin values to pass to CDF approximation
-  arma::ivec const infin = pmvnorm::get_infin(lower, upper);
 
 public:
   log_ml_term(arma::uvec const &idx_int, arma::uvec const &idx_obs,

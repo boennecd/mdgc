@@ -54,7 +54,7 @@ double log_ml_term::approximate
 
   if(n_int > 0){
     arma::mat V = vcov(idx_int, idx_int);
-    arma::vec mea = -upper;
+    arma::vec mea(n_int, arma::fill::zeros);
     arma::mat S_oi, S_oo_inv_S_oi;
     if(n_obs > 0){
       S_oi = vcov(idx_obs, idx_int);
@@ -66,7 +66,8 @@ double log_ml_term::approximate
 
     if(comp_deriv){
       auto res =
-        cdf<deriv>(mea, V, do_reorder).approximate(maxpts, abseps, releps);
+        cdf<deriv>(lower, upper, mea, V, do_reorder).approximate(
+            maxpts, abseps, releps);
       double const p_hat = res.finest[0];
       arma::vec d_mu(res.finest.memptr() + 1L, n_int, false),
                  d_V(res.finest.memptr() + 1L + n_int,
@@ -135,7 +136,7 @@ double log_ml_term::approximate
 
     } else {
       auto res =
-        cdf<likelihood>(mea, V, do_reorder).approximate(
+        cdf<likelihood>(lower, upper, mea, V, do_reorder).approximate(
             maxpts, abseps, releps);
       out += log(res.finest[0]);
     }

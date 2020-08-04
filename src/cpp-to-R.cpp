@@ -2,6 +2,7 @@
 #include "threat-safe-random.h"
 #include "pnorm.h"
 #include "qnorm.h"
+#include "fast-commutation.h"
 #include <vector>
 #ifdef _OPENMP
 #include <omp.h>
@@ -25,7 +26,7 @@ struct ml_terms {
  * @param code Matrix with type of outcomes. 0 is an observed value,
  * 1 is a missing value, and 2 is a value in an interval.
  */
-// [[Rcpp::export]]
+// [[Rcpp::export(rng = false)]]
 SEXP get_log_lm_terms(arma::mat const &lower, arma::mat const &upper,
                       arma::imat const &code){
   auto out = Rcpp::XPtr<ml_terms>(new ml_terms());
@@ -156,7 +157,7 @@ Rcpp::NumericVector eval_log_lm_terms(
   return res;
 }
 
-// [[Rcpp::export]]
+// [[Rcpp::export(rng = false)]]
 Rcpp::NumericMatrix get_z_hat
 (arma::mat const &lower, arma::mat const &upper, arma::imat const &code,
  unsigned const n_threads){
@@ -192,4 +193,9 @@ Rcpp::NumericMatrix get_z_hat
   }
 
   return out;
+}
+
+// [[Rcpp::export("get_commutation", rng = false)]]
+arma::mat get_commutation_to_R(unsigned const n, unsigned const m){
+  return get_commutation(n, m);
 }
