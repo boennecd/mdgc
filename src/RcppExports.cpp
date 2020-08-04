@@ -38,12 +38,27 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// get_z_hat
+Rcpp::NumericMatrix get_z_hat(arma::mat const& lower, arma::mat const& upper, arma::imat const& code, unsigned const n_threads);
+RcppExport SEXP _mdgc_get_z_hat(SEXP lowerSEXP, SEXP upperSEXP, SEXP codeSEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< arma::mat const& >::type lower(lowerSEXP);
+    Rcpp::traits::input_parameter< arma::mat const& >::type upper(upperSEXP);
+    Rcpp::traits::input_parameter< arma::imat const& >::type code(codeSEXP);
+    Rcpp::traits::input_parameter< unsigned const >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_z_hat(lower, upper, code, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 RcppExport SEXP run_testthat_tests();
 
 static const R_CallMethodDef CallEntries[] = {
     {"_mdgc_get_log_lm_terms", (DL_FUNC) &_mdgc_get_log_lm_terms, 3},
     {"_mdgc_eval_log_lm_terms", (DL_FUNC) &_mdgc_eval_log_lm_terms, 9},
+    {"_mdgc_get_z_hat", (DL_FUNC) &_mdgc_get_z_hat, 4},
     {"run_testthat_tests", (DL_FUNC) &run_testthat_tests, 0},
     {NULL, NULL, 0}
 };

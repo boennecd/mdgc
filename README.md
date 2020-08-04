@@ -179,12 +179,12 @@ microbenchmark(
   times = 5)
 #> Unit: milliseconds
 #>                       expr   min    lq  mean median    uq   max neval
-#>  1 thread                  125.0 125.4 126.2  126.6 126.6 127.5     5
-#>  1 thread  (w/o rordering) 123.1 123.5 126.9  128.9 129.1 129.9     5
-#>  2 threads                  63.5  64.8  65.2   65.1  65.5  66.8     5
-#>  2 threads (w/o rordering)  62.6  62.9  63.9   63.2  64.5  66.2     5
-#>  4 threads                  32.7  32.9  33.4   33.6  33.6  34.1     5
-#>  4 threads (w/o rordering)  32.2  32.3  33.3   32.4  33.0  36.3     5
+#>  1 thread                  124.2 124.3 124.9  125.1 125.3 125.6     5
+#>  1 thread  (w/o rordering) 122.4 123.1 123.5  123.6 124.1 124.2     5
+#>  2 threads                  63.5  63.5  63.6   63.5  63.7  63.8     5
+#>  2 threads (w/o rordering)  62.7  62.8  63.3   63.5  63.6  64.2     5
+#>  4 threads                  32.2  32.4  32.6   32.6  32.6  33.0     5
+#>  4 threads (w/o rordering)  32.6  32.9  33.1   33.2  33.3  33.3     5
 
 #####
 # we can also get an approximation of the gradient
@@ -208,13 +208,13 @@ microbenchmark(
     log_ml(dat$Sigma, comp_derivs = TRUE, do_reorder = FALSE, n_threads = 4L), 
   times = 5)
 #> Unit: milliseconds
-#>                       expr min  lq mean median  uq  max neval
-#>  1 thread                  976 977  985    980 994 1000     5
-#>  1 thread  (w/o rordering) 948 952  965    953 980  990     5
-#>  2 threads                 488 495  498    497 503  508     5
-#>  2 threads (w/o rordering) 482 489  496    493 503  510     5
-#>  4 threads                 256 260  263    264 264  271     5
-#>  4 threads (w/o rordering) 254 254  259    256 261  271     5
+#>                       expr min  lq mean median   uq  max neval
+#>  1 thread                  991 993  998    999 1002 1005     5
+#>  1 thread  (w/o rordering) 947 950  963    959  971  988     5
+#>  2 threads                 493 494  502    500  510  512     5
+#>  2 threads (w/o rordering) 483 497  497    500  502  505     5
+#>  4 threads                 257 262  265    264  266  274     5
+#>  4 threads (w/o rordering) 249 257  259    257  258  273     5
 
 # we create a wrapper function which takes in a log-Cholesky decomposition
 # 
@@ -336,9 +336,11 @@ start_val <- numeric(p * (p + 1) / 2)
 system.time(res <- naiv_gradient_descent(val = start_val, step_start = .001, 
                                          maxit = 20L, eps = 1e-2))
 #>    user  system elapsed 
-#>    30.1     0.0     7.6
+#>   29.55    0.00    7.47
 
 # compare estimates with truth
+norm(res$result - dat$Sigma)
+#> [1] 0.309
 res$result
 #>        [,1]  [,2]  [,3]  [,4]  [,5]  [,6]  [,7]  [,8]  [,9] [,10] [,11] [,12]
 #>  [1,] 1.000 0.381 0.412 0.358 0.274 0.433 0.361 0.428 0.464 0.316 0.499 0.411
@@ -443,75 +445,85 @@ adam <- function(val, batch_size, n_threads = 4L, maxit = 10L,
                    identity, simplify = FALSE)
   
   n_blocks <- length(blocks)
-  nit <- n_blocks * maxit
   n_par <- length(val)
   m <- v <- numeric(n_par)
   fun_vals <- numeric(maxit)
-  for(i in 1:nit - 1L){
-    idx_b <- (i %% n_blocks) + 1L
-    m_old <- m
-    v_old <- v
-    res <- par_fn(val, comp_derivs = TRUE, n_threads = n_threads, 
-                  seed = seed, indices = blocks[[idx_b]])
-    fun_vals[(i %/% n_blocks) + 1L] <- 
-      fun_vals[(i %/% n_blocks) + 1L] + c(res)
+  estimates <- matrix(NA_real_, n_par, maxit)
+  i <- -1L
+  
+  for(k in 1:maxit){
+    for(ii in 1:n_blocks){
+      i <- i + 1L
+      idx_b <- (i %% n_blocks) + 1L
+      m_old <- m
+      v_old <- v
+      res <- par_fn(val, comp_derivs = TRUE, n_threads = n_threads, 
+                    seed = seed, indices = blocks[[idx_b]])
+      fun_vals[(i %/% n_blocks) + 1L] <- 
+        fun_vals[(i %/% n_blocks) + 1L] + c(res)
+      
+      gr <- attr(res, "grad")
+      
+      m <- beta_1 * m_old + (1 - beta_1) * gr
+      v <- beta_2 * v_old + (1 - beta_2) * gr^2
+      
+      m_hat <- m / (1 - beta_1^(i + 1))
+      v_hat <- v / (1 - beta_2^(i + 1))
+      
+      val <- val + alpha * m_hat / (sqrt(v_hat) + epsilon)
+      val <- get_lchol(cov2cor(get_lchol_inv(val)))
+    }
     
-    gr <- attr(res, "grad")
-    
-    m <- beta_1 * m_old + (1 - beta_1) * gr
-    v <- beta_2 * v_old + (1 - beta_2) * gr^2
-    
-    m_hat <- m / (1 - beta_1^(i + 1))
-    v_hat <- v / (1 - beta_2^(i + 1))
-    
-    val <- val + alpha * m_hat / (sqrt(v_hat) + epsilon)
-    val <- get_lchol(cov2cor(get_lchol_inv(val)))
+    estimates[, k] <- val
   }
   
-  list(result = get_lchol_inv(val), fun_vals = fun_vals)
+  list(result = get_lchol_inv(val), fun_vals = fun_vals, 
+       estimates = estimates)
 }
 
 # estimate the model parameters
 set.seed(1)
 system.time(res_adam  <- adam(
-  val = start_val, alpha = 1e-2, maxit = 10L, batch_size = 100L))
+  val = start_val, alpha = 2e-2, maxit = 10L, batch_size = 200L))
 #>    user  system elapsed 
-#>  13.927   0.028   3.514
+#>  12.358   0.003   3.155
 
 # compare estimates with the truth
+norm(res_adam$result - dat$Sigma)
+#> [1] 0.287
 res_adam$result
 #>        [,1]  [,2]  [,3]  [,4]  [,5]  [,6]  [,7]  [,8]  [,9] [,10] [,11] [,12]
-#>  [1,] 1.000 0.388 0.431 0.368 0.282 0.433 0.362 0.430 0.467 0.323 0.504 0.423
-#>  [2,] 0.388 1.000 0.359 0.280 0.528 0.434 0.192 0.499 0.472 0.326 0.264 0.347
-#>  [3,] 0.431 0.359 1.000 0.339 0.231 0.539 0.386 0.407 0.430 0.553 0.537 0.500
-#>  [4,] 0.368 0.280 0.339 1.000 0.430 0.319 0.281 0.351 0.502 0.338 0.335 0.385
-#>  [5,] 0.282 0.528 0.231 0.430 1.000 0.508 0.363 0.382 0.423 0.450 0.345 0.355
-#>  [6,] 0.433 0.434 0.539 0.319 0.508 1.000 0.448 0.346 0.462 0.445 0.489 0.456
-#>  [7,] 0.362 0.192 0.386 0.281 0.363 0.448 1.000 0.299 0.390 0.274 0.373 0.370
-#>  [8,] 0.430 0.499 0.407 0.351 0.382 0.346 0.299 1.000 0.454 0.377 0.250 0.342
-#>  [9,] 0.467 0.472 0.430 0.502 0.423 0.462 0.390 0.454 1.000 0.462 0.369 0.352
-#> [10,] 0.323 0.326 0.553 0.338 0.450 0.445 0.274 0.377 0.462 1.000 0.438 0.358
-#> [11,] 0.504 0.264 0.537 0.335 0.345 0.489 0.373 0.250 0.369 0.438 1.000 0.561
-#> [12,] 0.423 0.347 0.500 0.385 0.355 0.456 0.370 0.342 0.352 0.358 0.561 1.000
-#> [13,] 0.404 0.510 0.464 0.296 0.500 0.531 0.308 0.430 0.447 0.493 0.499 0.479
-#> [14,] 0.553 0.463 0.423 0.352 0.499 0.553 0.396 0.380 0.396 0.556 0.579 0.606
-#> [15,] 0.526 0.415 0.533 0.422 0.509 0.511 0.429 0.395 0.431 0.477 0.495 0.545
+#>  [1,] 1.000 0.392 0.434 0.380 0.293 0.444 0.371 0.436 0.475 0.332 0.512 0.431
+#>  [2,] 0.392 1.000 0.357 0.283 0.533 0.438 0.191 0.500 0.475 0.327 0.269 0.347
+#>  [3,] 0.434 0.357 1.000 0.345 0.230 0.538 0.387 0.407 0.430 0.554 0.539 0.502
+#>  [4,] 0.380 0.283 0.345 1.000 0.431 0.322 0.283 0.353 0.502 0.340 0.340 0.392
+#>  [5,] 0.293 0.533 0.230 0.431 1.000 0.509 0.359 0.383 0.426 0.450 0.348 0.356
+#>  [6,] 0.444 0.438 0.538 0.322 0.509 1.000 0.448 0.349 0.467 0.446 0.494 0.456
+#>  [7,] 0.371 0.191 0.387 0.283 0.359 0.448 1.000 0.301 0.392 0.275 0.376 0.373
+#>  [8,] 0.436 0.500 0.407 0.353 0.383 0.349 0.301 1.000 0.455 0.379 0.254 0.345
+#>  [9,] 0.475 0.475 0.430 0.502 0.426 0.467 0.392 0.455 1.000 0.464 0.374 0.359
+#> [10,] 0.332 0.327 0.554 0.340 0.450 0.446 0.275 0.379 0.464 1.000 0.441 0.363
+#> [11,] 0.512 0.269 0.539 0.340 0.348 0.494 0.376 0.254 0.374 0.441 1.000 0.562
+#> [12,] 0.431 0.347 0.502 0.392 0.356 0.456 0.373 0.345 0.359 0.363 0.562 1.000
+#> [13,] 0.418 0.511 0.467 0.300 0.499 0.531 0.310 0.433 0.451 0.494 0.503 0.482
+#> [14,] 0.563 0.463 0.423 0.356 0.500 0.554 0.396 0.384 0.400 0.558 0.582 0.608
+#> [15,] 0.536 0.416 0.534 0.422 0.512 0.516 0.433 0.396 0.434 0.481 0.501 0.545
 #>       [,13] [,14] [,15]
-#>  [1,] 0.404 0.553 0.526
-#>  [2,] 0.510 0.463 0.415
-#>  [3,] 0.464 0.423 0.533
-#>  [4,] 0.296 0.352 0.422
-#>  [5,] 0.500 0.499 0.509
-#>  [6,] 0.531 0.553 0.511
-#>  [7,] 0.308 0.396 0.429
-#>  [8,] 0.430 0.380 0.395
-#>  [9,] 0.447 0.396 0.431
-#> [10,] 0.493 0.556 0.477
-#> [11,] 0.499 0.579 0.495
-#> [12,] 0.479 0.606 0.545
-#> [13,] 1.000 0.514 0.604
-#> [14,] 0.514 1.000 0.569
-#> [15,] 0.604 0.569 1.000
+#>  [1,] 0.418 0.563 0.536
+#>  [2,] 0.511 0.463 0.416
+#>  [3,] 0.467 0.423 0.534
+#>  [4,] 0.300 0.356 0.422
+#>  [5,] 0.499 0.500 0.512
+#>  [6,] 0.531 0.554 0.516
+#>  [7,] 0.310 0.396 0.433
+#>  [8,] 0.433 0.384 0.396
+#>  [9,] 0.451 0.400 0.434
+#> [10,] 0.494 0.558 0.481
+#> [11,] 0.503 0.582 0.501
+#> [12,] 0.482 0.608 0.545
+#> [13,] 1.000 0.515 0.609
+#> [14,] 0.515 1.000 0.573
+#> [15,] 0.609 0.573 1.000
 dat$Sigma
 #>        [,1]  [,2]  [,3]  [,4]  [,5]  [,6]  [,7]  [,8]  [,9] [,10] [,11] [,12]
 #>  [1,] 1.000 0.404 0.400 0.364 0.344 0.461 0.393 0.443 0.458 0.336 0.514 0.424
@@ -556,9 +568,90 @@ do_plot(dat$Sigma, "Truth")
 
 ``` r
 
-# look at the maximum log marginal likelihood
+# look at the maximum log marginal likelihood both at the end and after 
+# each iteration
 log_ml(res_adam$result)
-#> [1] -30238
+#> [1] -30236
+apply(res_adam$estimates, 2L, function(x) log_ml(get_lchol_inv(x)))
+#>  [1] -31566 -30650 -30501 -30334 -30270 -30250 -30240 -30237 -30236 -30236
 res_adam$fun_vals # likely lower bounds on the log-marginal likelihood
-#>  [1] -33395 -31080 -30513 -30382 -30321 -30295 -30285 -30281 -30280 -30280
+#>  [1] -33488 -31034 -30593 -30456 -30321 -30281 -30267 -30264 -30264 -30263
+
+# we can use better starting values. E.g. something heuristic like: 
+#   - transform back into the [0, 1] scale. 
+#   - take the middle of the interval and map back. 
+#   - compute the partial correlations. 
+get_z_hat <- function(lower, upper, code){
+  out <- mapply(function(l, u, co){
+    if(co <= 1)
+      return(u)
+    
+    a <- if(is.infinite(l)) 0 else pnorm(l)
+    b <- if(is.infinite(u)) 1 else pnorm(u)
+    qnorm((a + b) / 2)
+  }, l = lower, u = upper, c = code)
+  dim(out) <- dim(lower)
+  out
+}
+tmp <- get_z_hat(dat$lower, dat$upper, dat$code)
+
+# we also have a C++ function to do this which is faster
+all.equal(tmp, mdgc:::get_z_hat(
+  dat$lower, dat$upper, dat$code, n_threads = 4L))
+#> [1] TRUE
+
+# the latter is faster but both are fast
+microbenchmark(
+  `R version  ` = get_z_hat(dat$lower, dat$upper, dat$code), 
+  `C++ verison` = mdgc:::get_z_hat(
+  dat$lower, dat$upper, dat$code, n_threads = 4L), times = 10)
+#> Unit: microseconds
+#>         expr   min    lq  mean median    uq   max neval
+#>  R version   41646 43722 47225  46441 50911 53825    10
+#>  C++ verison   147   149   166    159   183   198    10
+
+# then we can compute an approximation of the covariance matrix as follows
+system.time(chat <- cov2cor(cov(t(tmp), use = "pairwise.complete.obs")))
+#>    user  system elapsed 
+#>   0.001   0.000   0.001
+
+# the starting value is already quite close
+par(mfcol = c(1, 2), mar  = c(1, 1, 4, 1))
+norm(chat - dat$Sigma)
+#> [1] 0.367
+do_plot(chat, "Starting value")
+do_plot(dat$Sigma, "Truth")
+```
+
+<img src="man/figures/README-sim_dat-3.png" width="100%" />
+
+``` r
+
+# run ADAM again 
+start_val <- get_lchol(chat)
+set.seed(1)
+system.time(res_adam  <- adam(
+  val = start_val, alpha = 2e-2, maxit = 5L, batch_size = 200L))
+#>    user  system elapsed 
+#>   6.777   0.012   1.719
+
+# plot estimate
+par(mfcol = c(1, 2), mar  = c(1, 1, 4, 1))
+norm(res_adam$result - dat$Sigma)
+#> [1] 0.306
+do_plot(res_adam$result, "Estimates (ADAM)")
+do_plot(dat$Sigma, "Truth")
+```
+
+<img src="man/figures/README-sim_dat-4.png" width="100%" />
+
+``` r
+
+# check log marginal likelihood like before
+log_ml(res_adam$result)
+#> [1] -30236
+apply(res_adam$estimates, 2L, function(x) log_ml(get_lchol_inv(x)))
+#> [1] -30269 -30251 -30239 -30237 -30236
+res_adam$fun_vals # likely lower bounds on the log-marginal likelihood
+#> [1] -30403 -30275 -30290 -30271 -30266
 ```

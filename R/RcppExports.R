@@ -9,3 +9,7 @@ eval_log_lm_terms <- function(ptr, indices, vcov, maxpts, abseps, releps, n_thre
     .Call(`_mdgc_eval_log_lm_terms`, ptr, indices, vcov, maxpts, abseps, releps, n_threads, comp_derivs, do_reorder)
 }
 
+get_z_hat <- function(lower, upper, code, n_threads) {
+    .Call(`_mdgc_get_z_hat`, lower, upper, code, n_threads)
+}
+

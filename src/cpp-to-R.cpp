@@ -1,5 +1,7 @@
 #include "logLik.h"
 #include "threat-safe-random.h"
+#include "pnorm.h"
+#include "qnorm.h"
 #include <vector>
 #ifdef _OPENMP
 #include <omp.h>
@@ -152,4 +154,42 @@ Rcpp::NumericVector eval_log_lm_terms(
     res.attr("grad") = derivs;
 
   return res;
+}
+
+// [[Rcpp::export]]
+Rcpp::NumericMatrix get_z_hat
+(arma::mat const &lower, arma::mat const &upper, arma::imat const &code,
+ unsigned const n_threads){
+  size_t const p = lower.n_rows,
+               n = upper.n_cols;
+  if(upper.n_rows != p or upper.n_cols != n)
+    throw std::invalid_argument("get_z_hat: invalid upper");
+  if(code.n_rows != p or code.n_cols != n)
+    throw std::invalid_argument("get_z_hat: invalid lower");
+  if(n_threads < 1)
+    throw std::invalid_argument("get_z_hat: invalid n_threads");
+
+  Rcpp::NumericMatrix out(p, n);
+  double * const o = &out[0];
+#ifdef _OPENMP
+#pragma omp for
+#endif
+  for(size_t j = 0; j < n; ++j){
+    double * oj = o + j * p;
+    for(size_t i = 0; i < p; ++i, ++oj){
+      if(code.at(i, j) <= 1L){
+        *oj = upper.at(i, j);
+        continue;
+      }
+
+      double const l = lower.at(i, j),
+                   u = upper.at(i, j),
+                   a = std::isinf(l) ? 0 : pnorm_std(l, 1L, 0L),
+                   b = std::isinf(u) ? 1 : pnorm_std(u, 1L, 0L);
+
+      *oj = qnorm_w((b + a) / 2., 0., 1., 1L, 0L);
+    }
+  }
+
+  return out;
 }

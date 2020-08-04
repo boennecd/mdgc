@@ -263,6 +263,7 @@ system.time(res <- naiv_gradient_descent(val = start_val, step_start = .001,
                                          maxit = 20L, eps = 1e-2))
 
 # compare estimates with truth
+norm(res$result - dat$Sigma)
 res$result
 dat$Sigma
 
@@ -296,40 +297,49 @@ adam <- function(val, batch_size, n_threads = 4L, maxit = 10L,
                    identity, simplify = FALSE)
   
   n_blocks <- length(blocks)
-  nit <- n_blocks * maxit
   n_par <- length(val)
   m <- v <- numeric(n_par)
   fun_vals <- numeric(maxit)
-  for(i in 1:nit - 1L){
-    idx_b <- (i %% n_blocks) + 1L
-    m_old <- m
-    v_old <- v
-    res <- par_fn(val, comp_derivs = TRUE, n_threads = n_threads, 
-                  seed = seed, indices = blocks[[idx_b]])
-    fun_vals[(i %/% n_blocks) + 1L] <- 
-      fun_vals[(i %/% n_blocks) + 1L] + c(res)
+  estimates <- matrix(NA_real_, n_par, maxit)
+  i <- -1L
+  
+  for(k in 1:maxit){
+    for(ii in 1:n_blocks){
+      i <- i + 1L
+      idx_b <- (i %% n_blocks) + 1L
+      m_old <- m
+      v_old <- v
+      res <- par_fn(val, comp_derivs = TRUE, n_threads = n_threads, 
+                    seed = seed, indices = blocks[[idx_b]])
+      fun_vals[(i %/% n_blocks) + 1L] <- 
+        fun_vals[(i %/% n_blocks) + 1L] + c(res)
+      
+      gr <- attr(res, "grad")
+      
+      m <- beta_1 * m_old + (1 - beta_1) * gr
+      v <- beta_2 * v_old + (1 - beta_2) * gr^2
+      
+      m_hat <- m / (1 - beta_1^(i + 1))
+      v_hat <- v / (1 - beta_2^(i + 1))
+      
+      val <- val + alpha * m_hat / (sqrt(v_hat) + epsilon)
+      val <- get_lchol(cov2cor(get_lchol_inv(val)))
+    }
     
-    gr <- attr(res, "grad")
-    
-    m <- beta_1 * m_old + (1 - beta_1) * gr
-    v <- beta_2 * v_old + (1 - beta_2) * gr^2
-    
-    m_hat <- m / (1 - beta_1^(i + 1))
-    v_hat <- v / (1 - beta_2^(i + 1))
-    
-    val <- val + alpha * m_hat / (sqrt(v_hat) + epsilon)
-    val <- get_lchol(cov2cor(get_lchol_inv(val)))
+    estimates[, k] <- val
   }
   
-  list(result = get_lchol_inv(val), fun_vals = fun_vals)
+  list(result = get_lchol_inv(val), fun_vals = fun_vals, 
+       estimates = estimates)
 }
 
 # estimate the model parameters
 set.seed(1)
 system.time(res_adam  <- adam(
-  val = start_val, alpha = 1e-2, maxit = 10L, batch_size = 100L))
+  val = start_val, alpha = 2e-2, maxit = 10L, batch_size = 200L))
 
 # compare estimates with the truth
+norm(res_adam$result - dat$Sigma)
 res_adam$result
 dat$Sigma
 
@@ -338,7 +348,63 @@ par(mfcol = c(1, 2), mar  = c(1, 1, 4, 1))
 do_plot(res_adam$result, "Estimates (ADAM)")
 do_plot(dat$Sigma, "Truth")
 
-# look at the maximum log marginal likelihood
+# look at the maximum log marginal likelihood both at the end and after 
+# each iteration
 log_ml(res_adam$result)
+apply(res_adam$estimates, 2L, function(x) log_ml(get_lchol_inv(x)))
+res_adam$fun_vals # likely lower bounds on the log-marginal likelihood
+
+# we can use better starting values. E.g. something heuristic like: 
+#   - transform back into the [0, 1] scale. 
+#   - take the middle of the interval and map back. 
+#   - compute the partial correlations. 
+get_z_hat <- function(lower, upper, code){
+  out <- mapply(function(l, u, co){
+    if(co <= 1)
+      return(u)
+    
+    a <- if(is.infinite(l)) 0 else pnorm(l)
+    b <- if(is.infinite(u)) 1 else pnorm(u)
+    qnorm((a + b) / 2)
+  }, l = lower, u = upper, c = code)
+  dim(out) <- dim(lower)
+  out
+}
+tmp <- get_z_hat(dat$lower, dat$upper, dat$code)
+
+# we also have a C++ function to do this which is faster
+all.equal(tmp, mdgc:::get_z_hat(
+  dat$lower, dat$upper, dat$code, n_threads = 4L))
+
+# the latter is faster but both are fast
+microbenchmark(
+  `R version  ` = get_z_hat(dat$lower, dat$upper, dat$code), 
+  `C++ verison` = mdgc:::get_z_hat(
+  dat$lower, dat$upper, dat$code, n_threads = 4L), times = 10)
+
+# then we can compute an approximation of the covariance matrix as follows
+system.time(chat <- cov2cor(cov(t(tmp), use = "pairwise.complete.obs")))
+
+# the starting value is already quite close
+par(mfcol = c(1, 2), mar  = c(1, 1, 4, 1))
+norm(chat - dat$Sigma)
+do_plot(chat, "Starting value")
+do_plot(dat$Sigma, "Truth")
+
+# run ADAM again 
+start_val <- get_lchol(chat)
+set.seed(1)
+system.time(res_adam  <- adam(
+  val = start_val, alpha = 2e-2, maxit = 5L, batch_size = 200L))
+
+# plot estimate
+par(mfcol = c(1, 2), mar  = c(1, 1, 4, 1))
+norm(res_adam$result - dat$Sigma)
+do_plot(res_adam$result, "Estimates (ADAM)")
+do_plot(dat$Sigma, "Truth")
+
+# check log marginal likelihood like before
+log_ml(res_adam$result)
+apply(res_adam$estimates, 2L, function(x) log_ml(get_lchol_inv(x)))
 res_adam$fun_vals # likely lower bounds on the log-marginal likelihood
 ```
