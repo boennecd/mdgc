@@ -5,7 +5,7 @@ get_log_lm_terms <- function(lower, upper, code) {
     .Call(`_mdgc_get_log_lm_terms`, lower, upper, code)
 }
 
-eval_log_lm_terms <- function(ptr, indices, vcov, maxpts, abseps, releps, n_threads, comp_derivs) {
-    .Call(`_mdgc_eval_log_lm_terms`, ptr, indices, vcov, maxpts, abseps, releps, n_threads, comp_derivs)
+eval_log_lm_terms <- function(ptr, indices, vcov, maxpts, abseps, releps, n_threads, comp_derivs, do_reorder = TRUE) {
+    .Call(`_mdgc_eval_log_lm_terms`, ptr, indices, vcov, maxpts, abseps, releps, n_threads, comp_derivs, do_reorder)
 }
 

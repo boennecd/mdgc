@@ -117,7 +117,7 @@
 *
       CALL MVSORT( N, LOWER, UPPER, DELTA, CORREL, INFIN, Y, .TRUE.,
      &            ND,     A,     B,    DL,    COV,  INFI, INFORM,
-     &            IDX )
+     &            IDX,  .TRUE.)
       NU = NUIN
       CALL MVSPCL( ND, NU, A, B, DL, COV, INFI, SNU, VL, ER, INFORM )
       END
@@ -257,15 +257,16 @@
 *
       SUBROUTINE MVSORT( N, LOWER, UPPER, DELTA, CORREL, INFIN, Y,PIVOT,
      &                  ND,     A,     B,    DL,    COV,  INFI, INFORM,
-     &                  IDX )
+     &                  IDX, DOSCALE  )
 *
 *     Subroutine to sort integration limits and determine Cholesky factor.
 *
 *     Benjamin Christoffersen added the IDX argument. It keeps track of the
+*     original indices. The DOSCALE argument is added to determine whether
+*     to scale the composition to have ones in the diagonal.
 *
-#     original indices.
       INTEGER N, ND, INFIN(*), INFI(*), INFORM
-      LOGICAL PIVOT
+      LOGICAL PIVOT, DOSCALE
       DOUBLE PRECISION     A(*),     B(*),    DL(*),    COV(*),
      &                 LOWER(*), UPPER(*), DELTA(*), CORREL(*), Y(*)
       INTEGER I, J, K, L, M, II, IJ, IL, JL, JMIN, IDX(*)
@@ -383,13 +384,17 @@
                   IF ( INFI(I) .EQ. 1 ) Y(I) = AMIN
                   IF ( INFI(I) .EQ. 2 ) Y(I) = ( AMIN + BMIN )/2
                END IF
-               DO J = 1, I
-                  II = II + 1
-                  COV(II) = COV(II)/CVDIAG
-               END DO
-                A(I) =  A(I)/CVDIAG
-                B(I) =  B(I)/CVDIAG
-               DL(I) = DL(I)/CVDIAG
+               IF(DOSCALE) THEN
+                  DO J = 1, I
+                     II = II + 1
+                     COV(II) = COV(II)/CVDIAG
+                  END DO
+                  A(I) =  A(I)/CVDIAG
+                  B(I) =  B(I)/CVDIAG
+                  DL(I) = DL(I)/CVDIAG
+               ELSE
+                  II = II + I
+               END IF
             ELSE
                IL = II + I
                DO L = I+1, ND

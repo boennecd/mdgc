@@ -84,26 +84,43 @@ ptr <- mdgc:::get_log_lm_terms(lower = dat$lower, upper = dat$upper,
 #   n_threads: number of threads. 
 #   comp_derivs: logical for whether to approximate the gradient. 
 #   indices: integer vector with which terms to include. 
+#   do_reorder: logical for whether to use heuristic variable reordering.
 log_ml <- function(vcov, releps = 1e-2, n_threads = 1L, comp_derivs = FALSE, 
-                   indices = 0:(NCOL(dat$lower) - 1L))
+                   indices = 0:(NCOL(dat$lower) - 1L), do_reorder = TRUE)
   mdgc:::eval_log_lm_terms(
     ptr = ptr, vcov = vcov, indices = indices, 
     maxpts = 100000L, abseps = -1, releps = releps, n_threads = n_threads, 
-    comp_derivs = comp_derivs)
+    comp_derivs = comp_derivs, do_reorder = do_reorder)
 
 # print the approximate log marginal likelihood at the true parameters
 set.seed(1)
 print(log_ml(dat$Sigma), digits = 7)
-print(log_ml(dat$Sigma), digits = 7)
-print(log_ml(dat$Sigma, n_threads = 4L), digits = 7)
+
+# check standard error
 sd(replicate(20, log_ml(dat$Sigma, n_threads = 4L)))
+
+# without reordering
+print(log_ml(dat$Sigma, n_threads = 4L, do_reorder = FALSE), digits = 7)
+
+# check standard error
+sd(replicate(20, log_ml(dat$Sigma, n_threads = 4L, do_reorder = FALSE)))
 
 # check computation time
 library(microbenchmark)
 microbenchmark(
-  `1 thread`     = log_ml(dat$Sigma), 
-  `2 threads`    = log_ml(dat$Sigma, n_threads = 2L),
-  `4 threads`    = log_ml(dat$Sigma, n_threads = 4L), times = 5)
+  `1 thread                 ` = 
+    log_ml(dat$Sigma), 
+  `1 thread  (w/o rordering)` = 
+    log_ml(dat$Sigma, do_reorder = FALSE), 
+  `2 threads                ` = 
+    log_ml(dat$Sigma                    , n_threads = 2L),
+  `2 threads (w/o rordering)` = 
+    log_ml(dat$Sigma, do_reorder = FALSE, n_threads = 2L),
+  `4 threads                ` = 
+    log_ml(dat$Sigma                    , n_threads = 4L), 
+  `4 threads (w/o rordering)` = 
+    log_ml(dat$Sigma, do_reorder = FALSE, n_threads = 4L), 
+  times = 5)
 
 #####
 # we can also get an approximation of the gradient
@@ -112,9 +129,18 @@ t2 <- log_ml(dat$Sigma, comp_derivs = TRUE, n_threads = 4L)
 all.equal(t1, t2, tolerance = 1e-2)
 
 microbenchmark(
-  `1 thread`     = log_ml(dat$Sigma, comp_derivs = TRUE), 
-  `2 threads`    = log_ml(dat$Sigma, comp_derivs = TRUE, n_threads = 2L),
-  `4 threads`    = log_ml(dat$Sigma, comp_derivs = TRUE, n_threads = 4L),
+  `1 thread                 ` = 
+    log_ml(dat$Sigma, comp_derivs = TRUE), 
+  `1 thread  (w/o rordering)` = 
+    log_ml(dat$Sigma, comp_derivs = TRUE, do_reorder = FALSE), 
+  `2 threads                ` = 
+    log_ml(dat$Sigma, comp_derivs = TRUE                    , n_threads = 2L),
+  `2 threads (w/o rordering)` = 
+    log_ml(dat$Sigma, comp_derivs = TRUE, do_reorder = FALSE, n_threads = 2L),
+  `4 threads                ` = 
+    log_ml(dat$Sigma, comp_derivs = TRUE                    , n_threads = 4L), 
+  `4 threads (w/o rordering)` = 
+    log_ml(dat$Sigma, comp_derivs = TRUE, do_reorder = FALSE, n_threads = 4L), 
   times = 5)
 
 # we create a wrapper function which takes in a log-Cholesky decomposition

@@ -136,35 +136,55 @@ ptr <- mdgc:::get_log_lm_terms(lower = dat$lower, upper = dat$upper,
 #   n_threads: number of threads. 
 #   comp_derivs: logical for whether to approximate the gradient. 
 #   indices: integer vector with which terms to include. 
+#   do_reorder: logical for whether to use heuristic variable reordering.
 log_ml <- function(vcov, releps = 1e-2, n_threads = 1L, comp_derivs = FALSE, 
-                   indices = 0:(NCOL(dat$lower) - 1L))
+                   indices = 0:(NCOL(dat$lower) - 1L), do_reorder = TRUE)
   mdgc:::eval_log_lm_terms(
     ptr = ptr, vcov = vcov, indices = indices, 
     maxpts = 100000L, abseps = -1, releps = releps, n_threads = n_threads, 
-    comp_derivs = comp_derivs)
+    comp_derivs = comp_derivs, do_reorder = do_reorder)
 
 # print the approximate log marginal likelihood at the true parameters
 set.seed(1)
 print(log_ml(dat$Sigma), digits = 7)
-#> [1] -30273.88
-print(log_ml(dat$Sigma), digits = 7)
 #> [1] -30273.89
-print(log_ml(dat$Sigma, n_threads = 4L), digits = 7)
-#> [1] -30273.88
+
+# check standard error
 sd(replicate(20, log_ml(dat$Sigma, n_threads = 4L)))
-#> [1] 0.00746
+#> [1] 0.00655
+
+# without reordering
+print(log_ml(dat$Sigma, n_threads = 4L, do_reorder = FALSE), digits = 7)
+#> [1] -30273.89
+
+# check standard error
+sd(replicate(20, log_ml(dat$Sigma, n_threads = 4L, do_reorder = FALSE)))
+#> [1] 0.011
 
 # check computation time
 library(microbenchmark)
 microbenchmark(
-  `1 thread`     = log_ml(dat$Sigma), 
-  `2 threads`    = log_ml(dat$Sigma, n_threads = 2L),
-  `4 threads`    = log_ml(dat$Sigma, n_threads = 4L), times = 5)
+  `1 thread                 ` = 
+    log_ml(dat$Sigma), 
+  `1 thread  (w/o rordering)` = 
+    log_ml(dat$Sigma, do_reorder = FALSE), 
+  `2 threads                ` = 
+    log_ml(dat$Sigma                    , n_threads = 2L),
+  `2 threads (w/o rordering)` = 
+    log_ml(dat$Sigma, do_reorder = FALSE, n_threads = 2L),
+  `4 threads                ` = 
+    log_ml(dat$Sigma                    , n_threads = 4L), 
+  `4 threads (w/o rordering)` = 
+    log_ml(dat$Sigma, do_reorder = FALSE, n_threads = 4L), 
+  times = 5)
 #> Unit: milliseconds
-#>       expr   min    lq  mean median    uq   max neval
-#>   1 thread 124.6 124.8 125.3  125.3 125.4 126.1     5
-#>  2 threads  63.3  63.5  63.8   63.6  64.1  64.4     5
-#>  4 threads  32.1  32.2  32.7   32.6  32.9  33.4     5
+#>                       expr   min    lq  mean median    uq   max neval
+#>  1 thread                  125.0 125.4 126.2  126.6 126.6 127.5     5
+#>  1 thread  (w/o rordering) 123.1 123.5 126.9  128.9 129.1 129.9     5
+#>  2 threads                  63.5  64.8  65.2   65.1  65.5  66.8     5
+#>  2 threads (w/o rordering)  62.6  62.9  63.9   63.2  64.5  66.2     5
+#>  4 threads                  32.7  32.9  33.4   33.6  33.6  34.1     5
+#>  4 threads (w/o rordering)  32.2  32.3  33.3   32.4  33.0  36.3     5
 
 #####
 # we can also get an approximation of the gradient
@@ -174,15 +194,27 @@ all.equal(t1, t2, tolerance = 1e-2)
 #> [1] TRUE
 
 microbenchmark(
-  `1 thread`     = log_ml(dat$Sigma, comp_derivs = TRUE), 
-  `2 threads`    = log_ml(dat$Sigma, comp_derivs = TRUE, n_threads = 2L),
-  `4 threads`    = log_ml(dat$Sigma, comp_derivs = TRUE, n_threads = 4L),
+  `1 thread                 ` = 
+    log_ml(dat$Sigma, comp_derivs = TRUE), 
+  `1 thread  (w/o rordering)` = 
+    log_ml(dat$Sigma, comp_derivs = TRUE, do_reorder = FALSE), 
+  `2 threads                ` = 
+    log_ml(dat$Sigma, comp_derivs = TRUE                    , n_threads = 2L),
+  `2 threads (w/o rordering)` = 
+    log_ml(dat$Sigma, comp_derivs = TRUE, do_reorder = FALSE, n_threads = 2L),
+  `4 threads                ` = 
+    log_ml(dat$Sigma, comp_derivs = TRUE                    , n_threads = 4L), 
+  `4 threads (w/o rordering)` = 
+    log_ml(dat$Sigma, comp_derivs = TRUE, do_reorder = FALSE, n_threads = 4L), 
   times = 5)
 #> Unit: milliseconds
-#>       expr min  lq mean median   uq  max neval
-#>   1 thread 980 980  996   1003 1008 1009     5
-#>  2 threads 493 500  502    501  503  512     5
-#>  4 threads 247 251  258    262  265  266     5
+#>                       expr min  lq mean median  uq  max neval
+#>  1 thread                  976 977  985    980 994 1000     5
+#>  1 thread  (w/o rordering) 948 952  965    953 980  990     5
+#>  2 threads                 488 495  498    497 503  508     5
+#>  2 threads (w/o rordering) 482 489  496    493 503  510     5
+#>  4 threads                 256 260  263    264 264  271     5
+#>  4 threads (w/o rordering) 254 254  259    256 261  271     5
 
 # we create a wrapper function which takes in a log-Cholesky decomposition
 # 
@@ -304,7 +336,7 @@ start_val <- numeric(p * (p + 1) / 2)
 system.time(res <- naiv_gradient_descent(val = start_val, step_start = .001, 
                                          maxit = 20L, eps = 1e-2))
 #>    user  system elapsed 
-#>  30.235   0.004   7.643
+#>    30.1     0.0     7.6
 
 # compare estimates with truth
 res$result
@@ -390,7 +422,7 @@ do_plot(dat$Sigma, "Truth")
 ``` r
 
 res$fun_vals # log marginal likelihood estimates at each iteration
-#>  [1] -36569 -32300 -31737 -31250 -31164 -30893 -30412 -30385 -30298 -30263
+#>  [1] -36569 -32300 -31737 -31250 -31164 -30892 -30412 -30385 -30298 -30263
 #> [11] -30254 -30249 -30244 -30241 -30240 -30238 -30237 -30236 -30235 -30235
 
 #####
@@ -444,7 +476,7 @@ set.seed(1)
 system.time(res_adam  <- adam(
   val = start_val, alpha = 1e-2, maxit = 10L, batch_size = 100L))
 #>    user  system elapsed 
-#>  13.485   0.024   3.395
+#>  13.927   0.028   3.514
 
 # compare estimates with the truth
 res_adam$result
@@ -455,9 +487,9 @@ res_adam$result
 #>  [4,] 0.368 0.280 0.339 1.000 0.430 0.319 0.281 0.351 0.502 0.338 0.335 0.385
 #>  [5,] 0.282 0.528 0.231 0.430 1.000 0.508 0.363 0.382 0.423 0.450 0.345 0.355
 #>  [6,] 0.433 0.434 0.539 0.319 0.508 1.000 0.448 0.346 0.462 0.445 0.489 0.456
-#>  [7,] 0.362 0.192 0.386 0.281 0.363 0.448 1.000 0.299 0.391 0.274 0.373 0.370
+#>  [7,] 0.362 0.192 0.386 0.281 0.363 0.448 1.000 0.299 0.390 0.274 0.373 0.370
 #>  [8,] 0.430 0.499 0.407 0.351 0.382 0.346 0.299 1.000 0.454 0.377 0.250 0.342
-#>  [9,] 0.467 0.472 0.430 0.502 0.423 0.462 0.391 0.454 1.000 0.462 0.369 0.352
+#>  [9,] 0.467 0.472 0.430 0.502 0.423 0.462 0.390 0.454 1.000 0.462 0.369 0.352
 #> [10,] 0.323 0.326 0.553 0.338 0.450 0.445 0.274 0.377 0.462 1.000 0.438 0.358
 #> [11,] 0.504 0.264 0.537 0.335 0.345 0.489 0.373 0.250 0.369 0.438 1.000 0.561
 #> [12,] 0.423 0.347 0.500 0.385 0.355 0.456 0.370 0.342 0.352 0.358 0.561 1.000

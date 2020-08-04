@@ -4,38 +4,6 @@
 #include <omp.h>
 #endif
 
-extern "C"
-{
-  /**
-   * @param N Dimension of the integral.
-   * @param lower N-vector with lower bounds.
-   * @param upper N-vector with upper bounds.
-   * @param delta N-vector with mean.
-   * @param correl N(N - 1)/2-dimensional vector with  upper triangle of the
-   * correlation matrix.
-   * @param infin N-dimensional vector indicating whether the bounds are
-   * finite.
-   * @param pivot not sure. Set it to true.
-   * @param y N-dimensional vector with workig memory.
-   * @param ND N unless there is double infinite regions.
-   * @param A potentially permutated version of lower.
-   * @param B potentially permutated version of upper.
-   * @param DL potentially permutated version of delta.
-   * @param cov N(N + 1)/2-dimensional vector with potentially permutated
-   * Cholesky decomposition of correl.
-   * @param inform non-zero if something went wrong.
-   * @param idx N-dimensional vector with indices of applied permutation.
-   */
-  void F77_NAME(mvsqrt)(
-      int const* /* N */, double const* /* lower */,
-      double const* /* upper */, double const* /* delta */,
-      double const* /* correl */, int const* /* infin */,
-      double const* /* y */, int const* /* pivot */,
-      int* /* ND */, double* /* A */, double* /* B */, double* /* DL */,
-      double* /* cov */, int* /* infi */, int* /* inform */,
-      int* /* idx */);
-}
-
 using std::invalid_argument;
 
 static restrictcdf::mvkbrv_ptr current_mvkbrv_ptr = nullptr;
@@ -86,12 +54,12 @@ double * cdf<funcs>::get_working_memory(){
 template<class funcs>
 void cdf<funcs>::set_working_memory
   (size_t max_dim, size_t const n_threads){
-  // assume thte cacheline is 128 bytes. Then make sure we avoid false
+  // assume the cacheline is 128 bytes. Then make sure we avoid false
   // sharing by having 2 x 128 bytes per thread.
   constexpr size_t const mult = 128L / 8L,
                      min_size = 2L * mult;
   size_t const upper_tri_size = (max_dim * (max_dim + 1L)) / 2L;
-  max_dim = 3L * max_dim + 3L * upper_tri_size;
+  max_dim = 4L * max_dim + 3L * upper_tri_size;
   max_dim = std::max(max_dim, min_size);
   max_dim = (max_dim + mult - 1L) / mult;
   max_dim *= mult;

@@ -43,7 +43,15 @@ context("restrictcdf unit tests") {
     double constexpr E_prop(0.0181507102495727);
     {
       auto res = restrictcdf::cdf<restrictcdf::likelihood>(
-        mean, sigma).approximate(1000000L, abseps, -1);
+        mean, sigma, false).approximate(1000000L, abseps, -1);
+
+      expect_true(res.inform == 0L);
+      expect_true(res.abserr                        < 100. * abseps);
+      expect_true(std::abs(res.finest[0L] - E_prop) < 100. * abseps);
+    }
+    {
+      auto res = restrictcdf::cdf<restrictcdf::likelihood>(
+        mean, sigma, true).approximate(1000000L, abseps, -1);
 
       expect_true(res.inform == 0L);
       expect_true(res.abserr                        < 100. * abseps);
@@ -99,6 +107,14 @@ context("restrictcdf unit tests") {
       expect_true(res.abserr                        < 100. * abseps);
       expect_true(std::abs(res.finest[0L] - E_prop) < 100. * abseps);
     }
+    {
+      auto res = restrictcdf::cdf<restrictcdf::likelihood>(
+        lower, upper, mean, sigma, true).approximate(1000000L, abseps, -1);
+
+      expect_true(res.inform == 0L);
+      expect_true(res.abserr                        < 100. * abseps);
+      expect_true(std::abs(res.finest[0L] - E_prop) < 100. * abseps);
+    }
   }
 
   test_that("cdf<likelihood> gives similar output to R (1D)") {
@@ -133,6 +149,22 @@ context("restrictcdf unit tests") {
 
       auto res = restrictcdf::cdf<restrictcdf::likelihood>(
         l, u, m, s, false).approximate(1000000L, 1e-8, -1);
+
+      expect_true(res.inform == 0L);
+      expect_true(res.abserr                           <= 0);
+      expect_true(std::abs(res.finest[0L] - expect[i]) <  eps);
+    }
+
+    for(size_t i = 0; i < 3; ++i){
+      arma::vec l(1), u(1), m(1);
+      arma::mat s(1, 1);
+      l[0] = lbs[i];
+      u[0] = ubs[i];
+      m[0] = mu;
+      s[0] = va;
+
+      auto res = restrictcdf::cdf<restrictcdf::likelihood>(
+        l, u, m, s, true).approximate(1000000L, 1e-8, -1);
 
       expect_true(res.inform == 0L);
       expect_true(res.abserr                           <= 0);
@@ -178,6 +210,24 @@ context("restrictcdf unit tests") {
 
       auto res = restrictcdf::cdf<restrictcdf::deriv>(
         l, u, m, s, false).approximate(1000000L, 1e-8, -1);
+
+      expect_true(res.inform == 0L);
+      expect_true(res.abserr                           <= 0);
+      expect_true(std::abs(res.finest[0L] - expect.at(0L, i)) <  eps);
+      expect_true(std::abs(res.finest[1L] - expect.at(1L, i)) <  eps);
+      expect_true(std::abs(res.finest[2L] - expect.at(2L, i)) <  eps);
+    }
+
+    for(size_t i = 0; i < 3; ++i){
+      arma::vec l(1), u(1), m(1);
+      arma::mat s(1, 1);
+      l[0] = lbs[i];
+      u[0] = ubs[i];
+      m[0] = mu;
+      s[0] = va;
+
+      auto res = restrictcdf::cdf<restrictcdf::deriv>(
+        l, u, m, s, true).approximate(1000000L, 1e-8, -1);
 
       expect_true(res.inform == 0L);
       expect_true(res.abserr                           <= 0);
@@ -242,13 +292,28 @@ context("restrictcdf unit tests") {
 
     double const abseps = std::pow(
       std::numeric_limits<double>::epsilon(), .4);
-    auto res = restrictcdf::cdf<restrictcdf::deriv>(
-      mean, sigma).approximate(1000000L, abseps, -1);
+    {
+      auto res = restrictcdf::cdf<restrictcdf::deriv>(
+        mean, sigma, false).approximate(1000000L, abseps, -1);
 
-    expect_true(res.inform == 0L);
-    expect_true(res.finest.n_elem == expect.n_elem);
-    for(unsigned i = 0; i < expect.n_elem; ++i)
-      expect_true(std::abs(res.finest[i] - expect[i]) < 1e-5);
+      expect_true(res.inform == 0L);
+      expect_true(res.finest.n_elem == expect.n_elem);
+      expect_true(std::abs(res.finest[0] - expect[0]) < 1e-5);
+      for(unsigned i = 1; i < expect.n_elem; ++i)
+        expect_true(std::abs(res.finest[i] - expect[i]) < 1e-5);
+    }
+    {
+      auto res = restrictcdf::cdf<restrictcdf::deriv>(
+        mean, sigma, true).approximate(1000000L, abseps, -1);
+
+      expect_true(res.inform == 0L);
+      expect_true(res.finest.n_elem == expect.n_elem);
+      expect_true(std::abs(res.finest[0] - expect[0]) < 1e-5);
+      for(unsigned i = 1; i < 5L; ++i)
+        expect_true(std::abs(res.finest[i] - expect[i]) < 1e-5);
+      for(unsigned i = 5; i < expect.n_elem; ++i)
+        expect_true(std::abs(res.finest[i] - expect[i]) < 1e-5);
+    }
   }
 
   test_that("cdf<deriv> gives similar output to R (with bounds)") {
@@ -309,12 +374,27 @@ context("restrictcdf unit tests") {
 
     double const abseps = std::pow(
       std::numeric_limits<double>::epsilon(), .4);
-    auto res = restrictcdf::cdf<restrictcdf::deriv>(
-      lower, upper, mean, sigma, false).approximate(1000000L, abseps, -1);
+    {
+        auto res = restrictcdf::cdf<restrictcdf::deriv>(
+          lower, upper, mean, sigma, false).approximate(1000000L, abseps, -1);
 
-    expect_true(res.inform == 0L);
-    expect_true(res.finest.n_elem == expect.n_elem);
-    for(unsigned i = 0; i < expect.n_elem; ++i)
-      expect_true(std::abs(res.finest[i] - expect[i]) < 1e-5);
+        expect_true(res.inform == 0L);
+        expect_true(res.finest.n_elem == expect.n_elem);
+        expect_true(std::abs(res.finest[0] - expect[0]) < 1e-5);
+        for(unsigned i = 1; i < expect.n_elem; ++i)
+          expect_true(std::abs(res.finest[i] - expect[i]) < 1e-5);
+    }
+    {
+      auto res = restrictcdf::cdf<restrictcdf::deriv>(
+        lower, upper, mean, sigma, true).approximate(1000000L, abseps, -1);
+
+      expect_true(res.inform == 0L);
+      expect_true(res.finest.n_elem == expect.n_elem);
+      expect_true(std::abs(res.finest[0] - expect[0]) < 1e-5);
+      for(unsigned i = 1; i < 5L; ++i)
+        expect_true(std::abs(res.finest[i] - expect[i]) < 1e-5);
+      for(unsigned i = 5; i < expect.n_elem; ++i)
+        expect_true(std::abs(res.finest[i] - expect[i]) < 1e-5);
+    }
   }
 }

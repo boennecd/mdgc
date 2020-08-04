@@ -5,8 +5,6 @@
 #include <omp.h>
 #endif
 
-#include "prof.h"
-
 using namespace mdgc;
 using namespace arma;
 
@@ -102,9 +100,8 @@ SEXP get_log_lm_terms(arma::mat const &lower, arma::mat const &upper,
 Rcpp::NumericVector eval_log_lm_terms(
     SEXP ptr, arma::ivec const &indices, arma::mat const &vcov,
     int const maxpts, double const abseps, double const releps,
-    size_t const n_threads, bool const comp_derivs){
-  profiler pp("eval_log_lm_terms");
-
+    size_t const n_threads, bool const comp_derivs,
+    bool const do_reorder = true){
   Rcpp::XPtr<ml_terms> obj(ptr);
   std::vector<log_ml_term> const &terms = obj->terms;
 
@@ -139,7 +136,8 @@ Rcpp::NumericVector eval_log_lm_terms(
 #endif
     for(size_t i = 0; i < n_indices; ++i)
       out += terms[indices[i]].approximate(
-        vcov, my_derivs, maxpts, abseps, releps, comp_derivs);
+        vcov, my_derivs, maxpts, abseps, releps, comp_derivs,
+        do_reorder);
 
     if(comp_derivs)
 #ifdef _OPENMP

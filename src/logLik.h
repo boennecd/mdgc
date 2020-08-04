@@ -52,13 +52,15 @@ public:
    * @param abseps Absolute convergence threshold.
    * @param releps Relative convergence threshold.
    * @param comp_deriv true if the derivative should be computed.
+   * @param do_reorder true if the order of integrations may be reordered.
    *
    * @return the log marginal likelihood approximation.
    *
    */
   double approximate(arma::mat const &vcov, arma::mat &derivs,
                      int const maxpts, double const abseps,
-                     double const releps, bool const comp_deriv) const;
+                     double const releps, bool const comp_deriv,
+                     bool const do_reorder) const;
 
   /**
    * sets the working memory. Must be called prior to calling approximate.
