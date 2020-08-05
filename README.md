@@ -191,7 +191,7 @@ system.time(
   ptr <- mdgc:::get_log_lm_terms(lower = dat$lower, upper = dat$upper, 
                                  code = dat$code))
 #>    user  system elapsed 
-#>       0       0       0
+#>   0.001   0.000   0.000
 
 # approximates the log marginal likelihood function.
 #
@@ -244,12 +244,12 @@ microbenchmark(
   times = 5)
 #> Unit: milliseconds
 #>                       expr min  lq mean median  uq max neval
-#>  1 thread                  547 548  550    550 550 554     5
-#>  1 thread  (w/o rordering) 815 826  831    835 836 840     5
-#>  2 threads                 284 286  290    286 291 303     5
-#>  2 threads (w/o rordering) 421 426  437    433 444 459     5
-#>  4 threads                 141 145  149    147 154 159     5
-#>  4 threads (w/o rordering) 223 226  229    227 233 236     5
+#>  1 thread                  539 546  549    547 554 556     5
+#>  1 thread  (w/o rordering) 804 811  819    819 829 831     5
+#>  2 threads                 269 273  274    275 275 278     5
+#>  2 threads (w/o rordering) 403 423  427    426 429 454     5
+#>  4 threads                 137 139  143    142 148 148     5
+#>  4 threads (w/o rordering) 214 217  222    223 226 231     5
 
 #####
 # we can also get an approximation of the gradient
@@ -274,12 +274,12 @@ microbenchmark(
   times = 5)
 #> Unit: milliseconds
 #>                       expr  min   lq mean median   uq  max neval
-#>  1 thread                  2462 2471 2514   2503 2566 2570     5
-#>  1 thread  (w/o rordering) 4303 4316 4376   4367 4409 4485     5
-#>  2 threads                 1233 1266 1279   1285 1301 1311     5
-#>  2 threads (w/o rordering) 2185 2209 2243   2222 2251 2348     5
-#>  4 threads                  670  679  693    684  700  730     5
-#>  4 threads (w/o rordering) 1210 1213 1238   1230 1261 1277     5
+#>  1 thread                  2378 2397 2433   2431 2475 2482     5
+#>  1 thread  (w/o rordering) 4213 4216 4254   4219 4263 4359     5
+#>  2 threads                 1193 1201 1224   1220 1244 1262     5
+#>  2 threads (w/o rordering) 2127 2130 2167   2141 2166 2271     5
+#>  4 threads                  654  655  663    657  664  688     5
+#>  4 threads (w/o rordering) 1123 1128 1158   1131 1189 1217     5
 
 # creates a matrix from a log-Cholesky decomposition.
 # 
@@ -403,41 +403,41 @@ start_val <- numeric(p * (p + 1) / 2)
 system.time(res <- naiv_gradient_descent(val = start_val, step_start = .001, 
                                          maxit = 20L, eps = 1e-2))
 #>    user  system elapsed 
-#>    78.5     0.0    20.2
+#>    73.9     0.0    19.1
 
 # compare estimates with truth
 norm(res$result - dat$Sigma)
-#> [1] 0.373
+#> [1] 0.374
 res$result
 #>        [,1]  [,2]  [,3]  [,4]  [,5]  [,6]  [,7]  [,8]  [,9] [,10] [,11] [,12]
-#>  [1,] 1.000 0.539 0.410 0.503 0.456 0.557 0.491 0.517 0.497 0.439 0.433 0.509
-#>  [2,] 0.539 1.000 0.438 0.483 0.318 0.431 0.465 0.503 0.439 0.494 0.534 0.534
-#>  [3,] 0.410 0.438 1.000 0.544 0.472 0.492 0.581 0.470 0.426 0.485 0.548 0.413
-#>  [4,] 0.503 0.483 0.544 1.000 0.455 0.539 0.475 0.458 0.521 0.446 0.432 0.466
-#>  [5,] 0.456 0.318 0.472 0.455 1.000 0.505 0.367 0.414 0.485 0.422 0.422 0.493
-#>  [6,] 0.557 0.431 0.492 0.539 0.505 1.000 0.474 0.487 0.468 0.411 0.399 0.568
-#>  [7,] 0.491 0.465 0.581 0.475 0.367 0.474 1.000 0.516 0.434 0.560 0.527 0.491
-#>  [8,] 0.517 0.503 0.470 0.458 0.414 0.487 0.516 1.000 0.502 0.630 0.376 0.523
-#>  [9,] 0.497 0.439 0.426 0.521 0.485 0.468 0.434 0.502 1.000 0.462 0.448 0.438
-#> [10,] 0.439 0.494 0.485 0.446 0.422 0.411 0.560 0.630 0.462 1.000 0.530 0.434
-#> [11,] 0.433 0.534 0.548 0.432 0.422 0.399 0.527 0.376 0.448 0.530 1.000 0.437
-#> [12,] 0.509 0.534 0.413 0.466 0.493 0.568 0.491 0.523 0.438 0.434 0.437 1.000
-#> [13,] 0.549 0.455 0.454 0.479 0.488 0.505 0.563 0.532 0.546 0.468 0.472 0.449
-#> [14,] 0.477 0.427 0.551 0.518 0.524 0.551 0.454 0.437 0.488 0.423 0.451 0.428
-#> [15,] 0.610 0.474 0.476 0.627 0.441 0.511 0.536 0.456 0.499 0.539 0.478 0.478
+#>  [1,] 1.000 0.539 0.407 0.505 0.456 0.556 0.491 0.517 0.497 0.439 0.434 0.509
+#>  [2,] 0.539 1.000 0.435 0.485 0.318 0.431 0.465 0.503 0.439 0.494 0.535 0.534
+#>  [3,] 0.407 0.435 1.000 0.542 0.471 0.491 0.579 0.468 0.424 0.484 0.546 0.411
+#>  [4,] 0.505 0.485 0.542 1.000 0.455 0.539 0.475 0.458 0.521 0.447 0.432 0.467
+#>  [5,] 0.456 0.318 0.471 0.455 1.000 0.505 0.367 0.414 0.485 0.423 0.422 0.493
+#>  [6,] 0.556 0.431 0.491 0.539 0.505 1.000 0.474 0.487 0.467 0.411 0.399 0.567
+#>  [7,] 0.491 0.465 0.579 0.475 0.367 0.474 1.000 0.516 0.434 0.560 0.527 0.491
+#>  [8,] 0.517 0.503 0.468 0.458 0.414 0.487 0.516 1.000 0.502 0.630 0.376 0.523
+#>  [9,] 0.497 0.439 0.424 0.521 0.485 0.467 0.434 0.502 1.000 0.462 0.448 0.438
+#> [10,] 0.439 0.494 0.484 0.447 0.423 0.411 0.560 0.630 0.462 1.000 0.530 0.434
+#> [11,] 0.434 0.535 0.546 0.432 0.422 0.399 0.527 0.376 0.448 0.530 1.000 0.437
+#> [12,] 0.509 0.534 0.411 0.467 0.493 0.567 0.491 0.523 0.438 0.434 0.437 1.000
+#> [13,] 0.549 0.455 0.452 0.480 0.488 0.505 0.563 0.532 0.545 0.468 0.472 0.448
+#> [14,] 0.478 0.427 0.549 0.518 0.524 0.551 0.454 0.437 0.488 0.423 0.451 0.429
+#> [15,] 0.609 0.474 0.475 0.628 0.442 0.511 0.536 0.456 0.499 0.539 0.479 0.477
 #>       [,13] [,14] [,15]
-#>  [1,] 0.549 0.477 0.610
+#>  [1,] 0.549 0.478 0.609
 #>  [2,] 0.455 0.427 0.474
-#>  [3,] 0.454 0.551 0.476
-#>  [4,] 0.479 0.518 0.627
-#>  [5,] 0.488 0.524 0.441
+#>  [3,] 0.452 0.549 0.475
+#>  [4,] 0.480 0.518 0.628
+#>  [5,] 0.488 0.524 0.442
 #>  [6,] 0.505 0.551 0.511
 #>  [7,] 0.563 0.454 0.536
 #>  [8,] 0.532 0.437 0.456
-#>  [9,] 0.546 0.488 0.499
+#>  [9,] 0.545 0.488 0.499
 #> [10,] 0.468 0.423 0.539
-#> [11,] 0.472 0.451 0.478
-#> [12,] 0.449 0.428 0.478
+#> [11,] 0.472 0.451 0.479
+#> [12,] 0.448 0.429 0.477
 #> [13,] 1.000 0.608 0.614
 #> [14,] 0.608 1.000 0.535
 #> [15,] 0.614 0.535 1.000
@@ -554,7 +554,7 @@ set.seed(1)
 system.time(res_adam  <- adam(
   val = start_val, alpha = 1e-2, maxit = 10L, batch_size = 100L))
 #>    user  system elapsed 
-#>  36.989   0.012  10.031
+#>  34.285   0.004   9.286
 
 # compare estimates with the truth
 norm(res_adam$result - dat$Sigma)
@@ -650,6 +650,155 @@ res_adam$fun_vals # likely lower bounds on the log-marginal likelihood
 res_adam_org <- res_adam
 
 #####
+# performs stochastic gradient descent instead (using SVRG).
+# 
+# Args: 
+#   val: starting value. 
+#   batch_size: number of observations in each batch. 
+#   n_threads: number of threads to use. 
+#   maxit: maximum number of iteration. 
+#   seed: seed to use.
+#   lr: learning rate. 
+svrg <- function(val, batch_size, n_threads = 4L, maxit = 10L, 
+                 seed = 1L, lr){
+  all_indices <- 0:(NCOL(dat$lower) - 1L)
+  indices <- sample(all_indices, replace = FALSE)
+  blocks <- tapply(indices, (seq_along(indices) - 1L) %/% batch_size, 
+                   identity, simplify = FALSE)
+  
+  n_blocks <- length(blocks)
+  n_par <- length(val)
+  estimates <- matrix(NA_real_, n_par, maxit + 1L)
+  fun_vals <- numeric(maxit + 1L)
+  estimates[, 1L] <- val
+  
+  for(k in 1:maxit + 1L){
+    old_val <- estimates[, k - 1L]
+    old_grs <- sapply(1:n_blocks - 1L, function(ii){
+      idx_b <- (ii %% n_blocks) + 1L
+      res_old <- par_fn(old_val, comp_derivs = TRUE, n_threads = n_threads, 
+                        seed = seed, indices = blocks[[idx_b]])
+      c(res_old, attr(res_old, "grad"))
+    })
+    
+    fun_vals[k - 1L] <- sum(old_grs[1, ])
+    old_grs <- old_grs[-1L, , drop = FALSE ]
+    old_gr <- rowSums(old_grs) / n_blocks
+    
+    for(ii in 1:n_blocks - 1L){
+      idx_b <- (ii %% n_blocks) + 1L
+      res <- par_fn(val, comp_derivs = TRUE, n_threads = n_threads, 
+                    seed = seed, indices = blocks[[idx_b]])
+      fun_vals[k] <- fun_vals[k] + c(res)
+      dir <- attr(res, "grad") - old_grs[, ii + 1L] + old_gr
+      
+      val <- val + lr * dir
+      val <- get_lchol(cov2cor(get_lchol_inv(val)))
+    }
+    
+    estimates[, k] <- val
+  }
+  
+  list(result = get_lchol_inv(val), fun_vals = fun_vals[-1L], 
+       estimates = estimates[, -1L, drop = FALSE])
+}
+
+# estimate the model parameters
+set.seed(1)
+system.time(res_svrg  <- svrg(
+  val = start_val, lr = 1e-3, maxit = 10L, batch_size = 100L))
+#>    user  system elapsed 
+#>  66.114   0.076  17.919
+
+# compare estimates with the truth
+norm(res_svrg$result - dat$Sigma)
+#> [1] 0.371
+res_svrg$result
+#>        [,1]  [,2]  [,3]  [,4]  [,5]  [,6]  [,7]  [,8]  [,9] [,10] [,11] [,12]
+#>  [1,] 1.000 0.535 0.402 0.498 0.451 0.550 0.482 0.510 0.490 0.429 0.427 0.504
+#>  [2,] 0.535 1.000 0.436 0.483 0.317 0.430 0.465 0.503 0.438 0.494 0.534 0.534
+#>  [3,] 0.402 0.436 1.000 0.542 0.471 0.490 0.579 0.468 0.424 0.483 0.546 0.411
+#>  [4,] 0.498 0.483 0.542 1.000 0.455 0.539 0.476 0.458 0.521 0.447 0.432 0.467
+#>  [5,] 0.451 0.317 0.471 0.455 1.000 0.505 0.367 0.414 0.484 0.422 0.422 0.493
+#>  [6,] 0.550 0.430 0.490 0.539 0.505 1.000 0.475 0.488 0.468 0.415 0.399 0.567
+#>  [7,] 0.482 0.465 0.579 0.476 0.367 0.475 1.000 0.514 0.433 0.556 0.525 0.490
+#>  [8,] 0.510 0.503 0.468 0.458 0.414 0.488 0.514 1.000 0.500 0.625 0.374 0.521
+#>  [9,] 0.490 0.438 0.424 0.521 0.484 0.468 0.433 0.500 1.000 0.462 0.447 0.437
+#> [10,] 0.429 0.494 0.483 0.447 0.422 0.415 0.556 0.625 0.462 1.000 0.528 0.433
+#> [11,] 0.427 0.534 0.546 0.432 0.422 0.399 0.525 0.374 0.447 0.528 1.000 0.436
+#> [12,] 0.504 0.534 0.411 0.467 0.493 0.567 0.490 0.521 0.437 0.433 0.436 1.000
+#> [13,] 0.544 0.455 0.452 0.479 0.487 0.505 0.561 0.531 0.544 0.467 0.472 0.448
+#> [14,] 0.472 0.427 0.549 0.518 0.523 0.551 0.453 0.436 0.487 0.422 0.451 0.428
+#> [15,] 0.605 0.473 0.474 0.627 0.441 0.512 0.533 0.454 0.498 0.538 0.477 0.476
+#>       [,13] [,14] [,15]
+#>  [1,] 0.544 0.472 0.605
+#>  [2,] 0.455 0.427 0.473
+#>  [3,] 0.452 0.549 0.474
+#>  [4,] 0.479 0.518 0.627
+#>  [5,] 0.487 0.523 0.441
+#>  [6,] 0.505 0.551 0.512
+#>  [7,] 0.561 0.453 0.533
+#>  [8,] 0.531 0.436 0.454
+#>  [9,] 0.544 0.487 0.498
+#> [10,] 0.467 0.422 0.538
+#> [11,] 0.472 0.451 0.477
+#> [12,] 0.448 0.428 0.476
+#> [13,] 1.000 0.607 0.613
+#> [14,] 0.607 1.000 0.534
+#> [15,] 0.613 0.534 1.000
+dat$Sigma
+#>        [,1]  [,2]  [,3]  [,4]  [,5]  [,6]  [,7]  [,8]  [,9] [,10] [,11] [,12]
+#>  [1,] 1.000 0.534 0.394 0.521 0.449 0.536 0.469 0.508 0.528 0.457 0.446 0.504
+#>  [2,] 0.534 1.000 0.417 0.500 0.319 0.414 0.486 0.524 0.473 0.504 0.521 0.517
+#>  [3,] 0.394 0.417 1.000 0.570 0.509 0.461 0.551 0.516 0.467 0.502 0.528 0.461
+#>  [4,] 0.521 0.500 0.570 1.000 0.489 0.540 0.500 0.458 0.550 0.474 0.471 0.504
+#>  [5,] 0.449 0.319 0.509 0.489 1.000 0.484 0.383 0.426 0.491 0.456 0.451 0.496
+#>  [6,] 0.536 0.414 0.461 0.540 0.484 1.000 0.475 0.459 0.461 0.393 0.409 0.555
+#>  [7,] 0.469 0.486 0.551 0.500 0.383 0.475 1.000 0.500 0.438 0.556 0.523 0.516
+#>  [8,] 0.508 0.524 0.516 0.458 0.426 0.459 0.500 1.000 0.502 0.612 0.416 0.507
+#>  [9,] 0.528 0.473 0.467 0.550 0.491 0.461 0.438 0.502 1.000 0.475 0.506 0.452
+#> [10,] 0.457 0.504 0.502 0.474 0.456 0.393 0.556 0.612 0.475 1.000 0.514 0.420
+#> [11,] 0.446 0.521 0.528 0.471 0.451 0.409 0.523 0.416 0.506 0.514 1.000 0.420
+#> [12,] 0.504 0.517 0.461 0.504 0.496 0.555 0.516 0.507 0.452 0.420 0.420 1.000
+#> [13,] 0.517 0.469 0.445 0.465 0.498 0.454 0.545 0.531 0.569 0.469 0.480 0.450
+#> [14,] 0.476 0.445 0.565 0.533 0.548 0.544 0.474 0.473 0.513 0.421 0.515 0.433
+#> [15,] 0.627 0.506 0.495 0.638 0.481 0.535 0.514 0.511 0.539 0.537 0.493 0.488
+#>       [,13] [,14] [,15]
+#>  [1,] 0.517 0.476 0.627
+#>  [2,] 0.469 0.445 0.506
+#>  [3,] 0.445 0.565 0.495
+#>  [4,] 0.465 0.533 0.638
+#>  [5,] 0.498 0.548 0.481
+#>  [6,] 0.454 0.544 0.535
+#>  [7,] 0.545 0.474 0.514
+#>  [8,] 0.531 0.473 0.511
+#>  [9,] 0.569 0.513 0.539
+#> [10,] 0.469 0.421 0.537
+#> [11,] 0.480 0.515 0.493
+#> [12,] 0.450 0.433 0.488
+#> [13,] 1.000 0.598 0.615
+#> [14,] 0.598 1.000 0.548
+#> [15,] 0.615 0.548 1.000
+
+# use plot instead
+par(mfcol = c(1, 3), mar  = c(1, 1, 4, 1))
+do_plot(res_svrg$result, "Estimates (SVRG)")
+do_plot(dat$Sigma, "Truth")
+do_plot(res_svrg$result - dat$Sigma, "Difference")
+```
+
+<img src="man/figures/README-sim_dat-3.png" width="100%" />
+
+``` r
+
+# look at the maximum log marginal likelihood both at the end and after 
+# each iteration
+funvals_svrg_org <- res_svrg$fun_vals
+funvals_svrg_org[length(funvals_svrg_org)] <- log_ml(res_svrg$result)
+funvals_svrg_org
+#>  [1] -22885 -22437 -22316 -22276 -22261 -22255 -22252 -22250 -22250 -22250
+
+#####
 # we can use better starting values. E.g. something heuristic like: 
 #   - transform back into the [0, 1] scale. 
 #   - take the middle of the interval and map back. 
@@ -680,13 +829,13 @@ microbenchmark(
   dat$lower, dat$upper, dat$code, n_threads = 4L), times = 10)
 #> Unit: microseconds
 #>         expr   min    lq  mean median    uq   max neval
-#>  R version   66724 70352 71707  71793 72316 77844    10
-#>  C++ verison   617   631   652    651   666   704    10
+#>  R version   67455 69697 73202  72135 74834 86831    10
+#>  C++ verison   613   626   641    646   651   667    10
 
 # then we can compute an approximation of the covariance matrix as follows
 system.time(chat <- cov2cor(cov(t(tmp), use = "pairwise.complete.obs")))
 #>    user  system elapsed 
-#>   0.003   0.000   0.003
+#>   0.002   0.000   0.003
 
 # the starting value is already quite close
 par(mfcol = c(1, 3), mar  = c(1, 1, 4, 1))
@@ -697,7 +846,7 @@ do_plot(dat$Sigma, "Truth")
 do_plot(chat - dat$Sigma, "Difference")
 ```
 
-<img src="man/figures/README-sim_dat-3.png" width="100%" />
+<img src="man/figures/README-sim_dat-4.png" width="100%" />
 
 ``` r
 
@@ -707,7 +856,7 @@ set.seed(1)
 system.time(res_adam  <- adam(
   val = start_val, alpha = 1e-2, maxit = 5L, batch_size = 100L))
 #>    user  system elapsed 
-#>  17.454   0.016   4.645
+#>  15.956   0.004   4.239
 
 # for comparisons, we also run the code using one thread
 set.seed(1)
@@ -715,7 +864,7 @@ system.time(res_adam_ser  <- adam(
   val = start_val, alpha = 1e-2, maxit = 5L, batch_size = 100L, 
   n_threads = 1L))
 #>    user  system elapsed 
-#>  13.194   0.008  13.203
+#>  12.253   0.016  12.270
 
 # we get (roughly) the same
 norm(res_adam$result - res_adam_ser$result)
@@ -730,7 +879,7 @@ do_plot(dat$Sigma, "Truth")
 do_plot(res_adam$result - dat$Sigma, "Difference")
 ```
 
-<img src="man/figures/README-sim_dat-4.png" width="100%" />
+<img src="man/figures/README-sim_dat-5.png" width="100%" />
 
 ``` r
 
@@ -744,34 +893,136 @@ funvals_adam
 res_adam$fun_vals # likely lower bounds on the log-marginal likelihood
 #> [1] -22355 -22276 -22281 -22280 -22279
 
+# do the same with SVRG
+set.seed(1)
+system.time(res_svrg  <- svrg(
+  val = start_val, lr = 1e-3, maxit = 5L, batch_size = 100L))
+#>    user  system elapsed 
+#>  31.754   0.004   8.586
+
+# compare estimates with the truth
+norm(res_svrg$result - dat$Sigma)
+#> [1] 0.383
+res_svrg$result
+#>        [,1]  [,2]  [,3]  [,4]  [,5]  [,6]  [,7]  [,8]  [,9] [,10] [,11] [,12]
+#>  [1,] 1.000 0.540 0.410 0.504 0.456 0.557 0.491 0.516 0.496 0.438 0.434 0.509
+#>  [2,] 0.540 1.000 0.434 0.481 0.315 0.428 0.461 0.500 0.434 0.490 0.532 0.532
+#>  [3,] 0.410 0.434 1.000 0.541 0.471 0.490 0.577 0.466 0.422 0.481 0.546 0.410
+#>  [4,] 0.504 0.481 0.541 1.000 0.456 0.538 0.475 0.457 0.520 0.446 0.432 0.466
+#>  [5,] 0.456 0.315 0.471 0.456 1.000 0.505 0.367 0.413 0.483 0.419 0.421 0.492
+#>  [6,] 0.557 0.428 0.490 0.538 0.505 1.000 0.470 0.482 0.464 0.410 0.398 0.564
+#>  [7,] 0.491 0.461 0.577 0.475 0.367 0.470 1.000 0.513 0.430 0.549 0.523 0.489
+#>  [8,] 0.516 0.500 0.466 0.457 0.413 0.482 0.513 1.000 0.495 0.615 0.373 0.519
+#>  [9,] 0.496 0.434 0.422 0.520 0.483 0.464 0.430 0.495 1.000 0.458 0.445 0.437
+#> [10,] 0.438 0.490 0.481 0.446 0.419 0.410 0.549 0.615 0.458 1.000 0.526 0.432
+#> [11,] 0.434 0.532 0.546 0.432 0.421 0.398 0.523 0.373 0.445 0.526 1.000 0.435
+#> [12,] 0.509 0.532 0.410 0.466 0.492 0.564 0.489 0.519 0.437 0.432 0.435 1.000
+#> [13,] 0.549 0.452 0.451 0.479 0.487 0.503 0.559 0.528 0.543 0.467 0.471 0.448
+#> [14,] 0.478 0.424 0.548 0.518 0.523 0.549 0.452 0.434 0.485 0.422 0.450 0.428
+#> [15,] 0.609 0.471 0.474 0.627 0.441 0.510 0.532 0.453 0.497 0.537 0.477 0.476
+#>       [,13] [,14] [,15]
+#>  [1,] 0.549 0.478 0.609
+#>  [2,] 0.452 0.424 0.471
+#>  [3,] 0.451 0.548 0.474
+#>  [4,] 0.479 0.518 0.627
+#>  [5,] 0.487 0.523 0.441
+#>  [6,] 0.503 0.549 0.510
+#>  [7,] 0.559 0.452 0.532
+#>  [8,] 0.528 0.434 0.453
+#>  [9,] 0.543 0.485 0.497
+#> [10,] 0.467 0.422 0.537
+#> [11,] 0.471 0.450 0.477
+#> [12,] 0.448 0.428 0.476
+#> [13,] 1.000 0.607 0.613
+#> [14,] 0.607 1.000 0.535
+#> [15,] 0.613 0.535 1.000
+dat$Sigma
+#>        [,1]  [,2]  [,3]  [,4]  [,5]  [,6]  [,7]  [,8]  [,9] [,10] [,11] [,12]
+#>  [1,] 1.000 0.534 0.394 0.521 0.449 0.536 0.469 0.508 0.528 0.457 0.446 0.504
+#>  [2,] 0.534 1.000 0.417 0.500 0.319 0.414 0.486 0.524 0.473 0.504 0.521 0.517
+#>  [3,] 0.394 0.417 1.000 0.570 0.509 0.461 0.551 0.516 0.467 0.502 0.528 0.461
+#>  [4,] 0.521 0.500 0.570 1.000 0.489 0.540 0.500 0.458 0.550 0.474 0.471 0.504
+#>  [5,] 0.449 0.319 0.509 0.489 1.000 0.484 0.383 0.426 0.491 0.456 0.451 0.496
+#>  [6,] 0.536 0.414 0.461 0.540 0.484 1.000 0.475 0.459 0.461 0.393 0.409 0.555
+#>  [7,] 0.469 0.486 0.551 0.500 0.383 0.475 1.000 0.500 0.438 0.556 0.523 0.516
+#>  [8,] 0.508 0.524 0.516 0.458 0.426 0.459 0.500 1.000 0.502 0.612 0.416 0.507
+#>  [9,] 0.528 0.473 0.467 0.550 0.491 0.461 0.438 0.502 1.000 0.475 0.506 0.452
+#> [10,] 0.457 0.504 0.502 0.474 0.456 0.393 0.556 0.612 0.475 1.000 0.514 0.420
+#> [11,] 0.446 0.521 0.528 0.471 0.451 0.409 0.523 0.416 0.506 0.514 1.000 0.420
+#> [12,] 0.504 0.517 0.461 0.504 0.496 0.555 0.516 0.507 0.452 0.420 0.420 1.000
+#> [13,] 0.517 0.469 0.445 0.465 0.498 0.454 0.545 0.531 0.569 0.469 0.480 0.450
+#> [14,] 0.476 0.445 0.565 0.533 0.548 0.544 0.474 0.473 0.513 0.421 0.515 0.433
+#> [15,] 0.627 0.506 0.495 0.638 0.481 0.535 0.514 0.511 0.539 0.537 0.493 0.488
+#>       [,13] [,14] [,15]
+#>  [1,] 0.517 0.476 0.627
+#>  [2,] 0.469 0.445 0.506
+#>  [3,] 0.445 0.565 0.495
+#>  [4,] 0.465 0.533 0.638
+#>  [5,] 0.498 0.548 0.481
+#>  [6,] 0.454 0.544 0.535
+#>  [7,] 0.545 0.474 0.514
+#>  [8,] 0.531 0.473 0.511
+#>  [9,] 0.569 0.513 0.539
+#> [10,] 0.469 0.421 0.537
+#> [11,] 0.480 0.515 0.493
+#> [12,] 0.450 0.433 0.488
+#> [13,] 1.000 0.598 0.615
+#> [14,] 0.598 1.000 0.548
+#> [15,] 0.615 0.548 1.000
+
+# use plot instead
+par(mfcol = c(1, 3), mar  = c(1, 1, 4, 1))
+do_plot(res_svrg$result, "Estimates (SVRG)")
+do_plot(dat$Sigma, "Truth")
+do_plot(res_svrg$result - dat$Sigma, "Difference")
+```
+
+<img src="man/figures/README-sim_dat-6.png" width="100%" />
+
+``` r
+
+# look at the maximum log marginal likelihood both at the end and after 
+# each iteration
+funvals_svrg <- res_svrg$fun_vals
+funvals_svrg[length(funvals_svrg)] <- log_ml(res_svrg$result)
+funvals_svrg
+#> [1] -22272 -22255 -22251 -22250 -22249
+
 #####
 # compare convergence of the different methods 
 #  line: gradient descent. 
 #  dashed: ADAM with poor starting values. 
 #  dotted: ADAM with better starting values
+#  blue: same as ADAM but using SVRG.
 lls <- matrix(NA_real_, max(length(res$fun_vals), length(funvals_adam_org), 
-                            length(funvals_adam)), 3L)
+                            length(funvals_adam), length(funvals_svrg_org), 
+                            length(funvals_svrg)), 5L)
 lls[seq_along(res$fun_vals)    , 1] <- res$fun_vals
 lls[seq_along(funvals_adam_org), 2] <- funvals_adam_org
 lls[seq_along(funvals_adam)    , 3] <- funvals_adam
+lls[seq_along(funvals_svrg_org), 4] <- funvals_svrg_org
+lls[seq_along(funvals_svrg)    , 5] <- funvals_svrg
 
 par(mfcol = c(1, 1), mar = c(5, 5, 1, 1))
-matplot(lls, lty = 1:3, col = "black", bty = "l", type = "l", 
-        xlab = "Iteration", ylab = "Log marginal likelihood")
+matplot(
+  lls, lty = c(1:3, 2:3), col = c(rep("black", 3), rep("darkblue", 2)), 
+  bty = "l", type = "l", xlab = "Iteration", 
+  ylab = "Log marginal likelihood")
 ```
 
-<img src="man/figures/README-sim_dat-5.png" width="100%" />
+<img src="man/figures/README-sim_dat-7.png" width="100%" />
 
 ``` r
 
 # skipping the first n steps
 n_skip <- 3L
-matplot(lls, lty = 1:3, ylim = range(lls[-(1:n_skip), ], na.rm = TRUE),
-        col = "black", bty = "l", type = "l", xlab = "Iteration", 
-        ylab = "Log marginal likelihood")
+matplot(
+  lls, lty = c(1:3, 2:3), col = c(rep("black", 3), rep("darkblue", 2)), 
+  ylim = range(lls[-(1:n_skip), ], na.rm = TRUE), bty = "l", 
+  type = "l", xlab = "Iteration", ylab = "Log marginal likelihood")
 ```
 
-<img src="man/figures/README-sim_dat-6.png" width="100%" />
+<img src="man/figures/README-sim_dat-8.png" width="100%" />
 
 ## References
 

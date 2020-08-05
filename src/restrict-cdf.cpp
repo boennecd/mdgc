@@ -35,10 +35,14 @@ extern "C"
 }
 
 namespace restrictcdf {
-static size_t wk_mem_per_thread = 0L,
-              current_wk_size   = 0L;
+static size_t wk_mem_per_thread  = 0L,
+              current_wk_size    = 0L,
+              iwk_mem_per_thread = 0L,
+              current_iwk_size   = 0L;
 static std::unique_ptr<double[]> current_wk_mem =
   std::unique_ptr<double[]>();
+static std::unique_ptr<int[]> current_iwk_mem =
+  std::unique_ptr<int[]>();
 
 template<class funcs>
 double * cdf<funcs>::get_working_memory(){
@@ -52,25 +56,60 @@ double * cdf<funcs>::get_working_memory(){
 }
 
 template<class funcs>
-void cdf<funcs>::set_working_memory
-  (size_t max_dim, size_t const n_threads){
-  // assume the cacheline is 128 bytes. Then make sure we avoid false
-  // sharing by having 2 x 128 bytes per thread.
-  constexpr size_t const mult = 128L / 8L,
-                     min_size = 2L * mult;
-  size_t const upper_tri_size = (max_dim * (max_dim + 1L)) / 2L;
-  max_dim = 4L * max_dim + 3L * upper_tri_size;
-  max_dim = std::max(max_dim, min_size);
-  max_dim = (max_dim + mult - 1L) / mult;
-  max_dim *= mult;
-  wk_mem_per_thread = max_dim;
+int * cdf<funcs>::get_iworking_memory(){
+#ifdef _OPENMP
+  size_t const my_num = omp_get_thread_num();
+#else
+  size_t const my_num(0L);
+#endif
 
-  size_t const new_size =
-    std::max(n_threads, static_cast<size_t>(1L)) * max_dim;
-  if(new_size > current_wk_size){
-    current_wk_mem.reset(new double[new_size]);
-    current_wk_size = new_size;
-    return;
+  return current_iwk_mem.get() + my_num * iwk_mem_per_thread;
+}
+
+template<class funcs>
+void cdf<funcs>::set_working_memory
+  (size_t const max_dim, size_t const n_threads){
+  constexpr size_t const cachline_size = 128L;
+  int int_type;
+  double double_type;
+
+  {
+    // makes sure we avoid false sharing.
+    constexpr size_t const mult = cachline_size / sizeof(double_type),
+                       min_size = 2L * mult;
+    size_t const upper_tri_size = (max_dim * (max_dim + 1L)) / 2L;
+    size_t m_dim = 4L * max_dim + 3L * upper_tri_size;
+    m_dim = std::max(m_dim, min_size);
+    m_dim = (m_dim + mult - 1L) / mult;
+    m_dim *= mult;
+    wk_mem_per_thread = m_dim;
+
+    size_t const new_size =
+      std::max(n_threads, static_cast<size_t>(1L)) * m_dim;
+    if(new_size > current_wk_size){
+      current_wk_mem.reset(new double[new_size]);
+      current_wk_size = new_size;
+
+    }
+  }
+
+  {
+    // makes sure we avoid false sharing.
+    constexpr size_t const mult = cachline_size / sizeof(int_type),
+                       min_size = 2L * mult;
+    size_t m_dim = 2L * max_dim;
+    m_dim = std::max(m_dim, min_size);
+    m_dim = (m_dim + mult - 1L) / mult;
+    m_dim *= mult;
+    iwk_mem_per_thread = m_dim;
+
+    size_t const new_size =
+      std::max(n_threads, static_cast<size_t>(1L)) * m_dim;
+    if(new_size > current_iwk_size){
+      current_iwk_mem.reset(new int[new_size]);
+      current_iwk_size = new_size;
+
+    }
   }
 }
 

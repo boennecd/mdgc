@@ -204,29 +204,37 @@ class cdf {
     /// objects for the child class
            * const child_mem;
 
-    ptr_to_dat(double * const wk_mem, int const ndim):
+    int * const infin,
+        * const idx;
+
+
+    ptr_to_dat(double * const wk_mem, int const ndim,
+               int * const iwk_mem):
       wk_mem(wk_mem), ndim(ndim),
       lower     (wk_mem            ),
       upper     (wk_mem + ndim     ),
       draw      (wk_mem + 2L * ndim),
       tmp_vec   (wk_mem + 3L * ndim),
       sigma_chol(wk_mem + 4L * ndim),
-      child_mem (wk_mem + 4L * ndim + (ndim * (ndim + 1L)) / 2L)
+      child_mem (wk_mem + 4L * ndim + (ndim * (ndim + 1L)) / 2L),
+      infin(iwk_mem),
+      idx  (iwk_mem + ndim)
       { }
   };
 
   static int ndim, n_integrands;
-  static arma::ivec infin, idx;
   static double * wk_mem;
+  static int *iwk_mem;
   static bool is_permutated;
   static constexpr bool const needs_last_unif =
     funcs::needs_last_unif();
 
 #ifdef _OPENMP
-#pragma omp threadprivate(ndim, n_integrands, infin, idx, wk_mem, is_permutated)
+#pragma omp threadprivate(ndim, n_integrands, wk_mem, iwk_mem, is_permutated)
 #endif
 
   static double * get_working_memory();
+  static int    * get_iworking_memory();
 
 public:
   /**
@@ -236,7 +244,8 @@ public:
    * @param max_dim Maximum number of variables to integrate out.
    * @param n_threads Maximum number of threads.
    */
-  static void set_working_memory(size_t max_dim, size_t const n_threads);
+  static void set_working_memory
+  (size_t const max_dim, size_t const n_threads);
 
   /**
    * Function to be called from mvkbrv.
@@ -249,18 +258,19 @@ public:
   static void eval_integrand(
       int const *ndim_in, double *unifs, int const *n_integrands_in,
       double *integrand_val){
-    size_t const udim = ndim;
+    size_t const udim = ndim,
+                 u_integrands = n_integrands;
 
 #ifdef DO_CHECKS
-    if(*ndim_in         != ndim)
+    if(*ndim_in         != static_cast<int>(udim))
       throw std::invalid_argument("cdf::eval_integrand: invalid 'ndim_in'");
     if(*n_integrands_in != n_integrands)
       throw std::invalid_argument("cdf::eval_integrand: invalid 'n_integrands_in'");
 #endif
 
-    ptr_to_dat map_obj(wk_mem, udim);
+    ptr_to_dat map_obj(wk_mem, udim, iwk_mem);
     arma::vec u(unifs        , udim        , false, false),
-            out(integrand_val, n_integrands, false, false),
+            out(integrand_val, u_integrands, false, false),
            draw(map_obj.draw , udim        , false, false);
     double const * const lower      = map_obj.lower,
                  * const upper      = map_obj.upper,
@@ -270,15 +280,16 @@ public:
     double const * sc = sigma_chol,
                  * lw = lower,
                  * up = upper;
+    int const *infin = map_obj.infin;
     /* loop over variables and transform them to truncated normal
      * variables */
-    for(size_t j = 0; j < udim; ++j, ++sc, ++lw, ++up){
+    for(size_t j = 0; j < udim; ++j, ++sc, ++lw, ++up, ++infin){
       auto const draw_n_p = ([&](){
         bool const needs_q =
           needs_last_unif or j + 1 < udim;
         double const * const draw_end = draw.begin() + j;
 
-       if(infin[j] == 0L){
+       if(*infin == 0L){
           double b(*up);
           for(double const *d = draw.begin(); d != draw_end; ){
             double const term = *sc++ * *d++;
@@ -288,7 +299,7 @@ public:
 
           return draw_trunc_mean<0L>(0, b, u[j], needs_q);
 
-        } else if(infin[j] == 1L){
+        } else if(*infin == 1L){
           double a(*lw);
           for(double const *d = draw.begin(); d != draw_end; ){
             double const term = *sc++ * *d++;
@@ -298,7 +309,7 @@ public:
 
           return draw_trunc_mean<1L>(a, 0, u[j], needs_q);
 
-        } else if(infin[j] == 2L){
+        } else if(*infin == 2L){
           double a(*lw),
                  b(*up);
           for(double const *d = draw.begin(); d != draw_end; ){
@@ -311,7 +322,7 @@ public:
 
           return draw_trunc_mean<2L>(a, b, u[j], needs_q);
         }
-        else if(infin[j] == -1L){
+        else if(*infin == -1L){
           sc += j;
           return draw_trunc_mean<-1L>(0, 0, u[j], needs_q);
 
@@ -327,7 +338,7 @@ public:
     }
 
     /* evaluate the integrand and weigth the result. */
-    funcs::integrand(draw, ndim, out, map_obj.child_mem);
+    funcs::integrand(draw, udim, out, map_obj.child_mem);
     out *= w;
   }
 
@@ -358,12 +369,19 @@ public:
 #endif
 
     size_t const udim = ndim;
-    infin = pmvnorm::get_infin(lower_in, upper_in);
-    wk_mem = get_working_memory();
-    ptr_to_dat map_obj(wk_mem, udim);
-    arma::vec lower     (map_obj.lower     , udim, false, false),
-              upper     (map_obj.upper     , udim, false, false),
-              sigma_chol(map_obj.sigma_chol, (udim * (udim + 1L)) / 2L, false, false);
+    wk_mem  = get_working_memory();
+    iwk_mem = get_iworking_memory();
+    ptr_to_dat map_obj(wk_mem, udim, iwk_mem);
+
+    int * const infin = map_obj.infin;
+    {
+      arma::ivec const tmp = pmvnorm::get_infin(lower_in, upper_in);
+      for(size_t i = 0; i < tmp.size(); ++i)
+        *(infin + i) = tmp[i];
+    }
+    arma::vec lower     (map_obj.lower     , udim, false, true),
+              upper     (map_obj.upper     , udim, false, true),
+              sigma_chol(map_obj.sigma_chol, (udim * (udim + 1L)) / 2L, false, true);
 
     /* re-scale */
     arma::vec sds = arma::sqrt(arma::diagvec(sigma_in)),
@@ -382,45 +400,46 @@ public:
       double * const y     = map_obj.draw,
              * const A     = map_obj.tmp_vec,
              * const B     = map_obj.child_mem,
-             * const DL    = map_obj.child_mem + udim,
+             * const DL    = sds.memptr(),
              * const delta = mu.begin();
+      sds.zeros();
+
       auto const correl = pmvnorm::get_cor_vec(sigma_in);
       int const pivot = 1L, doscale = 0L;
       int F_inform = 0L, nddim = udim;
       for(size_t i = 0; i < udim; ++i)
         *(delta + i) = 0.;
 
-      idx.set_size(udim);
       for(size_t i = 0; i < udim; ++i)
-        idx[i] = i;
+        *(map_obj.idx + i) = i;
       arma::ivec infi(udim);
 
       F77_CALL(mvsort)(
         &ndim, lower.memptr(), upper.memptr(), delta,
-        correl.cor_vec.memptr(), infin.memptr(), y, &pivot, &nddim, A, B,
-        DL, sigma_chol.memptr(), infi.memptr(), &F_inform, idx.memptr(),
+        correl.cor_vec.memptr(), infin, y, &pivot, &nddim, A, B,
+        DL, sigma_chol.memptr(), infi.memptr(), &F_inform, map_obj.idx,
         &doscale);
 
       if(F_inform != 0 or ndim != nddim)
         throw std::runtime_error("cdf::cdf: error in mvsort");
 
-      int prev = idx[0];
-      for(auto next = idx.begin() + 1L;
-          next != idx.end() and !is_permutated; prev = *next, ++next){
-        is_permutated = is_permutated or *next != prev + 1L;
-      }
+      int prev = *map_obj.idx;
+      for(size_t i = 1; !is_permutated or i < udim;
+          prev = *(map_obj.idx + i), ++i)
+        is_permutated = is_permutated or *(map_obj.idx + i) != prev + 1L;
+
 
       if(is_permutated){
         for(size_t i = 0; i < udim; ++i){
           lower[i] = *(A + i);
           upper[i] = *(B + i);
-          infin[i] = infi[i];
+          *(infin + i) = infi[i];
         }
 
         arma::uvec uidx(udim);
         arma::vec mu_permu(map_obj.tmp_vec, udim, false, false);
         for(size_t i = 0; i < udim; ++i){
-          uidx[i]     = idx[i];
+          uidx[i]     = *(map_obj.idx + i);
           mu_permu[i] = mu[uidx[i]];
         }
         arma::mat sigma_permu = sigma_in.submat(uidx, uidx);
@@ -481,7 +500,9 @@ public:
       throw std::invalid_argument("cdf::approximate: invalid 'maxvls'");
 #endif
 
-    ptr_to_dat map_obj(wk_mem, ndim);
+    wk_mem  = get_working_memory();
+    iwk_mem = get_iworking_memory();
+    ptr_to_dat map_obj(wk_mem, ndim, iwk_mem);
     if(ndim == 1L){
       /* handle the one-dimensional case as a special case */
       double const lw = *map_obj.lower,
@@ -502,14 +523,15 @@ public:
     }
 
     /* set pointer to this class' member function */
-    wk_mem = get_working_memory();
     set_mvkbrv_ptr(&cdf<funcs>::eval_integrand);
     output out =
       approximate_integral(ndim, n_integrands, maxvls, abseps, releps);
 
     funcs::post_process(out.finest, ndim, map_obj.child_mem);
-    if(is_permutated)
-      funcs::permutate(out.finest, ndim, idx, wk_mem);
+    if(is_permutated){
+      arma::ivec vec_idx(map_obj.idx, ndim, false, true);
+      funcs::permutate(out.finest, ndim, vec_idx, wk_mem);
+    }
 
     return out;
   }
@@ -638,11 +660,9 @@ int cdf<funcs>::ndim = 0L;
 template<class funcs>
 int cdf<funcs>::n_integrands = 0L;
 template<class funcs>
-arma::ivec cdf<funcs>::infin = arma::ivec();
-template<class funcs>
-arma::ivec cdf<funcs>::idx = arma::ivec();
-template<class funcs>
 double * cdf<funcs>::wk_mem = nullptr;
+template<class funcs>
+int * cdf<funcs>::iwk_mem = nullptr;
 template<class funcs>
 bool cdf<funcs>::is_permutated = false;
 }

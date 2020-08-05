@@ -422,6 +422,82 @@ res_adam$fun_vals # likely lower bounds on the log-marginal likelihood
 res_adam_org <- res_adam
 
 #####
+# performs stochastic gradient descent instead (using SVRG).
+# 
+# Args: 
+#   val: starting value. 
+#   batch_size: number of observations in each batch. 
+#   n_threads: number of threads to use. 
+#   maxit: maximum number of iteration. 
+#   seed: seed to use.
+#   lr: learning rate. 
+svrg <- function(val, batch_size, n_threads = 4L, maxit = 10L, 
+                 seed = 1L, lr){
+  all_indices <- 0:(NCOL(dat$lower) - 1L)
+  indices <- sample(all_indices, replace = FALSE)
+  blocks <- tapply(indices, (seq_along(indices) - 1L) %/% batch_size, 
+                   identity, simplify = FALSE)
+  
+  n_blocks <- length(blocks)
+  n_par <- length(val)
+  estimates <- matrix(NA_real_, n_par, maxit + 1L)
+  fun_vals <- numeric(maxit + 1L)
+  estimates[, 1L] <- val
+  
+  for(k in 1:maxit + 1L){
+    old_val <- estimates[, k - 1L]
+    old_grs <- sapply(1:n_blocks - 1L, function(ii){
+      idx_b <- (ii %% n_blocks) + 1L
+      res_old <- par_fn(old_val, comp_derivs = TRUE, n_threads = n_threads, 
+                        seed = seed, indices = blocks[[idx_b]])
+      c(res_old, attr(res_old, "grad"))
+    })
+    
+    fun_vals[k - 1L] <- sum(old_grs[1, ])
+    old_grs <- old_grs[-1L, , drop = FALSE ]
+    old_gr <- rowSums(old_grs) / n_blocks
+    
+    for(ii in 1:n_blocks - 1L){
+      idx_b <- (ii %% n_blocks) + 1L
+      res <- par_fn(val, comp_derivs = TRUE, n_threads = n_threads, 
+                    seed = seed, indices = blocks[[idx_b]])
+      fun_vals[k] <- fun_vals[k] + c(res)
+      dir <- attr(res, "grad") - old_grs[, ii + 1L] + old_gr
+      
+      val <- val + lr * dir
+      val <- get_lchol(cov2cor(get_lchol_inv(val)))
+    }
+    
+    estimates[, k] <- val
+  }
+  
+  list(result = get_lchol_inv(val), fun_vals = fun_vals[-1L], 
+       estimates = estimates[, -1L, drop = FALSE])
+}
+
+# estimate the model parameters
+set.seed(1)
+system.time(res_svrg  <- svrg(
+  val = start_val, lr = 1e-3, maxit = 10L, batch_size = 100L))
+
+# compare estimates with the truth
+norm(res_svrg$result - dat$Sigma)
+res_svrg$result
+dat$Sigma
+
+# use plot instead
+par(mfcol = c(1, 3), mar  = c(1, 1, 4, 1))
+do_plot(res_svrg$result, "Estimates (SVRG)")
+do_plot(dat$Sigma, "Truth")
+do_plot(res_svrg$result - dat$Sigma, "Difference")
+
+# look at the maximum log marginal likelihood both at the end and after 
+# each iteration
+funvals_svrg_org <- res_svrg$fun_vals
+funvals_svrg_org[length(funvals_svrg_org)] <- log_ml(res_svrg$result)
+funvals_svrg_org
+
+#####
 # we can use better starting values. E.g. something heuristic like: 
 #   - transform back into the [0, 1] scale. 
 #   - take the middle of the interval and map back. 
@@ -489,26 +565,55 @@ funvals_adam <-
 funvals_adam
 res_adam$fun_vals # likely lower bounds on the log-marginal likelihood
 
+# do the same with SVRG
+set.seed(1)
+system.time(res_svrg  <- svrg(
+  val = start_val, lr = 1e-3, maxit = 5L, batch_size = 100L))
+
+# compare estimates with the truth
+norm(res_svrg$result - dat$Sigma)
+res_svrg$result
+dat$Sigma
+
+# use plot instead
+par(mfcol = c(1, 3), mar  = c(1, 1, 4, 1))
+do_plot(res_svrg$result, "Estimates (SVRG)")
+do_plot(dat$Sigma, "Truth")
+do_plot(res_svrg$result - dat$Sigma, "Difference")
+
+# look at the maximum log marginal likelihood both at the end and after 
+# each iteration
+funvals_svrg <- res_svrg$fun_vals
+funvals_svrg[length(funvals_svrg)] <- log_ml(res_svrg$result)
+funvals_svrg
+
 #####
 # compare convergence of the different methods 
 #  line: gradient descent. 
 #  dashed: ADAM with poor starting values. 
 #  dotted: ADAM with better starting values
+#  blue: same as ADAM but using SVRG.
 lls <- matrix(NA_real_, max(length(res$fun_vals), length(funvals_adam_org), 
-                            length(funvals_adam)), 3L)
+                            length(funvals_adam), length(funvals_svrg_org), 
+                            length(funvals_svrg)), 5L)
 lls[seq_along(res$fun_vals)    , 1] <- res$fun_vals
 lls[seq_along(funvals_adam_org), 2] <- funvals_adam_org
 lls[seq_along(funvals_adam)    , 3] <- funvals_adam
+lls[seq_along(funvals_svrg_org), 4] <- funvals_svrg_org
+lls[seq_along(funvals_svrg)    , 5] <- funvals_svrg
 
 par(mfcol = c(1, 1), mar = c(5, 5, 1, 1))
-matplot(lls, lty = 1:3, col = "black", bty = "l", type = "l", 
-        xlab = "Iteration", ylab = "Log marginal likelihood")
+matplot(
+  lls, lty = c(1:3, 2:3), col = c(rep("black", 3), rep("darkblue", 2)), 
+  bty = "l", type = "l", xlab = "Iteration", 
+  ylab = "Log marginal likelihood")
 
 # skipping the first n steps
 n_skip <- 3L
-matplot(lls, lty = 1:3, ylim = range(lls[-(1:n_skip), ], na.rm = TRUE),
-        col = "black", bty = "l", type = "l", xlab = "Iteration", 
-        ylab = "Log marginal likelihood")
+matplot(
+  lls, lty = c(1:3, 2:3), col = c(rep("black", 3), rep("darkblue", 2)), 
+  ylim = range(lls[-(1:n_skip), ], na.rm = TRUE), bty = "l", 
+  type = "l", xlab = "Iteration", ylab = "Log marginal likelihood")
 ```
 
 ## References
