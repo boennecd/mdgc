@@ -2,7 +2,56 @@
 #include "restrict-cdf.h"
 #include <algorithm>
 #include "fast-commutation.h"
+#include "lp_utils.h"
+
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 using std::log;
+
+namespace {
+static std::unique_ptr<double[]> log_ml_wk;
+static size_t wk_mem_per_thread = 0L,
+                current_wk_size = 0L;
+
+double * get_working_memory_log_ml(){
+#ifdef _OPENMP
+  size_t const my_num = omp_get_thread_num();
+#else
+  size_t const my_num(0L);
+#endif
+
+  return log_ml_wk.get() + my_num * wk_mem_per_thread;
+}
+
+void set_working_memory_log_ml(size_t const n_int, size_t const n_obs,
+                               size_t const n_threads){
+  size_t const n_int_sq = n_int * n_int,
+               n_obs_sq = n_obs * n_obs,
+        size_shared_mem = n_int_sq + n_obs_sq + n_obs + n_obs * n_int,
+          size_temp_mem = n_int_sq + n_obs_sq + n_int * n_obs + n_int,
+                max_dim = size_shared_mem + size_temp_mem;
+
+  constexpr size_t const cachline_size = 128L,
+                                  mult = cachline_size / sizeof(double),
+                              min_size = 2L * mult;
+
+  size_t m_dim = max_dim;
+  m_dim = std::max(m_dim, min_size);
+  m_dim = (m_dim + mult - 1L) / mult;
+  m_dim *= mult;
+  wk_mem_per_thread = m_dim;
+
+  size_t const new_size =
+    std::max(n_threads, static_cast<size_t>(1L)) * m_dim;
+  if(new_size > current_wk_size){
+    log_ml_wk.reset(new double[new_size]);
+    current_wk_size = new_size;
+
+  }
+}
+} //
 
 namespace mdgc {
 using namespace restrictcdf;
@@ -28,38 +77,77 @@ double log_ml_term::approximate
       throw std::invalid_argument("log_ml_term::approximate: invalid derivs");
   }
 #endif
-
-  // TODO: this function be written a lot smarter...
   double out(.0);
 
+  // handle memory
+  size_t const n_int_sq = n_int * n_int,
+               n_obs_sq = n_obs * n_obs,
+  /* memory that is needed for common quantities */
+        size_shared_mem = n_int_sq + n_obs_sq + n_obs + n_obs * n_int;
+  double * const wk_mem = get_working_memory_log_ml();
+
+  size_t shared_cur = 0L;
+  auto get_shared = [&](size_t const siz){
+    double *out = wk_mem + shared_cur;
+    shared_cur += siz;
+    return out;
+  };
+
+  size_t tmp_cur = 0L;
+  double * const wk_use = wk_mem + size_shared_mem;
+  auto get_temp_mem = [&](size_t const siz, bool const reset){
+    if(reset)
+      tmp_cur = 0L;
+    double *out = wk_use + tmp_cur;
+    tmp_cur += siz;
+    return out;
+  };
+
   /* add terms from the observed outcomes */
-  arma::mat S_oo;
-  arma::vec obs_scaled;
+  arma::mat S_oo(get_shared(n_obs_sq), n_obs, n_obs, false, true);
+  arma::vec obs_scaled(get_shared(n_obs), n_obs, false, true);
   if(n_obs > 0){
     out -= static_cast<double>(n_obs) / 2. * log_2_pi;
     S_oo = vcov(idx_obs, idx_obs);
     double val, sgn;
     arma::log_det(val, sgn, S_oo);
     out -= .5 * val;
-    obs_scaled = arma::solve(
-      S_oo, obs_val, arma::solve_opts::likely_sympd);
+    if(!arma::solve(
+      obs_scaled, S_oo, obs_val, arma::solve_opts::likely_sympd))
+      throw std::runtime_error("log_ml_term::approximate: solve() failed");
     out -= arma::dot(obs_val, obs_scaled) / 2.;
 
     if(comp_deriv){
-      derivs(idx_obs, idx_obs) += obs_scaled * obs_scaled.t() / 2.;
       // TODO: the inverse term is computed many times!
-      derivs(idx_obs, idx_obs) -= S_oo.i() / 2.;
+      arma::mat S_00_inv(get_temp_mem(n_obs_sq, true), n_obs, n_obs,
+                         false, true);
+      if(!arma::inv_sympd(S_00_inv, S_oo))
+        throw std::runtime_error("log_ml_term::approximate: inv() failed");
+      for(size_t j = 0; j < n_obs; ++j){
+        size_t const jj = idx_obs[j];
+        for(size_t i = 0; i < n_obs; ++i){
+          size_t const ii = idx_obs[i];
+          derivs.at(ii, jj) +=
+            (obs_scaled[i] * obs_scaled[j] - S_00_inv.at(i , j)) / 2.;
+        }
+      }
     }
   }
 
   if(n_int > 0){
-    arma::mat V = vcov(idx_int, idx_int);
-    arma::vec mea(n_int, arma::fill::zeros);
-    arma::mat S_oi, S_oo_inv_S_oi;
+    arma::mat V(get_temp_mem(n_int_sq, true), n_int, n_int, false, true);
+    V = vcov(idx_int, idx_int);
+    arma::vec mea(get_temp_mem(n_int, false), n_int, false, true);
+    mea.zeros();
+    arma::mat S_oo_inv_S_oi(get_shared(n_obs * n_int), n_obs, n_int,
+                            false, true);
     if(n_obs > 0){
+      arma::mat S_oi(get_temp_mem(n_obs * n_int, false), n_obs, n_int,
+                     false, true);
       S_oi = vcov(idx_obs, idx_int);
-      S_oo_inv_S_oi =  arma::solve(
-        S_oo, S_oi, arma::solve_opts::likely_sympd);
+      if(!arma::solve(
+        S_oo_inv_S_oi, S_oo, S_oi, arma::solve_opts::likely_sympd))
+        throw std::runtime_error("log_ml_term::approximate: solve() failed");
       V -= S_oi.t() * S_oo_inv_S_oi;
       mea += S_oi.t() * obs_scaled;
     }
@@ -69,13 +157,13 @@ double log_ml_term::approximate
         cdf<deriv>(lower, upper, mea, V, do_reorder).approximate(
             maxpts, abseps, releps);
       double const p_hat = res.finest[0];
-      arma::vec d_mu(res.finest.memptr() + 1L, n_int, false),
+      arma::vec d_mu(res.finest.memptr() + 1L, n_int, false, true),
                  d_V(res.finest.memptr() + 1L + n_int,
-                     (n_int * (n_int + 1L)) / 2L, false);
+                     (n_int * (n_int + 1L)) / 2L, false, true);
       d_mu /= p_hat;
       d_V  /= p_hat;
 
-      arma::vec d_V_full(n_int * n_int);
+      arma::vec d_V_full(get_shared(n_int_sq), n_int_sq, false, true);
       {
         double const *val = d_V.begin();
         for(size_t c = 0; c < n_int; ++c){
@@ -90,48 +178,60 @@ double log_ml_term::approximate
       out += log(p_hat);
 
       /* handle the terms from the mean */
-      arma::mat const dum_diag_mat =
-        arma::diagmat(arma::vec(S_oi.n_cols, arma::fill::ones));
-
       if(n_obs > 0){
-        arma::mat tmp = arma::kron(obs_scaled, S_oo_inv_S_oi);
-        arma::mat inc = tmp * d_mu;
-        inc.reshape(n_obs, n_obs);
-        derivs(idx_obs, idx_obs) -= (inc + inc.t()) / 2.;
+        {
+          arma::mat inc(
+              get_temp_mem(n_obs_sq, true), n_obs, n_obs, false, true);
+          x_kron_X_dot_y(obs_scaled, S_oo_inv_S_oi, d_mu,
+                         inc.memptr(), get_temp_mem(n_obs * n_int, false));
+          inc /= 2.;
+          derivs(idx_obs, idx_obs) -= inc;
+          derivs(idx_obs, idx_obs) -= inc.t();
+        }
 
-        tmp = arma::kron(obs_scaled, dum_diag_mat);
-        inc = tmp * d_mu;
-        inc /= 2.;
-        inc.reshape(n_int, n_obs);
-        derivs(idx_int, idx_obs) += inc;
-        derivs(idx_obs, idx_int) += inc.t();
+        {
+          arma::mat dum(obs_scaled.memptr(), obs_scaled.n_elem, 1L,
+                        false, true);
+          arma::mat inc(get_temp_mem(n_int * n_obs, true),
+                        n_int, n_obs, false, true);
+          X_kron_I_dot_x(dum, n_int, d_mu, inc.memptr(), true);
 
+          inc /= 2.;
+          inc.reshape(n_int, n_obs);
+          derivs(idx_int, idx_obs) += inc;
+          derivs(idx_obs, idx_int) += inc.t();
+        }
       }
 
       /* handle the terms from the covariance matrix */
       {
-        arma::mat dum(d_V_full.memptr(), n_int, n_int, false);
+        arma::mat dum(d_V_full.memptr(), n_int, n_int, false, true);
         derivs(idx_int, idx_int) += dum;
       }
 
       if(n_obs > 0){
-        arma::mat tmp = arma::kron(S_oo_inv_S_oi, S_oo_inv_S_oi);
-        arma::mat inc = tmp * d_V_full;
-        inc.reshape(n_obs, n_obs);
-        derivs(idx_obs, idx_obs) += inc;
+        {
+          arma::mat inc(get_temp_mem(n_obs_sq, true), n_obs, n_obs,
+                        false, true);
+          X_kron_X_dot_x(S_oo_inv_S_oi, d_V_full, inc.memptr(),
+                         get_temp_mem(n_obs * n_int, false));
+          derivs(idx_obs, idx_obs) += inc;
+        }
 
-        arma::mat const K = get_commutation(
-          S_oo_inv_S_oi.n_cols, S_oo_inv_S_oi.n_rows);
-        tmp = arma::kron(S_oo_inv_S_oi, dum_diag_mat) +
-          K.t() * arma::kron(dum_diag_mat, S_oo_inv_S_oi);
-        inc = tmp * d_V_full;
+        {
+          arma::mat inc(get_temp_mem(n_obs * n_int, true),
+                        n_int * n_obs, 1L, false, true);
+          I_kron_X_dot_x(S_oo_inv_S_oi, n_int, d_V_full, inc.memptr());
+          commutation_dot(n_int, n_obs, inc.memptr(), true,
+                          get_temp_mem(n_obs * n_int, false));
+          X_kron_I_dot_x(S_oo_inv_S_oi, n_int, d_V_full, inc.memptr(),
+                         false);
 
-        inc.reshape(n_int, n_obs);
-
-        inc /= 2.;
-        derivs(idx_int, idx_obs) -= inc;
-        derivs(idx_obs, idx_int) -= inc.t();
-
+          inc.reshape(n_int, n_obs);
+          inc /= 2.;
+          derivs(idx_int, idx_obs) -= inc;
+          derivs(idx_obs, idx_int) -= inc.t();
+        }
       }
 
     } else {
@@ -147,12 +247,16 @@ double log_ml_term::approximate
 
 void log_ml_term::set_working_memory(
     std::vector<log_ml_term> const &terms, size_t const n_threads){
-  size_t max_n_int = 0L;
-  for(auto const &t : terms)
+  size_t max_n_int = 0L, max_n_obs = 0L;
+  for(auto const &t : terms){
     if(t.n_int > max_n_int)
       max_n_int = t.n_int;
+    if(t.n_obs > max_n_obs)
+      max_n_obs = t.n_obs;
+  }
 
   cdf<deriv>::set_working_memory(max_n_int, n_threads);
+  set_working_memory_log_ml(max_n_int, max_n_obs, n_threads);
 }
 
 } // namespace mdgc

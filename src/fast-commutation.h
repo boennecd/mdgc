@@ -2,6 +2,38 @@
 #define FAST_COM_H
 #include "arma-wrap.h"
 
+inline std::unique_ptr<size_t[]> get_commutation_unequal_vec
+  (unsigned const n, unsigned const m, bool const transpose){
+  unsigned const nm = n * m,
+            nnm_p1 = n * nm + 1L,
+             nm_pm = nm + m;
+  std::unique_ptr<size_t[]> out(new size_t[nm]);
+  size_t * const o_begin = out.get();
+  size_t idx = 0L;
+  for(unsigned i = 0; i < n; ++i, idx += nm_pm){
+    size_t idx1 = idx;
+    for(unsigned j = 0; j < m; ++j, idx1 += nnm_p1)
+      if(transpose)
+        *(o_begin + idx1 / nm) = (idx1 % nm);
+      else
+        *(o_begin + idx1 % nm) = (idx1 / nm);
+  }
+
+  return out;
+}
+
+inline void commutation_dot
+  (unsigned const n, unsigned const m, double * const x,
+   bool const transpose, double * const wk){
+  size_t const nm = n * m;
+  auto const indices = get_commutation_unequal_vec(n, m, transpose);
+
+  for(size_t i = 0; i < nm; ++i)
+    *(wk + i) = *(x + *(indices.get() +i ));
+  for(size_t i = 0; i < nm; ++i)
+    *(x + i) = *(wk + i);
+}
+
 inline arma::mat get_commutation_unequal
   (unsigned const n, unsigned const m){
   unsigned const nm = n * m,

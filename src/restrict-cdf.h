@@ -269,50 +269,47 @@ public:
 #endif
 
     ptr_to_dat map_obj(wk_mem, udim, iwk_mem);
-    arma::vec u(unifs        , udim        , false, false),
-            out(integrand_val, u_integrands, false, false),
-           draw(map_obj.draw , udim        , false, false);
-    double const * const lower      = map_obj.lower,
-                 * const upper      = map_obj.upper,
-                 * const sigma_chol = map_obj.sigma_chol;
+    double * const out = integrand_val,
+           * const draw = map_obj.draw;
 
     double w(1.);
-    double const * sc = sigma_chol,
-                 * lw = lower,
-                 * up = upper;
+    double const * sc  = map_obj.sigma_chol,
+                 * lw  = map_obj.lower,
+                 * up  = map_obj.upper,
+                 *unif = unifs;
     int const *infin = map_obj.infin;
     /* loop over variables and transform them to truncated normal
      * variables */
-    for(size_t j = 0; j < udim; ++j, ++sc, ++lw, ++up, ++infin){
+    for(size_t j = 0; j < udim; ++j, ++sc, ++lw, ++up, ++infin, ++unif){
       auto const draw_n_p = ([&](){
         bool const needs_q =
           needs_last_unif or j + 1 < udim;
-        double const * const draw_end = draw.begin() + j;
+        double const * const draw_end = draw + j;
 
        if(*infin == 0L){
           double b(*up);
-          for(double const *d = draw.begin(); d != draw_end; ){
+          for(double const *d = draw; d != draw_end; ){
             double const term = *sc++ * *d++;
             b -= term;
           }
           b /= *sc;
 
-          return draw_trunc_mean<0L>(0, b, u[j], needs_q);
+          return draw_trunc_mean<0L>(0, b, *unif, needs_q);
 
         } else if(*infin == 1L){
           double a(*lw);
-          for(double const *d = draw.begin(); d != draw_end; ){
+          for(double const *d = draw; d != draw_end; ){
             double const term = *sc++ * *d++;
             a -= term;
           }
           a /= *sc;
 
-          return draw_trunc_mean<1L>(a, 0, u[j], needs_q);
+          return draw_trunc_mean<1L>(a, 0, *unif, needs_q);
 
         } else if(*infin == 2L){
           double a(*lw),
                  b(*up);
-          for(double const *d = draw.begin(); d != draw_end; ){
+          for(double const *d = draw; d != draw_end; ){
             double const term = *sc++ * *d++;
             a -= term;
             b -= term;
@@ -320,26 +317,29 @@ public:
           a /= *sc;
           b /= *sc;
 
-          return draw_trunc_mean<2L>(a, b, u[j], needs_q);
+          return draw_trunc_mean<2L>(a, b, *unif, needs_q);
         }
         else if(*infin == -1L){
           sc += j;
-          return draw_trunc_mean<-1L>(0, 0, u[j], needs_q);
+          return draw_trunc_mean<-1L>(0, 0, *unif, needs_q);
 
         }
 
         throw std::runtime_error("draw_trunc_mean: not implemented");
         sc += j;
-        return draw_trunc_mean<-1L>(0, 0, u[j], needs_q);
+        return draw_trunc_mean<-1L>(0, 0, *unif, needs_q);
       })();
 
-      w       *= draw_n_p[0];
-      draw[j]  = draw_n_p[1];
+      w           *= draw_n_p[0];
+      *(draw + j)  = draw_n_p[1];
     }
 
     /* evaluate the integrand and weigth the result. */
     funcs::integrand(draw, udim, out, map_obj.child_mem);
-    out *= w;
+
+    double const * const out_end = out + u_integrands;
+    for(double * o = out; o != out_end; ++o)
+      *o *= w;
   }
 
   /**
@@ -548,7 +548,7 @@ public:
   static int constexpr get_n_integrands(arma::vec const&, arma::mat const&){
     return 1L;
   }
-  static void integrand(arma::vec const&, int const, arma::vec&,
+  static void integrand(double const * const, int const, double * const,
                         double const * const);
   static void post_process(arma::vec&, int const, double const * const) { }
   constexpr static bool needs_last_unif() {
@@ -586,7 +586,7 @@ public:
   }
 
   static int get_n_integrands(arma::vec const&, arma::mat const&);
-  static void integrand(arma::vec const&, int const, arma::vec&,
+  static void integrand(double const * const, int const, double * const,
                         double const * const);
   static void post_process(arma::vec&, int const, double const * const);
   constexpr static bool needs_last_unif() {

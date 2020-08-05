@@ -70,12 +70,10 @@ template<class funcs>
 void cdf<funcs>::set_working_memory
   (size_t const max_dim, size_t const n_threads){
   constexpr size_t const cachline_size = 128L;
-  int int_type;
-  double double_type;
 
   {
     // makes sure we avoid false sharing.
-    constexpr size_t const mult = cachline_size / sizeof(double_type),
+    constexpr size_t const mult = cachline_size / sizeof(double),
                        min_size = 2L * mult;
     size_t const upper_tri_size = (max_dim * (max_dim + 1L)) / 2L;
     size_t m_dim = 4L * max_dim + 3L * upper_tri_size;
@@ -95,7 +93,7 @@ void cdf<funcs>::set_working_memory
 
   {
     // makes sure we avoid false sharing.
-    constexpr size_t const mult = cachline_size / sizeof(int_type),
+    constexpr size_t const mult = cachline_size / sizeof(int),
                        min_size = 2L * mult;
     size_t m_dim = 2L * max_dim;
     m_dim = std::max(m_dim, min_size);
@@ -127,13 +125,13 @@ output approximate_integral(
 }
 
 void likelihood::integrand
-(arma::vec const &draw, int const ndim, arma::vec &out,
+(double const * const, int const ndim, double * const out,
  double const * const){
 #ifdef DO_CHECKS
-  if(out.n_elem != 1L)
+  if(!out)
     throw invalid_argument("likelihood::integrand: invalid out");
 #endif
-  out[0] = 1;
+  *out = 1;
 }
 
 int deriv::get_n_integrands
@@ -143,31 +141,36 @@ int deriv::get_n_integrands
 }
 
 void deriv::integrand
-(arma::vec const &draw, int const ndim, arma::vec &out,
+(double const * const draw, int const ndim, double * const out,
  double const * const wk_mem){
   arma::uword const p = ndim;
 
-#ifdef DO_CHECKS
   size_t const n_elem = 1L + p + (p * (p + 1L)) / 2L;
-  if(out.n_elem != n_elem)
-    throw invalid_argument("deriv::integrand: invalid out");
-#endif
-  out.zeros();
+  double * const out_end = out + n_elem;
 
-  out[0L] = 1.;
-  double * const mean_part_begin = out.memptr() + 1L;
+#ifdef DO_CHECKS
+  for(double * o = out + 1L; o != out_end; ++o)
+    if(!o)
+      throw invalid_argument("likelihood::integrand: invalid out");
+#endif
+
+  for(double * o = out + 1L; o != out_end; ++o)
+    *o = 0.;
+
+  *out = 1.;
+  double * const mean_part_begin = out + 1L;
   /* Multiplying by the inverse matrix is fast but not smart numerically.
    * TODO: much of this computation can be done later */
   double const * sigma_chol_inv = wk_mem;
   for(unsigned c = 0; c < p; ++c){
-    double const mult = draw[c],
+    double const mult = *(draw + c),
           * const end = mean_part_begin + c + 1L;
     for(double *rhs = mean_part_begin; rhs != end; ++rhs, ++sigma_chol_inv)
       *rhs += mult * *sigma_chol_inv;
   }
 
   {
-    double *o = out.memptr() + 1L + p;
+    double *o = out + 1L + p;
     for(unsigned c = 0; c < p; c++){
       double const mult = *(mean_part_begin + c),
             * const end = mean_part_begin + c + 1;
