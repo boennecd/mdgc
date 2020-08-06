@@ -13,7 +13,19 @@ get_z_hat <- function(lower, upper, code, n_threads) {
     .Call(`_mdgc_get_z_hat`, lower, upper, code, n_threads)
 }
 
+pmvnorm <- function(lower, upper, mu, Sigma, maxvls, abseps, releps, derivs, do_reorder = TRUE) {
+    .Call(`_mdgc_pmvnorm_to_R`, lower, upper, mu, Sigma, maxvls, abseps, releps, derivs, do_reorder)
+}
+
 get_commutation <- function(n, m) {
     .Call(`_mdgc_get_commutation_to_R`, n, m)
+}
+
+get_commutation_vec <- function(n, m, transpose) {
+    .Call(`_mdgc_get_commutation_vec`, n, m, transpose)
+}
+
+x_dot_X_kron_I <- function(x, X, l) {
+    .Call(`_mdgc_x_dot_X_kron_I_wrap`, x, X, l)
 }
 

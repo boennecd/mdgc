@@ -201,12 +201,12 @@ class cdf {
            * const draw,
            * const tmp_vec,
            * const sigma_chol,
+           * const tmp_mat,
     /// objects for the child class
            * const child_mem;
 
     int * const infin,
         * const idx;
-
 
     ptr_to_dat(double * const wk_mem, int const ndim,
                int * const iwk_mem):
@@ -216,7 +216,9 @@ class cdf {
       draw      (wk_mem + 2L * ndim),
       tmp_vec   (wk_mem + 3L * ndim),
       sigma_chol(wk_mem + 4L * ndim),
-      child_mem (wk_mem + 4L * ndim + (ndim * (ndim + 1L)) / 2L),
+      tmp_mat   (wk_mem + 4L * ndim + (ndim * (ndim + 1L)) / 2L),
+      child_mem (
+          wk_mem + 4L * ndim + ndim * ndim + (ndim * (ndim + 1L)) / 2L),
       infin(iwk_mem),
       idx  (iwk_mem + ndim)
       { }
@@ -292,7 +294,6 @@ public:
             double const term = *sc++ * *d++;
             b -= term;
           }
-          b /= *sc;
 
           return draw_trunc_mean<0L>(0, b, *unif, needs_q);
 
@@ -302,7 +303,6 @@ public:
             double const term = *sc++ * *d++;
             a -= term;
           }
-          a /= *sc;
 
           return draw_trunc_mean<1L>(a, 0, *unif, needs_q);
 
@@ -314,8 +314,6 @@ public:
             a -= term;
             b -= term;
           }
-          a /= *sc;
-          b /= *sc;
 
           return draw_trunc_mean<2L>(a, b, *unif, needs_q);
         }
@@ -405,7 +403,7 @@ public:
       sds.zeros();
 
       auto const correl = pmvnorm::get_cor_vec(sigma_in);
-      int const pivot = 1L, doscale = 0L;
+      int const pivot = 1L, doscale = 1L;
       int F_inform = 0L, nddim = udim;
       for(size_t i = 0; i < udim; ++i)
         *(delta + i) = 0.;
@@ -437,18 +435,21 @@ public:
         }
 
         arma::uvec uidx(udim);
-        arma::vec mu_permu(map_obj.tmp_vec, udim, false, false);
+        arma::vec mu_permu(map_obj.tmp_vec, udim, false, true);
         for(size_t i = 0; i < udim; ++i){
           uidx[i]     = *(map_obj.idx + i);
           mu_permu[i] = mu[uidx[i]];
         }
-        arma::mat sigma_permu = sigma_in.submat(uidx, uidx);
+
+        arma::mat sigma_permu(map_obj.tmp_mat, udim, udim, false, true);
+        sigma_permu = sigma_in.submat(uidx, uidx);
         funcs::set_child_wk_mem(mu_permu, sigma_permu, map_obj.child_mem);
         return;
       }
 
     } else if(!do_reorder and udim > 1L) {
-      arma::mat tmp = sigma_in;
+      arma::mat tmp(map_obj.tmp_mat, udim, udim, false, true);
+      tmp = sigma_in;
       tmp.each_row() /= sds.t();
       tmp.each_col() /= sds;
       if(!arma::chol(tmp, tmp))
@@ -456,6 +457,19 @@ public:
       else
         copy_upper_tri(tmp, sigma_chol.memptr());
 
+    }
+
+    if(udim > 1L){
+      /* rescale such that choleksy decomposition has ones in the diagonal */
+      double * sc = sigma_chol.begin();
+      for(size_t i = 0; i < udim; ++i){
+        double const scal = *(sc + i);
+        lower[i] /= scal;
+        upper[i] /= scal;
+        double * const sc_end = sc + i + 1L;
+        for(; sc != sc_end; ++sc)
+          *sc /= scal;
+      }
     }
 
     funcs::set_child_wk_mem(mu_in, sigma_in, map_obj.child_mem);
@@ -577,12 +591,19 @@ public:
   static void set_child_wk_mem
   (arma::vec const &mu, arma::mat const &sigma,
    double * const wk_mem){
-    size_t const p = mu.n_elem;
-    arma::mat signa_inv(arma::inv(sigma)),
-    sigma_chol_inv(arma::inv(arma::trimatu(arma::chol(sigma))));
+    size_t const p = mu.n_elem,
+           size_up = (p * (p + 1L)) / 2L;
 
-    copy_upper_tri(sigma_chol_inv, wk_mem);
-    copy_upper_tri(signa_inv     , wk_mem + (p * (p + 1L)) / 2L);
+    arma::mat tmp_mat(wk_mem + 2L * size_up, p, p, false, true);
+    if(!arma::chol(tmp_mat, sigma))
+      throw std::runtime_error("deriv::set_child_wk_mem: chol failed");
+    if(!arma::inv(tmp_mat, tmp_mat))
+      throw std::runtime_error("deriv::set_child_wk_mem: inv failed");
+    copy_upper_tri(tmp_mat, wk_mem);
+
+    if(!arma::inv_sympd(tmp_mat, sigma))
+      throw std::runtime_error("deriv::set_child_wk_mem: inv_sympd failed");
+    copy_upper_tri(tmp_mat, wk_mem + size_up);
   }
 
   static int get_n_integrands(arma::vec const&, arma::mat const&);

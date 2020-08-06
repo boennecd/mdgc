@@ -1,11 +1,9 @@
       SUBROUTINE MVKBRVEVAL( NDIM, MAXVLS, NF,
      &                       ABSEPS, RELEPS, ABSERR, FINEST,
-     &                       INFORM )
+     &                       INFORM, MINVLS )
       EXTERNAL MVKBRVINTEGRAND
       DOUBLE PRECISION ABSEPS, RELEPS, FINEST(*), ABSERR
       INTEGER NDIM, NF, MINVLS, MAXVLS, INFORM
-
-      MINVLS = 0
 
       CALL MVKBRV( NDIM, MINVLS, MAXVLS, NF,
      &             MVKBRVINTEGRAND, ABSEPS, RELEPS,

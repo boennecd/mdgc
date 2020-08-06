@@ -50,6 +50,25 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// pmvnorm_to_R
+Rcpp::NumericVector pmvnorm_to_R(arma::vec const& lower, arma::vec const& upper, arma::vec const& mu, arma::mat const& Sigma, int const maxvls, double const abseps, double const releps, bool const derivs, bool const do_reorder);
+RcppExport SEXP _mdgc_pmvnorm_to_R(SEXP lowerSEXP, SEXP upperSEXP, SEXP muSEXP, SEXP SigmaSEXP, SEXP maxvlsSEXP, SEXP absepsSEXP, SEXP relepsSEXP, SEXP derivsSEXP, SEXP do_reorderSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< arma::vec const& >::type lower(lowerSEXP);
+    Rcpp::traits::input_parameter< arma::vec const& >::type upper(upperSEXP);
+    Rcpp::traits::input_parameter< arma::vec const& >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< arma::mat const& >::type Sigma(SigmaSEXP);
+    Rcpp::traits::input_parameter< int const >::type maxvls(maxvlsSEXP);
+    Rcpp::traits::input_parameter< double const >::type abseps(absepsSEXP);
+    Rcpp::traits::input_parameter< double const >::type releps(relepsSEXP);
+    Rcpp::traits::input_parameter< bool const >::type derivs(derivsSEXP);
+    Rcpp::traits::input_parameter< bool const >::type do_reorder(do_reorderSEXP);
+    rcpp_result_gen = Rcpp::wrap(pmvnorm_to_R(lower, upper, mu, Sigma, maxvls, abseps, releps, derivs, do_reorder));
+    return rcpp_result_gen;
+END_RCPP
+}
 // get_commutation_to_R
 arma::mat get_commutation_to_R(unsigned const n, unsigned const m);
 RcppExport SEXP _mdgc_get_commutation_to_R(SEXP nSEXP, SEXP mSEXP) {
@@ -61,6 +80,30 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// get_commutation_vec
+Rcpp::IntegerVector get_commutation_vec(unsigned const n, unsigned const m, bool const transpose);
+RcppExport SEXP _mdgc_get_commutation_vec(SEXP nSEXP, SEXP mSEXP, SEXP transposeSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::traits::input_parameter< unsigned const >::type n(nSEXP);
+    Rcpp::traits::input_parameter< unsigned const >::type m(mSEXP);
+    Rcpp::traits::input_parameter< bool const >::type transpose(transposeSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_commutation_vec(n, m, transpose));
+    return rcpp_result_gen;
+END_RCPP
+}
+// x_dot_X_kron_I_wrap
+arma::mat x_dot_X_kron_I_wrap(arma::vec const& x, arma::mat const& X, size_t const l);
+RcppExport SEXP _mdgc_x_dot_X_kron_I_wrap(SEXP xSEXP, SEXP XSEXP, SEXP lSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::traits::input_parameter< arma::vec const& >::type x(xSEXP);
+    Rcpp::traits::input_parameter< arma::mat const& >::type X(XSEXP);
+    Rcpp::traits::input_parameter< size_t const >::type l(lSEXP);
+    rcpp_result_gen = Rcpp::wrap(x_dot_X_kron_I_wrap(x, X, l));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 RcppExport SEXP run_testthat_tests();
 
@@ -68,7 +111,10 @@ static const R_CallMethodDef CallEntries[] = {
     {"_mdgc_get_log_lm_terms", (DL_FUNC) &_mdgc_get_log_lm_terms, 3},
     {"_mdgc_eval_log_lm_terms", (DL_FUNC) &_mdgc_eval_log_lm_terms, 9},
     {"_mdgc_get_z_hat", (DL_FUNC) &_mdgc_get_z_hat, 4},
+    {"_mdgc_pmvnorm_to_R", (DL_FUNC) &_mdgc_pmvnorm_to_R, 9},
     {"_mdgc_get_commutation_to_R", (DL_FUNC) &_mdgc_get_commutation_to_R, 2},
+    {"_mdgc_get_commutation_vec", (DL_FUNC) &_mdgc_get_commutation_vec, 3},
+    {"_mdgc_x_dot_X_kron_I_wrap", (DL_FUNC) &_mdgc_x_dot_X_kron_I_wrap, 3},
     {"run_testthat_tests", (DL_FUNC) &run_testthat_tests, 0},
     {NULL, NULL, 0}
 };

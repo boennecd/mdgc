@@ -145,7 +145,7 @@ system.time(
 #   comp_derivs: logical for whether to approximate the gradient. 
 #   indices: integer vector with which terms to include. 
 #   do_reorder: logical for whether to use heuristic variable reordering.
-log_ml <- function(vcov, releps = 1e-2, n_threads = 1L, comp_derivs = FALSE, 
+log_ml <- function(vcov, releps = 1e-2, n_threads = 4L, comp_derivs = FALSE, 
                    indices = 0:(NCOL(dat$lower) - 1L), do_reorder = TRUE)
   mdgc:::eval_log_lm_terms(
     ptr = ptr, vcov = vcov, indices = indices, 
@@ -154,7 +154,7 @@ log_ml <- function(vcov, releps = 1e-2, n_threads = 1L, comp_derivs = FALSE,
 
 # print the approximate log marginal likelihood at the true parameters
 set.seed(1)
-print(log_ml(dat$Sigma), digits = 7)
+print(log_ml(dat$Sigma, n_threads = 1L), digits = 7)
 
 # check standard error
 sd(replicate(20, log_ml(dat$Sigma, n_threads = 4L)))
@@ -169,9 +169,9 @@ sd(replicate(20, log_ml(dat$Sigma, n_threads = 4L, do_reorder = FALSE)))
 library(microbenchmark)
 microbenchmark(
   `1 thread                 ` = 
-    log_ml(dat$Sigma), 
+    log_ml(dat$Sigma                    , n_threads = 1L), 
   `1 thread  (w/o rordering)` = 
-    log_ml(dat$Sigma, do_reorder = FALSE), 
+    log_ml(dat$Sigma, do_reorder = FALSE, n_threads = 1L), 
   `2 threads                ` = 
     log_ml(dat$Sigma                    , n_threads = 2L),
   `2 threads (w/o rordering)` = 
@@ -184,15 +184,15 @@ microbenchmark(
 
 #####
 # we can also get an approximation of the gradient
-t1 <- log_ml(dat$Sigma, comp_derivs = TRUE)
+t1 <- log_ml(dat$Sigma, comp_derivs = TRUE, n_threads = 1L)
 t2 <- log_ml(dat$Sigma, comp_derivs = TRUE, n_threads = 4L)
 all.equal(t1, t2, tolerance = 1e-2)
   
 microbenchmark(
   `1 thread                 ` = 
-    log_ml(dat$Sigma, comp_derivs = TRUE), 
+    log_ml(dat$Sigma, comp_derivs = TRUE                    , n_threads = 1L), 
   `1 thread  (w/o rordering)` = 
-    log_ml(dat$Sigma, comp_derivs = TRUE, do_reorder = FALSE), 
+    log_ml(dat$Sigma, comp_derivs = TRUE, do_reorder = FALSE, n_threads = 1L), 
   `2 threads                ` = 
     log_ml(dat$Sigma, comp_derivs = TRUE                    , n_threads = 2L),
   `2 threads (w/o rordering)` = 
@@ -202,6 +202,56 @@ microbenchmark(
   `4 threads (w/o rordering)` = 
     log_ml(dat$Sigma, comp_derivs = TRUE, do_reorder = FALSE, n_threads = 4L), 
   times = 5)
+
+#####
+# the main code in the packages provides an approximation to the CDF similar 
+# to the one in the mvtnorm package. We provide an example below to 
+# illustrate this. Feel free to skip this part of the README.
+library(mvtnorm)
+set.seed(1)
+p_ex <- 5L
+S_ex <- diag(p_ex)
+S_ex[lower.tri(S_ex)] <- S_ex[upper.tri(S_ex)] <- .25
+m_ex <- seq(-2, 2, length.out = p_ex)
+lower_ex <- m_ex + drop(rnorm(p_ex) %*% chol(S_ex)) - 1
+upper_ex <- lower_ex + 1
+
+use_mvtnorm <- function()
+  pmvnorm(
+    lower = lower_ex, upper = upper_ex, sigma = S_ex, mean = m_ex, 
+    algorithm = GenzBretz(maxpts = 10000L, abseps = -1, releps = 1e-6))
+use_this_pkg <- function(derivs = FALSE)
+  mdgc:::pmvnorm(lower = lower_ex, upper = upper_ex, mu = m_ex, 
+                 Sigma = S_ex, maxvls = 10000L, abseps = -1, releps = 1e-6, 
+                 derivs = derivs)
+use_mvtnorm()
+use_this_pkg()
+all.equal(c(use_mvtnorm()), c(use_this_pkg()), tolerance = 1e-5)
+microbenchmark(mvtnorm = use_mvtnorm(), mdgc = use_this_pkg(), 
+               times = 25)
+
+sd(replicate(25, use_mvtnorm()))
+sd(replicate(25, use_this_pkg()))
+
+# the latter function can also provide gradients with respect to the mean 
+# and covariance matrix
+library(numDeriv)
+gr_hat <- jacobian(function(a){
+  m <- a[1:p_ex]
+  S <- matrix(nr = p_ex, nc = p_ex)
+  S[upper.tri(S, TRUE)] <- a[-(1:p_ex)]
+  S[lower.tri(S)] <- t(S)[lower.tri(S)]
+  
+  set.seed(1L)
+  res <- pmvnorm(
+    lower = lower_ex, upper = upper_ex, sigma = S, mean = m, 
+    algorithm = GenzBretz(maxpts = 10000L, abseps = -1, releps = 1e-6))
+  c(res)
+}, c(m_ex, S_ex[upper.tri(S_ex, TRUE)]))
+gr <- use_this_pkg(TRUE)
+
+# the off diagonal elements of the covariance matrix is not scaled by 2
+gr_hat / gr[-1]
 
 # creates a matrix from a log-Cholesky decomposition.
 # 
@@ -226,8 +276,8 @@ get_lchol <- function(par){
   lSig[lower.tri(lSig, TRUE)]
 }
 
-Jac_dum <- mdgc:::get_commutation(p, p)
-diag(Jac_dum) <- diag(Jac_dum) + 1
+# indices used to apply a matrix product with a get_commutation matrix
+com_vec <- mdgc:::get_commutation_vec(p, p, FALSE)
 
 # computes the approximate log marginal likelihood. 
 #
@@ -253,7 +303,8 @@ par_fn <- function(par, seed = NULL, comp_derivs = FALSE,
     tmp <- matrix(0, p, p)
     tmp[lower.tri(tmp, TRUE)] <- par
     diag(tmp) <- exp(diag(tmp))
-    gr <- (c(gr) %*% Jac_dum) %*% (tmp %x% diag(p))
+    gr <- gr[com_vec] + c(gr)
+    gr <- mdgc:::x_dot_X_kron_I(x = gr, X = tmp, l = p)
     gr <- gr[, lower.tri(tmp, TRUE)]
     idx_diag <- c(1L, 1L + cumsum(NCOL(tmp):2)) 
     gr[idx_diag] <- gr[idx_diag] * diag(tmp)

@@ -3,10 +3,12 @@
 #include "pnorm.h"
 #include "qnorm.h"
 #include "fast-commutation.h"
+#include "restrict-cdf.h"
 #include <vector>
 #ifdef _OPENMP
 #include <omp.h>
 #endif
+#include "lp_utils.h"
 
 using namespace mdgc;
 using namespace arma;
@@ -195,7 +197,57 @@ Rcpp::NumericMatrix get_z_hat
   return out;
 }
 
+// [[Rcpp::export("pmvnorm")]]
+Rcpp::NumericVector pmvnorm_to_R
+  (arma::vec const &lower, arma::vec const &upper, arma::vec const &mu,
+   arma::mat const &Sigma, int const maxvls, double const abseps,
+   double const releps, bool const derivs, bool const do_reorder = true){
+  parallelrng::set_rng_seeds(1L);
+  restrictcdf::cdf<restrictcdf::deriv>::set_working_memory(
+    lower.n_elem, 1L);
+
+  auto res = ([&](){
+    if(derivs)
+      return restrictcdf::cdf<restrictcdf::deriv>
+      (lower, upper, mu, Sigma, do_reorder).approximate(
+          maxvls, abseps, releps);
+
+    return restrictcdf::cdf<restrictcdf::likelihood>
+      (lower, upper, mu, Sigma, do_reorder).approximate(
+          maxvls, abseps, releps);
+  })();
+
+  Rcpp::NumericVector out;
+  out = res.finest;
+  out.attr("minvls") = res.minvls;
+  out.attr("inform") = res.inform;
+  out.attr("abserr") = res.abserr;
+
+  return out;
+}
+
 // [[Rcpp::export("get_commutation", rng = false)]]
 arma::mat get_commutation_to_R(unsigned const n, unsigned const m){
   return get_commutation(n, m);
 }
+
+// [[Rcpp::export(rng = false)]]
+Rcpp::IntegerVector get_commutation_vec
+  (unsigned const n, unsigned const m, bool const transpose){
+  std::unique_ptr<size_t[]> res =
+    get_commutation_unequal_vec(n, m, transpose);
+  Rcpp::IntegerVector out(n * m);
+  for(size_t i = 0; i < n * m; ++i)
+    out[i] = *(res.get() + i) + 1L;
+
+  return out;
+}
+
+// [[Rcpp::export("x_dot_X_kron_I", rng = false)]]
+arma::mat x_dot_X_kron_I_wrap
+  (arma::vec const &x, arma::mat const &X, size_t const l){
+  arma::mat out(1L, X.n_cols * l);
+  x_dot_X_kron_I(x, X, l, out.memptr());
+  return out;
+}
+

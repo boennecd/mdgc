@@ -20,7 +20,8 @@ extern "C"
   void F77_NAME(mvkbrveval)(
       int const* /* NDIM */, int const* /* MAXVLS */, int const* /* NF */,
       double const* /* ABSEPS */, double const* /* RELEPS */,
-      double* /* ABSERR */, double* /* FINEST */, int* /* INFORM */);
+      double* /* ABSERR */, double* /* FINEST */, int* /* INFORM */,
+      int* /* MINVLS */ );
 
   void F77_SUB(mvkbrvintegrand)
     (int const *m, double *unifs, int const *mf, double *out){
@@ -76,7 +77,8 @@ void cdf<funcs>::set_working_memory
     constexpr size_t const mult = cachline_size / sizeof(double),
                        min_size = 2L * mult;
     size_t const upper_tri_size = (max_dim * (max_dim + 1L)) / 2L;
-    size_t m_dim = 4L * max_dim + 3L * upper_tri_size;
+    size_t m_dim =
+      4L * max_dim + 2L * max_dim * max_dim + 3L * upper_tri_size;
     m_dim = std::max(m_dim, min_size);
     m_dim = (m_dim + mult - 1L) / mult;
     m_dim *= mult;
@@ -116,10 +118,12 @@ output approximate_integral(
     double const abseps, double const releps){
   output out;
   out.finest.resize(n_integrands);
+  out.minvls = 0L;
 
   F77_CALL(mvkbrveval)(
       &ndim, &maxvls, &n_integrands, &abseps, &releps,
-      &out.abserr, out.finest.memptr(), &out.inform);
+      &out.abserr, out.finest.memptr(), &out.inform,
+      &out.minvls);
 
   return out;
 }

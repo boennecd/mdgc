@@ -191,7 +191,7 @@ system.time(
   ptr <- mdgc:::get_log_lm_terms(lower = dat$lower, upper = dat$upper, 
                                  code = dat$code))
 #>    user  system elapsed 
-#>   0.001   0.000   0.001
+#>       0       0       0
 
 # approximates the log marginal likelihood function.
 #
@@ -202,7 +202,7 @@ system.time(
 #   comp_derivs: logical for whether to approximate the gradient. 
 #   indices: integer vector with which terms to include. 
 #   do_reorder: logical for whether to use heuristic variable reordering.
-log_ml <- function(vcov, releps = 1e-2, n_threads = 1L, comp_derivs = FALSE, 
+log_ml <- function(vcov, releps = 1e-2, n_threads = 4L, comp_derivs = FALSE, 
                    indices = 0:(NCOL(dat$lower) - 1L), do_reorder = TRUE)
   mdgc:::eval_log_lm_terms(
     ptr = ptr, vcov = vcov, indices = indices, 
@@ -211,7 +211,7 @@ log_ml <- function(vcov, releps = 1e-2, n_threads = 1L, comp_derivs = FALSE,
 
 # print the approximate log marginal likelihood at the true parameters
 set.seed(1)
-print(log_ml(dat$Sigma), digits = 7)
+print(log_ml(dat$Sigma, n_threads = 1L), digits = 7)
 #> [1] -22290.21
 
 # check standard error
@@ -230,9 +230,9 @@ sd(replicate(20, log_ml(dat$Sigma, n_threads = 4L, do_reorder = FALSE)))
 library(microbenchmark)
 microbenchmark(
   `1 thread                 ` = 
-    log_ml(dat$Sigma), 
+    log_ml(dat$Sigma                    , n_threads = 1L), 
   `1 thread  (w/o rordering)` = 
-    log_ml(dat$Sigma, do_reorder = FALSE), 
+    log_ml(dat$Sigma, do_reorder = FALSE, n_threads = 1L), 
   `2 threads                ` = 
     log_ml(dat$Sigma                    , n_threads = 2L),
   `2 threads (w/o rordering)` = 
@@ -244,25 +244,25 @@ microbenchmark(
   times = 5)
 #> Unit: milliseconds
 #>                       expr min  lq mean median  uq max neval
-#>  1 thread                  514 514  518    518 519 526     5
-#>  1 thread  (w/o rordering) 760 772  776    775 779 793     5
-#>  2 threads                 259 259  260    260 260 263     5
-#>  2 threads (w/o rordering) 389 394  403    403 405 423     5
-#>  4 threads                 132 133  133    134 134 134     5
-#>  4 threads (w/o rordering) 210 210  213    211 216 221     5
+#>  1 thread                  491 491  499    493 506 514     5
+#>  1 thread  (w/o rordering) 740 747  757    763 767 769     5
+#>  2 threads                 251 253  257    254 260 268     5
+#>  2 threads (w/o rordering) 369 374  391    395 398 420     5
+#>  4 threads                 125 129  130    130 131 137     5
+#>  4 threads (w/o rordering) 198 201  205    204 208 214     5
 
 #####
 # we can also get an approximation of the gradient
-t1 <- log_ml(dat$Sigma, comp_derivs = TRUE)
+t1 <- log_ml(dat$Sigma, comp_derivs = TRUE, n_threads = 1L)
 t2 <- log_ml(dat$Sigma, comp_derivs = TRUE, n_threads = 4L)
 all.equal(t1, t2, tolerance = 1e-2)
 #> [1] TRUE
   
 microbenchmark(
   `1 thread                 ` = 
-    log_ml(dat$Sigma, comp_derivs = TRUE), 
+    log_ml(dat$Sigma, comp_derivs = TRUE                    , n_threads = 1L), 
   `1 thread  (w/o rordering)` = 
-    log_ml(dat$Sigma, comp_derivs = TRUE, do_reorder = FALSE), 
+    log_ml(dat$Sigma, comp_derivs = TRUE, do_reorder = FALSE, n_threads = 1L), 
   `2 threads                ` = 
     log_ml(dat$Sigma, comp_derivs = TRUE                    , n_threads = 2L),
   `2 threads (w/o rordering)` = 
@@ -274,12 +274,86 @@ microbenchmark(
   times = 5)
 #> Unit: milliseconds
 #>                       expr  min   lq mean median   uq  max neval
-#>  1 thread                  2239 2241 2285   2274 2333 2335     5
-#>  1 thread  (w/o rordering) 3960 3969 4010   3971 4019 4129     5
-#>  2 threads                 1114 1132 1151   1142 1161 1203     5
-#>  2 threads (w/o rordering) 2034 2043 2078   2063 2087 2163     5
-#>  4 threads                  614  615  623    622  623  640     5
-#>  4 threads (w/o rordering) 1066 1104 1110   1107 1125 1149     5
+#>  1 thread                  2175 2183 2215   2194 2261 2262     5
+#>  1 thread  (w/o rordering) 3829 3840 3881   3852 3879 4004     5
+#>  2 threads                 1084 1102 1115   1105 1129 1154     5
+#>  2 threads (w/o rordering) 1950 1963 1998   1985 1991 2103     5
+#>  4 threads                  598  602  611    609  614  632     5
+#>  4 threads (w/o rordering) 1039 1052 1081   1064 1121 1130     5
+
+#####
+# the main code in the packages provides an approximation to the CDF similar 
+# to the one in the mvtnorm package. We provide an example below to 
+# illustrate this. Feel free to skip this part of the README.
+library(mvtnorm)
+set.seed(1)
+p_ex <- 5L
+S_ex <- diag(p_ex)
+S_ex[lower.tri(S_ex)] <- S_ex[upper.tri(S_ex)] <- .25
+m_ex <- seq(-2, 2, length.out = p_ex)
+lower_ex <- m_ex + drop(rnorm(p_ex) %*% chol(S_ex)) - 1
+upper_ex <- lower_ex + 1
+
+use_mvtnorm <- function()
+  pmvnorm(
+    lower = lower_ex, upper = upper_ex, sigma = S_ex, mean = m_ex, 
+    algorithm = GenzBretz(maxpts = 10000L, abseps = -1, releps = 1e-6))
+use_this_pkg <- function(derivs = FALSE)
+  mdgc:::pmvnorm(lower = lower_ex, upper = upper_ex, mu = m_ex, 
+                 Sigma = S_ex, maxvls = 10000L, abseps = -1, releps = 1e-6, 
+                 derivs = derivs)
+use_mvtnorm()
+#> [1] 0.00136
+#> attr(,"error")
+#> [1] 9.59e-09
+#> attr(,"msg")
+#> [1] "Completion with error > abseps"
+use_this_pkg()
+#>         [,1]
+#> [1,] 0.00136
+#> attr(,"minvls")
+#> [1] 6992
+#> attr(,"inform")
+#> [1] 1
+#> attr(,"abserr")
+#> [1] 2.71e-08
+all.equal(c(use_mvtnorm()), c(use_this_pkg()), tolerance = 1e-5)
+#> [1] TRUE
+microbenchmark(mvtnorm = use_mvtnorm(), mdgc = use_this_pkg(), 
+               times = 25)
+#> Unit: milliseconds
+#>     expr  min   lq mean median   uq  max neval
+#>  mvtnorm 4.37 4.48  4.5   4.49 4.52 4.78    25
+#>     mdgc 2.86 2.93  3.0   2.95 2.98 3.63    25
+
+sd(replicate(25, use_mvtnorm()))
+#> [1] 3.07e-09
+sd(replicate(25, use_this_pkg()))
+#> [1] 7.2e-09
+
+# the latter function can also provide gradients with respect to the mean 
+# and covariance matrix
+library(numDeriv)
+gr_hat <- jacobian(function(a){
+  m <- a[1:p_ex]
+  S <- matrix(nr = p_ex, nc = p_ex)
+  S[upper.tri(S, TRUE)] <- a[-(1:p_ex)]
+  S[lower.tri(S)] <- t(S)[lower.tri(S)]
+  
+  set.seed(1L)
+  res <- pmvnorm(
+    lower = lower_ex, upper = upper_ex, sigma = S, mean = m, 
+    algorithm = GenzBretz(maxpts = 10000L, abseps = -1, releps = 1e-6))
+  c(res)
+}, c(m_ex, S_ex[upper.tri(S_ex, TRUE)]))
+gr <- use_this_pkg(TRUE)
+
+# the off diagonal elements of the covariance matrix is not scaled by 2
+gr_hat / gr[-1]
+#>      [,1] [,2] [,3] [,4] [,5] [,6] [,7] [,8] [,9] [,10] [,11] [,12] [,13] [,14]
+#> [1,]    1    1    1    1    1    1    2    1    2     2     1     2     2     2
+#>      [,15] [,16] [,17] [,18] [,19] [,20]
+#> [1,]     1     2     2     2     2     1
 
 # creates a matrix from a log-Cholesky decomposition.
 # 
@@ -304,8 +378,8 @@ get_lchol <- function(par){
   lSig[lower.tri(lSig, TRUE)]
 }
 
-Jac_dum <- mdgc:::get_commutation(p, p)
-diag(Jac_dum) <- diag(Jac_dum) + 1
+# indices used to apply a matrix product with a get_commutation matrix
+com_vec <- mdgc:::get_commutation_vec(p, p, FALSE)
 
 # computes the approximate log marginal likelihood. 
 #
@@ -331,7 +405,8 @@ par_fn <- function(par, seed = NULL, comp_derivs = FALSE,
     tmp <- matrix(0, p, p)
     tmp[lower.tri(tmp, TRUE)] <- par
     diag(tmp) <- exp(diag(tmp))
-    gr <- (c(gr) %*% Jac_dum) %*% (tmp %x% diag(p))
+    gr <- gr[com_vec] + c(gr)
+    gr <- mdgc:::x_dot_X_kron_I(x = gr, X = tmp, l = p)
     gr <- gr[, lower.tri(tmp, TRUE)]
     idx_diag <- c(1L, 1L + cumsum(NCOL(tmp):2)) 
     gr[idx_diag] <- gr[idx_diag] * diag(tmp)
@@ -403,41 +478,41 @@ start_val <- numeric(p * (p + 1) / 2)
 system.time(res <- naiv_gradient_descent(val = start_val, step_start = .001, 
                                          maxit = 20L, eps = 1e-2))
 #>    user  system elapsed 
-#>  71.192   0.004  18.415
+#>    68.6     0.0    17.7
 
 # compare estimates with truth
 norm(res$result - dat$Sigma)
-#> [1] 0.373
+#> [1] 0.374
 res$result
 #>        [,1]  [,2]  [,3]  [,4]  [,5]  [,6]  [,7]  [,8]  [,9] [,10] [,11] [,12]
-#>  [1,] 1.000 0.539 0.410 0.503 0.456 0.557 0.491 0.517 0.497 0.439 0.433 0.509
-#>  [2,] 0.539 1.000 0.438 0.483 0.318 0.431 0.465 0.503 0.439 0.494 0.534 0.534
-#>  [3,] 0.410 0.438 1.000 0.544 0.472 0.493 0.581 0.470 0.426 0.485 0.548 0.413
-#>  [4,] 0.503 0.483 0.544 1.000 0.455 0.539 0.475 0.458 0.521 0.446 0.431 0.466
-#>  [5,] 0.456 0.318 0.472 0.455 1.000 0.505 0.367 0.414 0.485 0.422 0.422 0.493
-#>  [6,] 0.557 0.431 0.493 0.539 0.505 1.000 0.474 0.487 0.467 0.411 0.399 0.568
-#>  [7,] 0.491 0.465 0.581 0.475 0.367 0.474 1.000 0.516 0.434 0.560 0.526 0.491
-#>  [8,] 0.517 0.503 0.470 0.458 0.414 0.487 0.516 1.000 0.502 0.630 0.376 0.523
-#>  [9,] 0.497 0.439 0.426 0.521 0.485 0.467 0.434 0.502 1.000 0.462 0.448 0.438
-#> [10,] 0.439 0.494 0.485 0.446 0.422 0.411 0.560 0.630 0.462 1.000 0.530 0.434
-#> [11,] 0.433 0.534 0.548 0.431 0.422 0.399 0.526 0.376 0.448 0.530 1.000 0.436
-#> [12,] 0.509 0.534 0.413 0.466 0.493 0.568 0.491 0.523 0.438 0.434 0.436 1.000
-#> [13,] 0.549 0.455 0.454 0.479 0.488 0.505 0.563 0.532 0.546 0.468 0.472 0.449
-#> [14,] 0.477 0.427 0.551 0.518 0.524 0.551 0.454 0.437 0.488 0.423 0.451 0.428
-#> [15,] 0.610 0.474 0.476 0.627 0.441 0.512 0.536 0.456 0.499 0.540 0.478 0.478
+#>  [1,] 1.000 0.539 0.407 0.505 0.456 0.556 0.491 0.517 0.497 0.439 0.434 0.509
+#>  [2,] 0.539 1.000 0.435 0.485 0.318 0.431 0.465 0.503 0.439 0.494 0.535 0.534
+#>  [3,] 0.407 0.435 1.000 0.542 0.471 0.491 0.579 0.468 0.425 0.484 0.546 0.411
+#>  [4,] 0.505 0.485 0.542 1.000 0.455 0.539 0.476 0.458 0.521 0.447 0.433 0.467
+#>  [5,] 0.456 0.318 0.471 0.455 1.000 0.505 0.367 0.414 0.485 0.423 0.422 0.493
+#>  [6,] 0.556 0.431 0.491 0.539 0.505 1.000 0.474 0.487 0.467 0.411 0.399 0.567
+#>  [7,] 0.491 0.465 0.579 0.476 0.367 0.474 1.000 0.516 0.434 0.561 0.527 0.491
+#>  [8,] 0.517 0.503 0.468 0.458 0.414 0.487 0.516 1.000 0.502 0.630 0.376 0.522
+#>  [9,] 0.497 0.439 0.425 0.521 0.485 0.467 0.434 0.502 1.000 0.463 0.448 0.438
+#> [10,] 0.439 0.494 0.484 0.447 0.423 0.411 0.561 0.630 0.463 1.000 0.530 0.434
+#> [11,] 0.434 0.535 0.546 0.433 0.422 0.399 0.527 0.376 0.448 0.530 1.000 0.437
+#> [12,] 0.509 0.534 0.411 0.467 0.493 0.567 0.491 0.522 0.438 0.434 0.437 1.000
+#> [13,] 0.549 0.455 0.452 0.480 0.488 0.505 0.564 0.532 0.545 0.468 0.472 0.449
+#> [14,] 0.478 0.428 0.549 0.518 0.524 0.551 0.454 0.437 0.489 0.423 0.451 0.429
+#> [15,] 0.609 0.474 0.475 0.628 0.442 0.511 0.536 0.456 0.499 0.540 0.478 0.477
 #>       [,13] [,14] [,15]
-#>  [1,] 0.549 0.477 0.610
-#>  [2,] 0.455 0.427 0.474
-#>  [3,] 0.454 0.551 0.476
-#>  [4,] 0.479 0.518 0.627
-#>  [5,] 0.488 0.524 0.441
-#>  [6,] 0.505 0.551 0.512
-#>  [7,] 0.563 0.454 0.536
+#>  [1,] 0.549 0.478 0.609
+#>  [2,] 0.455 0.428 0.474
+#>  [3,] 0.452 0.549 0.475
+#>  [4,] 0.480 0.518 0.628
+#>  [5,] 0.488 0.524 0.442
+#>  [6,] 0.505 0.551 0.511
+#>  [7,] 0.564 0.454 0.536
 #>  [8,] 0.532 0.437 0.456
-#>  [9,] 0.546 0.488 0.499
+#>  [9,] 0.545 0.489 0.499
 #> [10,] 0.468 0.423 0.540
 #> [11,] 0.472 0.451 0.478
-#> [12,] 0.449 0.428 0.478
+#> [12,] 0.449 0.429 0.477
 #> [13,] 1.000 0.608 0.614
 #> [14,] 0.608 1.000 0.535
 #> [15,] 0.614 0.535 1.000
@@ -554,7 +629,7 @@ set.seed(1)
 system.time(res_adam  <- adam(
   val = start_val, alpha = 1e-2, maxit = 10L, batch_size = 100L))
 #>    user  system elapsed 
-#>  33.541   0.004   9.050
+#>  31.997   0.004   8.620
 
 # compare estimates with the truth
 norm(res_adam$result - dat$Sigma)
@@ -644,7 +719,7 @@ log_ml(res_adam$result)
 funvals_adam_org <- 
   apply(res_adam$estimates, 2L, function(x) log_ml(get_lchol_inv(x)))
 funvals_adam_org
-#>  [1] -23063 -22506 -22339 -22289 -22267 -22257 -22253 -22252 -22251 -22251
+#>  [1] -23063 -22506 -22338 -22289 -22267 -22257 -22253 -22252 -22251 -22251
 res_adam$fun_vals # likely lower bounds on the log-marginal likelihood
 #>  [1] -24144 -22755 -22427 -22333 -22302 -22288 -22282 -22279 -22278 -22278
 res_adam_org <- res_adam
@@ -708,7 +783,7 @@ set.seed(1)
 system.time(res_svrg  <- svrg(
   val = start_val, lr = 1e-3, maxit = 10L, batch_size = 100L))
 #>    user  system elapsed 
-#>  65.086   0.088  17.611
+#>   62.48    0.02   16.83
 
 # compare estimates with the truth
 norm(res_svrg$result - dat$Sigma)
@@ -829,13 +904,13 @@ microbenchmark(
   dat$lower, dat$upper, dat$code, n_threads = 4L), times = 10)
 #> Unit: microseconds
 #>         expr   min    lq  mean median    uq   max neval
-#>  R version   71586 73726 77187  76953 78496 90020    10
-#>  C++ verison   663   674   693    694   707   729    10
+#>  R version   71404 74431 75444  75932 77477 78038    10
+#>  C++ verison   641   677   701    697   711   797    10
 
 # then we can compute an approximation of the covariance matrix as follows
 system.time(chat <- cov2cor(cov(t(tmp), use = "pairwise.complete.obs")))
 #>    user  system elapsed 
-#>   0.002   0.000   0.002
+#>   0.003   0.000   0.002
 
 # the starting value is already quite close
 par(mfcol = c(1, 3), mar  = c(1, 1, 4, 1))
@@ -856,7 +931,7 @@ set.seed(1)
 system.time(res_adam  <- adam(
   val = start_val, alpha = 1e-2, maxit = 5L, batch_size = 100L))
 #>    user  system elapsed 
-#>   15.60    0.04    4.15
+#>   14.90    0.00    3.93
 
 # for comparisons, we also run the code using one thread
 set.seed(1)
@@ -864,11 +939,11 @@ system.time(res_adam_ser  <- adam(
   val = start_val, alpha = 1e-2, maxit = 5L, batch_size = 100L, 
   n_threads = 1L))
 #>    user  system elapsed 
-#>   11.98    0.02   12.00
+#>    11.6     0.0    11.6
 
 # we get (roughly) the same
 norm(res_adam$result - res_adam_ser$result)
-#> [1] 0.00499
+#> [1] 0.00511
 
 # plot estimate
 par(mfcol = c(1, 3), mar  = c(1, 1, 4, 1))
@@ -898,7 +973,7 @@ set.seed(1)
 system.time(res_svrg  <- svrg(
   val = start_val, lr = 1e-3, maxit = 5L, batch_size = 100L))
 #>    user  system elapsed 
-#>  32.589   0.004   8.792
+#>  31.295   0.004   8.401
 
 # compare estimates with the truth
 norm(res_svrg$result - dat$Sigma)
