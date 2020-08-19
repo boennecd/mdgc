@@ -46,7 +46,7 @@ static std::unique_ptr<int[]> current_iwk_mem =
   std::unique_ptr<int[]>();
 
 template<class funcs>
-double * cdf<funcs>::get_working_memory(){
+double * cdf<funcs>::get_working_memory() noexcept {
 #ifdef _OPENMP
   size_t const my_num = omp_get_thread_num();
 #else
@@ -57,7 +57,7 @@ double * cdf<funcs>::get_working_memory(){
 }
 
 template<class funcs>
-int * cdf<funcs>::get_iworking_memory(){
+int * cdf<funcs>::get_iworking_memory() noexcept {
 #ifdef _OPENMP
   size_t const my_num = omp_get_thread_num();
 #else
@@ -73,7 +73,7 @@ void cdf<funcs>::set_working_memory
   constexpr size_t const cachline_size = 128L;
 
   {
-    // makes sure we avoid false sharing.
+    // makes sure to avoid false sharing
     constexpr size_t const mult = cachline_size / sizeof(double),
                        min_size = 2L * mult;
     size_t const upper_tri_size = (max_dim * (max_dim + 1L)) / 2L;
@@ -128,35 +128,29 @@ output approximate_integral(
   return out;
 }
 
-void likelihood::integrand
-(double const * const, int const ndim, double * const out,
- double const * const){
-#ifdef DO_CHECKS
-  if(!out)
-    throw invalid_argument("likelihood::integrand: invalid out");
-#endif
-  *out = 1;
-}
-
 int deriv::get_n_integrands
-(arma::vec const &mu, arma::mat const &sigma) {
+(arma::vec const &mu, arma::mat const &sigma) noexcept {
   arma::uword const p = mu.n_elem;
   return 1 + p + (p * (p + 1)) / 2L;
 }
 
+inline void deriv_integrand_inner_loop
+  (double * __restrict__ o, double const * __restrict__ lhs,
+   unsigned const c) noexcept {
+  double const * const end = lhs + c + 1;
+  double const mult = *(lhs + c);
+  for(; lhs != end; ++o, ++lhs)
+    *o = mult * * lhs;
+}
+
 void deriv::integrand
-(double const * const draw, int const ndim, double * const out,
- double const * const wk_mem){
+(double const * const __restrict__ draw, int const ndim,
+ double * const __restrict__ out, double const * const __restrict__ wk_mem)
+  noexcept {
   arma::uword const p = ndim;
 
   size_t const n_elem = 1L + p + (p * (p + 1L)) / 2L;
   double * const out_end = out + n_elem;
-
-#ifdef DO_CHECKS
-  for(double * o = out + 1L; o != out_end; ++o)
-    if(!o)
-      throw invalid_argument("likelihood::integrand: invalid out");
-#endif
 
   for(double * o = out + 1L; o != out_end; ++o)
     *o = 0.;
@@ -174,18 +168,16 @@ void deriv::integrand
   }
 
   {
-    double *o = out + 1L + p;
+    double * o = out + 1L + p;
     for(unsigned c = 0; c < p; c++){
-      double const mult = *(mean_part_begin + c),
-            * const end = mean_part_begin + c + 1;
-      for(double *lhs = mean_part_begin; lhs != end; ++o, ++lhs)
-        *o = mult * *lhs;
+      deriv_integrand_inner_loop(o, mean_part_begin, c);
+      o += c + 1L;
     }
   }
 }
 
 void deriv::post_process(arma::vec &finest, int const ndim,
-                         double const * const wk_mem) {
+                         double const * const wk_mem) noexcept {
   arma::uword const p = ndim;
 
   double phat = finest[0L];

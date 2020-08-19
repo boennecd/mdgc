@@ -53,11 +53,11 @@ double qnorm_w(double const p, double const mu, double const sigma,
                int const lower_tail, int const log_p){
     double p_, q, r, val;
 
-    if(__builtin_expect(isnan(p) || isnan(mu) || isnan(sigma), 0))
+    if(isnan(p) || isnan(mu) || isnan(sigma))
 	     return p + mu + sigma;
 
     if (log_p) {
-      if(__builtin_expect(-INFINITY < p && p < 0, 1)){
+      if(-INFINITY < p && p < 0){
       }
       else if(p > 0)
         return NAN;
@@ -67,7 +67,7 @@ double qnorm_w(double const p, double const mu, double const sigma,
         return lower_tail ? -INFINITY :  INFINITY;
     }
     else { /* !log_p */
-      if(__builtin_expect(0 < p && p < 1, 1)){
+      if(0 < p && p < 1){
       }
       else if(p < 0 || p > 1)
         return NAN;
@@ -77,8 +77,8 @@ double qnorm_w(double const p, double const mu, double const sigma,
         return lower_tail ?  INFINITY : -INFINITY;
     }
 
-    if(__builtin_expect(sigma  < 0, 0))	return NAN;
-    else if(__builtin_expect(sigma == 0, 0))	return mu;
+    if(sigma  < 0)	return NAN;
+    else if(sigma == 0)	return mu;
 
     q = lower_tail ? p : 0.5 - p + 0.5;
     p_ = log_p ? (lower_tail ? exp(p) : - expm1(p)) : q;

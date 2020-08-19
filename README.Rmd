@@ -219,10 +219,10 @@ upper_ex <- lower_ex + 1
 use_mvtnorm <- function()
   pmvnorm(
     lower = lower_ex, upper = upper_ex, sigma = S_ex, mean = m_ex, 
-    algorithm = GenzBretz(maxpts = 10000L, abseps = -1, releps = 1e-6))
+    algorithm = GenzBretz(maxpts = 100000L, abseps = -1, releps = 1e-5))
 use_this_pkg <- function(derivs = FALSE)
   mdgc:::pmvnorm(lower = lower_ex, upper = upper_ex, mu = m_ex, 
-                 Sigma = S_ex, maxvls = 10000L, abseps = -1, releps = 1e-6, 
+                 Sigma = S_ex, maxvls = 100000L, abseps = -1, releps = 1e-5, 
                  derivs = derivs)
 use_mvtnorm()
 use_this_pkg()
@@ -250,7 +250,7 @@ gr_hat <- jacobian(function(a){
 }, c(m_ex, S_ex[upper.tri(S_ex, TRUE)]))
 gr <- use_this_pkg(TRUE)
 
-# the off diagonal elements of the covariance matrix is not scaled by 2
+# the off diagonal elements of the covariance matrix are not scaled by 2
 gr_hat / gr[-1]
 
 # creates a matrix from a log-Cholesky decomposition.
@@ -335,18 +335,20 @@ all.equal(attr(r1, "grad"), drop(r2), tolerance = 1e-2)
 #   maxit: maximum number of iteration. 
 #   eps: convergence threshold to use. 
 #   seed: seed to use.
+#   c1, c2: parameters for Wolfe condition.
 naiv_gradient_descent <- function(val, step_start, n_threads = 4L, 
-                                  maxit = 10L, eps = 1e-3, seed = 1L){
+                                  maxit = 10L, eps = 1e-3, seed = 1L, 
+                                  c1 = 1e-3, c2 = .1){
   fun_vals <- step_sizes <- rep(NA_real_, maxit)
   
+  gr_new <- par_fn(val, comp_derivs = TRUE, n_threads = n_threads, 
+                   seed = seed)
   for(i in 1:maxit){
-    gr <- par_fn(val, comp_derivs = TRUE, n_threads = n_threads, 
-                 seed = seed)
+    gr <- gr_new
     fun_vals[i] <- prev_fun <- c(gr)
     dir <- attr(gr, "grad")
     step <- step_start
-    if(sqrt(sum(dir^2)) < eps)
-      break
+    m <- drop(dir %*% attr(gr, "grad"))
     
     max_j <- 11L
     for(j in 1:max_j){
@@ -356,10 +358,18 @@ naiv_gradient_descent <- function(val, step_start, n_threads = 4L,
       new_val <- get_lchol(cov2cor(get_lchol_inv(new_val)))
       new_fun <- par_fn(new_val, comp_derivs = FALSE, n_threads = n_threads, 
                         seed = seed)
-      if(new_fun > prev_fun){
-        val <- new_val
-        break
+      
+      # Wolfe conditions
+      if(-new_fun <= -prev_fun + c1 * step * m){
+        gr_new <- par_fn(new_val, comp_derivs = TRUE, n_threads = n_threads, 
+                         seed = seed)
+      
+        if(drop(attr(gr_new, "grad") %*% dir) >= c2 * m){
+          val <- new_val
+          break
+        }
       }
+      
       step <- step / 2
     }
     
@@ -382,7 +392,7 @@ dat$Sigma
 
 # or plot both of them and compare
 do_plot <- function(x, main){
-  sc <- colorRampPalette(c("Red", "White", "Blue"))(50)
+  sc <- colorRampPalette(c("Red", "White", "Blue"))(51)
   image(x, main = main, col = sc, zlim = c(-1, 1), xaxt = "n", yaxt = "n", 
         bty = "n")
 }

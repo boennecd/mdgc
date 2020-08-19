@@ -9,6 +9,7 @@
 #include "pnorm.h"
 #include "qnorm.h"
 #include "mvtnorm-wrapper.h"
+#include "config.h"
 
 namespace restrictcdf {
 extern "C"
@@ -63,20 +64,20 @@ extern "C"
 template<int i>
 std::array<double, 2> draw_trunc_mean
 (double const a, double const b, double const u,
- bool const comp_quantile){
-  throw std::runtime_error("draw_trunc_mean: not implemented");
-  return { 0, 0 };
+ bool const comp_quantile) MDGC_NOEXCEPT {
+  return { std::numeric_limits<double>::quiet_NaN(),
+           std::numeric_limits<double>::quiet_NaN() };
 }
 
 template<> inline std::array<double, 2> draw_trunc_mean<-1L>
 (double const a, double const b, double const u,
- bool const comp_quantile){
+ bool const comp_quantile) MDGC_NOEXCEPT {
   return { 1., u };
 }
 
 template<> inline std::array<double, 2> draw_trunc_mean<0L>
 (double const a, double const b, double const u,
- bool const comp_quantile){
+ bool const comp_quantile) MDGC_NOEXCEPT {
   double const qb = pnorm_std(b, 1L, 0L);
   if(comp_quantile)
     return { qb, qnorm_w(qb * u, 0, 1, 1L, 0L) };
@@ -85,7 +86,7 @@ template<> inline std::array<double, 2> draw_trunc_mean<0L>
 
 template<> inline std::array<double, 2> draw_trunc_mean<1L>
 (double const a, double const b, double const u,
- bool const comp_quantile){
+ bool const comp_quantile) MDGC_NOEXCEPT {
   double const qa = pnorm_std(a, 1L, 0L);
   if(comp_quantile)
     return { 1 - qa, qnorm_w(qa + u * (1 - qa), 0, 1, 1L, 0L) };
@@ -94,7 +95,7 @@ template<> inline std::array<double, 2> draw_trunc_mean<1L>
 
 template<> inline std::array<double, 2> draw_trunc_mean<2L>
 (double const a, double const b, double const u,
- bool const comp_quantile){
+ bool const comp_quantile) MDGC_NOEXCEPT {
   double const qa = pnorm_std(a, 1L, 0L),
                qb = pnorm_std(b, 1L, 0L);
 #ifdef DO_CHECKS
@@ -139,7 +140,7 @@ void set_mvkbrv_ptr(mvkbrv_ptr);
  * @param X Matrix top copy.
  * @param x Pointer to copy to.
  */
-inline void copy_upper_tri(arma::mat const &X, double *x){
+inline void copy_upper_tri(arma::mat const &X, double *x) noexcept {
   size_t const p = X.n_cols;
   for(unsigned c = 0; c < p; c++)
     for(unsigned r = 0; r <= c; r++, x++)
@@ -209,7 +210,7 @@ class cdf {
         * const idx;
 
     ptr_to_dat(double * const wk_mem, int const ndim,
-               int * const iwk_mem):
+               int * const iwk_mem) noexcept:
       wk_mem(wk_mem), ndim(ndim),
       lower     (wk_mem            ),
       upper     (wk_mem + ndim     ),
@@ -235,8 +236,8 @@ class cdf {
 #pragma omp threadprivate(ndim, n_integrands, wk_mem, iwk_mem, is_permutated)
 #endif
 
-  static double * get_working_memory();
-  static int    * get_iworking_memory();
+  static double * get_working_memory() noexcept;
+  static int    * get_iworking_memory() noexcept;
 
 public:
   /**
@@ -259,7 +260,7 @@ public:
    */
   static void eval_integrand(
       int const *ndim_in, double *unifs, int const *n_integrands_in,
-      double *integrand_val){
+      double *integrand_val) MDGC_NOEXCEPT {
     size_t const udim = ndim,
                  u_integrands = n_integrands;
 
@@ -275,42 +276,37 @@ public:
            * const draw = map_obj.draw;
 
     double w(1.);
-    double const * sc  = map_obj.sigma_chol,
-                 * lw  = map_obj.lower,
-                 * up  = map_obj.upper,
-                 *unif = unifs;
+    double const * __restrict__ sc   = map_obj.sigma_chol,
+                 * __restrict__ lw   = map_obj.lower,
+                 * __restrict__ up   = map_obj.upper,
+                 * __restrict__ unif = unifs;
     int const *infin = map_obj.infin;
     /* loop over variables and transform them to truncated normal
      * variables */
     for(size_t j = 0; j < udim; ++j, ++sc, ++lw, ++up, ++infin, ++unif){
       auto const draw_n_p = ([&](){
-        bool const needs_q =
-          needs_last_unif or j + 1 < udim;
-        double const * const draw_end = draw + j;
+        bool const needs_q = needs_last_unif or j + 1 < udim;
+        double const *d = draw;
 
-       if(*infin == 0L){
+        if(*infin == 0L){
           double b(*up);
-          for(double const *d = draw; d != draw_end; ){
-            double const term = *sc++ * *d++;
-            b -= term;
-          }
+          for(size_t i = 0; i < j; ++i)
+            b -= *sc++ * *d++;
 
           return draw_trunc_mean<0L>(0, b, *unif, needs_q);
 
         } else if(*infin == 1L){
           double a(*lw);
-          for(double const *d = draw; d != draw_end; ){
-            double const term = *sc++ * *d++;
-            a -= term;
-          }
+          for(size_t i = 0; i < j; ++i)
+            a -= *sc++ * *d++;
 
           return draw_trunc_mean<1L>(a, 0, *unif, needs_q);
 
         } else if(*infin == 2L){
           double a(*lw),
                  b(*up);
-          for(double const *d = draw; d != draw_end; ){
-            double const term = *sc++ * *d++;
+          for(size_t i = 0; i < j; ++i, sc++, d++){
+            double const term = *sc * *d;
             a -= term;
             b -= term;
           }
@@ -323,7 +319,9 @@ public:
 
         }
 
+#ifdef DO_CHECKS
         throw std::runtime_error("draw_trunc_mean: not implemented");
+#endif
         sc += j;
         return draw_trunc_mean<-1L>(0, 0, *unif, needs_q);
       })();
@@ -335,8 +333,8 @@ public:
     /* evaluate the integrand and weigth the result. */
     funcs::integrand(draw, udim, out, map_obj.child_mem);
 
-    double const * const out_end = out + u_integrands;
-    for(double * o = out; o != out_end; ++o)
+    double * o = out;
+    for(size_t i = 0; i < u_integrands; ++i, ++o)
       *o *= w;
   }
 
@@ -557,20 +555,30 @@ public:
 class likelihood {
 public:
   static void set_child_wk_mem
-  (arma::vec const&, arma::mat const&, double const * const) { }
+    (arma::vec const&, arma::mat const&, double const * const) noexcept { }
 
-  static int constexpr get_n_integrands(arma::vec const&, arma::mat const&){
+  constexpr static int get_n_integrands
+    (arma::vec const&, arma::mat const&) {
     return 1L;
   }
-  static void integrand(double const * const, int const, double * const,
-                        double const * const);
-  static void post_process(arma::vec&, int const, double const * const) { }
+  static void integrand
+    (double const * const __restrict__, int const,
+     double * const __restrict__ out, double const * const __restrict__)
+    MDGC_NOEXCEPT {
+#ifdef DO_CHECKS
+    if(!out)
+      throw invalid_argument("likelihood::integrand: invalid out");
+#endif
+    *out = 1;
+  }
+  static void post_process
+    (arma::vec&, int const, double const * const) noexcept { }
   constexpr static bool needs_last_unif() {
     return false;
   }
 
   static arma::vec univariate(double const lw, double const ub,
-                              double const * const wk_mem){
+                              double const * const wk_mem) {
     arma::vec out(1L);
     double const p_ub = std::isinf(ub) ? 1 : pnorm_std(ub, 1L, 0L),
                  p_lb = std::isinf(lw) ? 0 : pnorm_std(lw, 1L, 0L);
@@ -578,8 +586,8 @@ public:
     return out;
   }
 
-  static void permutate(arma::vec&, int const, arma::ivec const&,
-                        double * const) { }
+  static void permutate
+    (arma::vec&, int const, arma::ivec const&, double * const) noexcept { }
 };
 
 /**
@@ -606,10 +614,13 @@ public:
     copy_upper_tri(tmp_mat, wk_mem + size_up);
   }
 
-  static int get_n_integrands(arma::vec const&, arma::mat const&);
-  static void integrand(double const * const, int const, double * const,
-                        double const * const);
-  static void post_process(arma::vec&, int const, double const * const);
+  static int get_n_integrands(arma::vec const&, arma::mat const&) noexcept;
+  static void integrand
+    (double const * const __restrict__, int const,
+     double * const __restrict__, double const * const __restrict__)
+    noexcept;
+  static void post_process
+    (arma::vec&, int const, double const * const) noexcept;
   constexpr static bool needs_last_unif() {
     return true;
   }
@@ -638,8 +649,9 @@ public:
     return out;
   }
 
-  static void permutate(arma::vec &finest, int const ndim,
-                        arma::ivec const &idx, double * const work_mem) {
+  static void permutate
+    (arma::vec &finest, int const ndim, arma::ivec const &idx,
+     double * const work_mem) noexcept {
     size_t const dim_cov = (ndim * (ndim + 1L)) / 2L;
 
     arma::vec dmu(finest.memptr() + 1L       , ndim   , false, true),
