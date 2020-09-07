@@ -138,15 +138,15 @@ mgdc_start_value <- function(object, ...)
   UseMethod("mgdc_start_value")
 
 #' @export
-mgdc_start_value <- function(ojbect, ...)
+mgdc_start_value <- function(object, ...)
   mgdc_start_value.default(lower = object$lower, upper = object$upper,
                            code = object$code)
 
 #' @importFrom stats cov cov2cor
 #' @export
-mgdc_start_value.default <- function(object, lower, upper, code, ...){
-  Z <- get_z_hat(
-    mdgc_obj$lower, mdgc_obj$upper, mdgc_obj$code, n_threads = 4L)
+mgdc_start_value.default <- function(object, lower, upper, code,
+                                     n_threads = 1L, ...){
+  Z <- get_z_hat(lower, upper, code, n_threads = n_threads)
   cov2cor(cov(t(Z), use = "pairwise.complete.obs"))
 }
 
@@ -178,7 +178,7 @@ mgdc_fit <- function(ptr, vcov, lr = 1e-3, releps = 1e-2,
 
   method <- method[1L]
   stopifnot(
-    all(dim(vcov) == c(p, p)), is.numeric(vcov),
+    all(dim(vcov) == c(nvars, nvars)), is.numeric(vcov),
     is.numeric(lr), length(lr) == 1L, lr > 0,
     is.integer(maxit), length(maxit) == 1L, maxit > 0L,
     is.integer(batch_size), length(batch_size) == 1L, batch_size > 0L,
@@ -194,7 +194,7 @@ mgdc_fit <- function(ptr, vcov, lr = 1e-3, releps = 1e-2,
   #####
   # assign functions to use
   # indices used to apply a matrix product with a get_commutation matrix
-  com_vec <- get_commutation_vec(p, p, FALSE)
+  com_vec <- get_commutation_vec(nvars, nvars, FALSE)
 
   # computes the approximate log marginal likelihood.
   #
@@ -213,11 +213,11 @@ mgdc_fit <- function(ptr, vcov, lr = 1e-3, releps = 1e-2,
     log_ml <- c(res)
     if(comp_derivs){
       gr <- attr(res, "grad")
-      tmp <- matrix(0, p, p)
+      tmp <- matrix(0, nvars, nvars)
       tmp[lower.tri(tmp, TRUE)] <- par
       diag(tmp) <- exp(diag(tmp))
       gr <- gr[com_vec] + c(gr)
-      gr <- mdgc:::x_dot_X_kron_I(x = gr, X = tmp, l = p)
+      gr <- mdgc:::x_dot_X_kron_I(x = gr, X = tmp, l = nvars)
       gr <- gr[, lower.tri(tmp, TRUE)]
       idx_diag <- c(1L, 1L + cumsum(NCOL(tmp):2))
       gr[idx_diag] <- gr[idx_diag] * diag(tmp)

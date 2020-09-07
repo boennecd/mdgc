@@ -106,8 +106,11 @@ sim_dat <- function(n, p = 4, n_lvls = 5L){
   
   # create observed data
   truth_obs <- data.frame(truth)
+  truth_obs[, is_con] <- qexp(pnorm(as.matrix(truth_obs[, is_con])))
+  
   bs_bin <- c(-Inf, 0., Inf)
   truth_obs[, is_bin] <- truth_obs[, is_bin] > bs_bin[2]
+  
   bs_ord <- qnorm(seq(0, 1, length.out = n_lvls + 1L))
   truth_obs[, is_ord] <- as.integer(cut(truth[, is_ord], breaks = bs_ord))
   for(i in which(is_ord)){
