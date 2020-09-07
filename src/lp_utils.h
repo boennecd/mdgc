@@ -1,6 +1,7 @@
 #ifndef LP_UTILS_H
 #define LP_UTILS_H
 #include "arma-wrap.h"
+#include "config.h"
 
 /**
  * computes (X (x) X) x where x is p^2 vector and X is a k x p matrix and
@@ -9,8 +10,8 @@
  * @param wk working memory with up k x p elements.
  */
 inline void X_kron_X_dot_x
-(arma::mat const &X, arma::vec const &x, double * const out,
- double * const wk){
+(arma::mat const &X, arma::vec const &x, double * const __restrict__ out,
+ double * const __restrict__ wk) MDGC_NOEXCEPT {
   size_t const k = X.n_rows,
                p = X.n_cols,
               kk = k * k;
@@ -49,16 +50,17 @@ inline void X_kron_X_dot_x
 }
 
 /**
- * computes (x (x) X) y where x is l vector, X is a k x p matrix, 
- * y is a p vector, and stores it in the passed pointer which can 
+ * computes (x (x) X) y where x is l vector, X is a k x p matrix,
+ * y is a p vector, and stores it in the passed pointer which can
  * hold l x k elements.
- * 
+ *
  * @param wk working memory with up k elements.
  */
 inline void x_kron_X_dot_y
-  (arma::vec const &x, arma::mat const &X, arma::vec const &y, 
-   double * const out, double * const wk){
-  size_t const l = x.n_elem, 
+  (arma::vec const &x, arma::mat const &X, arma::vec const &y,
+   double * const __restrict__ out,
+   double * const __restrict__ wk) MDGC_NOEXCEPT {
+  size_t const l = x.n_elem,
                k = X.n_rows,
               lk = k * l;
 #ifdef DDO_CHECKS
@@ -67,11 +69,11 @@ inline void x_kron_X_dot_y
 #endif
   for(size_t i = 0; i < lk; ++i)
     *(out + i) = 0;
-  
+
   double * const w_end = wk + k;
   for(double * w = wk; w != w_end; ++w)
     *w = 0.;
-  
+
   {
     double const * yp = y.begin();
     for(auto Xp = X.begin(); Xp != X.end(); ++yp){
@@ -80,9 +82,9 @@ inline void x_kron_X_dot_y
         *w += *Xp * mult;
     }
   }
-  
+
   double * o = out;
-  for(auto xp = x.begin(); xp != x.end(); ++xp)    
+  for(auto xp = x.begin(); xp != x.end(); ++xp)
     for(double * w = wk; w != w_end; ++w, ++o)
       *o = *w * *xp;
 }
@@ -94,7 +96,7 @@ inline void x_kron_X_dot_y
  */
 inline void X_kron_I_dot_x
   (arma::mat const &X, size_t const l, arma::vec const &x,
-   double * const out, bool const set_zero){
+   double * const __restrict__ out, bool const set_zero) MDGC_NOEXCEPT {
   size_t const k = X.n_rows,
                p = X.n_cols,
               kl = k * l;
@@ -124,7 +126,7 @@ inline void X_kron_I_dot_x
  */
 inline void I_kron_X_dot_x
   (arma::mat const &X, size_t const l, arma::vec const &x,
-   double * const out){
+   double * const __restrict__ out) MDGC_NOEXCEPT {
   size_t const k = X.n_rows,
                p = X.n_cols,
               kl = k * l;
@@ -149,13 +151,13 @@ inline void I_kron_X_dot_x
 }
 
 /**
- * computes x (X (x) I) where X is a k x p matrix, I is an l dimensional 
- * diagonal matrix and x is an l x k vector. The result is stored in the 
+ * computes x (X (x) I) where X is a k x p matrix, I is an l dimensional
+ * diagonal matrix and x is an l x k vector. The result is stored in the
  * p x l dimensional output.
  */
 inline void x_dot_X_kron_I
-  (arma::vec const &x, arma::mat const &X, size_t const l, 
-   double * const out){
+  (arma::vec const &x, arma::mat const &X, size_t const l,
+   double * const __restrict__ out) MDGC_NOEXCEPT {
   size_t const k = X.n_rows,
                p = X.n_cols,
               pl = p * l;
@@ -165,13 +167,13 @@ inline void x_dot_X_kron_I
 #endif
   for(size_t i = 0; i < pl; ++i)
     *(out + i) = 0;
-  
+
   for(size_t c = 0; c < p; ++c){
     for(size_t r = 0; r < k; ++r){
       double const mult = X.at(r, c);
       double const * const x_end = x.memptr() + r * l + l;
       double * o = out + c * l;
-      for(double const * xp = x.memptr() + r * l; 
+      for(double const * xp = x.memptr() + r * l;
           xp != x_end; ++xp, ++o)
         *o += *xp * mult;
     }

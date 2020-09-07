@@ -6,15 +6,15 @@
 
 using namespace Rcpp;
 
-// get_log_lm_terms
-SEXP get_log_lm_terms(arma::mat const& lower, arma::mat const& upper, arma::imat const& code);
-RcppExport SEXP _mdgc_get_log_lm_terms(SEXP lowerSEXP, SEXP upperSEXP, SEXP codeSEXP) {
+// get_log_lm_terms_cpp
+SEXP get_log_lm_terms_cpp(arma::mat const& lower, arma::mat const& upper, arma::imat const& code);
+RcppExport SEXP _mdgc_get_log_lm_terms_cpp(SEXP lowerSEXP, SEXP upperSEXP, SEXP codeSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::traits::input_parameter< arma::mat const& >::type lower(lowerSEXP);
     Rcpp::traits::input_parameter< arma::mat const& >::type upper(upperSEXP);
     Rcpp::traits::input_parameter< arma::imat const& >::type code(codeSEXP);
-    rcpp_result_gen = Rcpp::wrap(get_log_lm_terms(lower, upper, code));
+    rcpp_result_gen = Rcpp::wrap(get_log_lm_terms_cpp(lower, upper, code));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -108,7 +108,7 @@ END_RCPP
 RcppExport SEXP run_testthat_tests();
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_mdgc_get_log_lm_terms", (DL_FUNC) &_mdgc_get_log_lm_terms, 3},
+    {"_mdgc_get_log_lm_terms_cpp", (DL_FUNC) &_mdgc_get_log_lm_terms_cpp, 3},
     {"_mdgc_eval_log_lm_terms", (DL_FUNC) &_mdgc_eval_log_lm_terms, 9},
     {"_mdgc_get_z_hat", (DL_FUNC) &_mdgc_get_z_hat, 4},
     {"_mdgc_pmvnorm_to_R", (DL_FUNC) &_mdgc_pmvnorm_to_R, 9},

@@ -53,19 +53,30 @@ To summarize, we do the following below:
     stochastic gradient descent using ADAM. 
  5. show how to improve 4. by using better starting values which are quick 
     to compute. As of this writing, this reduces the estimation time to 
-    less than 5 seconds using four threads and less than 13.5 seconds using 
+    about 4 seconds using four threads and about 12 seconds using 
     one thread.
     
 Presumably/likely, computing the marginals of each variable should be 
 extremely fast, as should 
 the imputation once the model parameters are estimated. Given that this is 
 true, then the main concern should be the time it takes to estimate the 
-model parameters. As we show, this can be done quickly using our code.
+model parameters. As we show, this can be done quickly using our code. We 
+start of with the example using the high end API. Then we turn to a more 
+detailed explanation. 
+
+### Quick Example
+
+We first simulate a data set and provide an example which shows how to use 
+the package.
+
+```{r load_pkgs}
+# load the packages we need
+library(bench)
+library(mdgc)
+```
 
 ```{r sim_dat, cache = 1, fig.height = 3, fig.width = 7}
-library(mdgc)
-
-# simulates a data set and puts it into a format to pass to C++.
+# simulates a data set and mask some of the data.
 #
 # Args: 
 #   n: number of observations. 
@@ -73,7 +84,7 @@ library(mdgc)
 #   n_lvls: number of levels for the ordinal variables. 
 # 
 # Returns: 
-#   Simluated masked data set in the format needed to pass to C++.
+#   Simluated masked data and true covariance matrix. 
 sim_dat <- function(n, p = 4, n_lvls = 5L){
   # get the covariance matrix
   Sb <- diag(p)
@@ -82,7 +93,7 @@ sim_dat <- function(n, p = 4, n_lvls = 5L){
   Sig <- cov2cor(drop(rWishart(1L, 5L * p, Sb)))
   
   # draw the observations
-  Z <- truth <- crossprod(chol(Sig), matrix(rnorm(n * p), p))
+  truth <- matrix(rnorm(n * p), n) %*% chol(Sig)
   
   # determine the type
   type <- rep(1:3, each = floor((p + 3 - 1) / 3))[1:p]
@@ -90,67 +101,93 @@ sim_dat <- function(n, p = 4, n_lvls = 5L){
   is_bin <- type == 2L
   is_ord <- type == 3L
   
-  # mask data 
-  is_mask <- matrix(runif(n * p) < .3, p)
-  Z[is_mask] <- NA_real_
+  # sample which are masked data 
+  is_mask <- matrix(runif(n * p) < .3, n)
   
-  # set code arugment. Codes are:
-  #  0: latent Z is observed (upper is the observed point).
-  #  1: latent Z can be anything.
-  #  2: latent Z is in an interval given by lower and upper.
-  code <- matrix(0L, p, n)
-  code[is_ord | is_bin, ] <- 2L
-  code[is_mask] <- 1L
+  # create observed data
+  truth_obs <- data.frame(truth)
+  bs_bin <- c(-Inf, 0., Inf)
+  truth_obs[, is_bin] <- truth_obs[, is_bin] > bs_bin[2]
+  bs_ord <- qnorm(seq(0, 1, length.out = n_lvls + 1L))
+  truth_obs[, is_ord] <- as.integer(cut(truth[, is_ord], breaks = bs_ord))
+  for(i in which(is_ord)){
+    truth_obs[, i] <- ordered(truth_obs[, i])
+    levels(truth_obs[, i]) <- 
+      LETTERS[seq_len(length(unique(truth_obs[, i])))]
+  }
+
+  # mask the data
+  seen_obs <- truth_obs
+  seen_obs[is_mask] <- NA
   
-  # create upper and lower bounds
-  upper <- lower <- matrix(NA_real_, p, n)
-  lower[is_con, ] <- upper[is_con, ] <- truth[is_con, ]
-  
-  bs <- c(-Inf, 0, Inf)
-  lower[is_bin, ] <- head(bs, -1)[cut(truth[is_bin, ], breaks = bs)]
-  upper[is_bin, ] <- bs[-1]      [cut(truth[is_bin, ], breaks = bs)]
-  
-  bs <- qnorm(seq(0, 1, length.out = n_lvls + 1L))
-  lower[is_ord, ] <- head(bs, -1)[cut(truth[is_ord, ], breaks = bs)]
-  upper[is_ord, ] <- bs[-1]      [cut(truth[is_ord, ], breaks = bs)]
-  
-  lower[is_mask] <- upper[is_mask] <- NA_real_
-  
-  list(lower = lower, upper = upper, code = code, Sigma = Sig, 
-       truth = truth)
+  list(truth = truth, truth_obs = truth_obs, seen_obs = seen_obs, 
+       Sigma = Sig)
 }
 
-# simulate and show the data. Data is stored in 
-# [# variables] x [# observations] format
+# simulate and show the data
 set.seed(1)
 p <- 15L
 dat <- sim_dat(2000L, p = p)
-dat$lower[, 1:5] # lower bounds
-dat$upper[, 1:5] # upper bounds
-dat$code [, 1:5] # code for type of data
-dat$truth[, 1:5] # true values
 
-#####
-# get pointers to objects in C++
+# how an observed data set could look
+head(dat$seen_obs)
+
+# assign objects needed for model estimation
+mdgc_obj <- get_mgdc(dat$seen_obs)
+log_ml_ptr <- get_mgdc_log_ml(mdgc_obj)
+start_val <- mgdc_start_value(mdgc_obj)
+
+# this is very fast so we can neglect this when we consider the computation 
+# time
+mark(`Setup time` = {
+  mdgc_obj <- get_mgdc(dat$seen_obs)
+  log_ml_ptr <- get_mgdc_log_ml(mdgc_obj)
+  start_val <- mgdc_start_value(mdgc_obj)
+}, min_iterations = 10)
+
+# fit the model using two different methods
+set.seed(60941821)
 system.time(
-  ptr <- mdgc:::get_log_lm_terms(lower = dat$lower, upper = dat$upper, 
-                                 code = dat$code))
+  fit_adam <- mgdc_fit(
+    ptr = log_ml_ptr, vcov = start_val, n_threads = 4L, 
+    lr = 1e-2, maxit = 5L, batch_size = 100L, method = "adam"))
+system.time(
+  fit_svrg <- mgdc_fit(
+    ptr = log_ml_ptr, vcov = start_val, n_threads = 4L, 
+    lr = 1e-3, maxit = 5L, batch_size = 100L, method = "svrg"))
 
-# approximates the log marginal likelihood function.
-#
-# Args: 
-#   vcov: correlation matrix.
-#   releps: relative error for each term. 
-#   n_threads: number of threads. 
-#   comp_derivs: logical for whether to approximate the gradient. 
-#   indices: integer vector with which terms to include. 
-#   do_reorder: logical for whether to use heuristic variable reordering.
-log_ml <- function(vcov, releps = 1e-2, n_threads = 4L, comp_derivs = FALSE, 
-                   indices = 0:(NCOL(dat$lower) - 1L), do_reorder = TRUE)
-  mdgc:::eval_log_lm_terms(
-    ptr = ptr, vcov = vcov, indices = indices, 
-    maxpts = 100000L, abseps = -1, releps = releps, n_threads = n_threads, 
-    comp_derivs = comp_derivs, do_reorder = do_reorder)
+# compare the log marginal likelihood 
+mgdc_log_ml(vcov = fit_adam$result, ptr = log_ml_ptr, releps = 1e-3)
+mgdc_log_ml(vcov = fit_svrg$result, ptr = log_ml_ptr, releps = 1e-3)
+
+# compare the estimated correlation matrix with the true value
+do_plot <- function(est, truth, main){
+  par_old <- par(mfcol = c(1, 3), mar  = c(1, 1, 4, 1))
+  on.exit(par(par_old))
+  sc <- colorRampPalette(c("Red", "White", "Blue"))(51)
+  
+  f <- function(x, main)
+    image(x[, NCOL(x):1], main = main, col = sc, zlim = c(-1, 1), 
+          xaxt = "n", yaxt = "n", bty = "n")
+  f(est, main)
+  f(truth, "Truth")
+  f(est - truth, "Difference")
+}
+
+do_plot(fit_adam$result, dat$Sigma, "Estimates (ADAM)")
+do_plot(fit_svrg$result, dat$Sigma, "Estimates (SVRG)")
+```
+
+### Detailed Example
+
+In this section, we show a more detailed example where we use some of the 
+non-exported functions package. This section is mainly included to give an 
+idea of what is going on under the hood. 
+
+```{r detailed, cache = 1, fig.height = 3, fig.width = 7}
+# assign function to evalute the log marginal likelihood
+log_ml <- function(...)
+  mgdc_log_ml(ptr = log_ml_ptr, ...)
 
 # print the approximate log marginal likelihood at the true parameters
 set.seed(1)
@@ -166,8 +203,7 @@ print(log_ml(dat$Sigma, n_threads = 4L, do_reorder = FALSE), digits = 7)
 sd(replicate(20, log_ml(dat$Sigma, n_threads = 4L, do_reorder = FALSE)))
 
 # check computation time
-library(microbenchmark)
-microbenchmark(
+mark(
   `1 thread                 ` = 
     log_ml(dat$Sigma                    , n_threads = 1L), 
   `1 thread  (w/o rordering)` = 
@@ -180,15 +216,15 @@ microbenchmark(
     log_ml(dat$Sigma                    , n_threads = 4L), 
   `4 threads (w/o rordering)` = 
     log_ml(dat$Sigma, do_reorder = FALSE, n_threads = 4L), 
-  times = 5)
+  min_iterations = 5, check = FALSE)
 
 #####
 # we can also get an approximation of the gradient
-t1 <- log_ml(dat$Sigma, comp_derivs = TRUE, n_threads = 1L)
-t2 <- log_ml(dat$Sigma, comp_derivs = TRUE, n_threads = 4L)
+t1 <- log_ml(dat$Sigma, comp_derivs = TRUE, n_threads = 1L, releps = 1e-3)
+t2 <- log_ml(dat$Sigma, comp_derivs = TRUE, n_threads = 4L, releps = 1e-3)
 all.equal(t1, t2, tolerance = 1e-2)
   
-microbenchmark(
+mark(
   `1 thread                 ` = 
     log_ml(dat$Sigma, comp_derivs = TRUE                    , n_threads = 1L), 
   `1 thread  (w/o rordering)` = 
@@ -201,7 +237,7 @@ microbenchmark(
     log_ml(dat$Sigma, comp_derivs = TRUE                    , n_threads = 4L), 
   `4 threads (w/o rordering)` = 
     log_ml(dat$Sigma, comp_derivs = TRUE, do_reorder = FALSE, n_threads = 4L), 
-  times = 5)
+  min_iterations = 5, check = FALSE)
 
 #####
 # the main code in the packages provides an approximation to the CDF similar 
@@ -227,8 +263,8 @@ use_this_pkg <- function(derivs = FALSE)
 use_mvtnorm()
 use_this_pkg()
 all.equal(c(use_mvtnorm()), c(use_this_pkg()), tolerance = 1e-5)
-microbenchmark(mvtnorm = use_mvtnorm(), mdgc = use_this_pkg(), 
-               times = 25)
+mark(mvtnorm = use_mvtnorm(), mdgc = use_this_pkg(), 
+     min_iterations = 25, check = FALSE)
 
 sd(replicate(25, use_mvtnorm()))
 sd(replicate(25, use_this_pkg()))
@@ -290,7 +326,7 @@ com_vec <- mdgc:::get_commutation_vec(p, p, FALSE)
 #   indices: integer vector with which terms to include. 
 par_fn <- function(par, seed = NULL, comp_derivs = FALSE, 
                    n_threads = 1L, releps = 1e-2, 
-                   indices = 0:(NCOL(dat$lower) - 1L)){
+                   indices = 0:(NROW(dat$seen_obs) - 1L)){
   if(!is.null(seed))
     set.seed(seed)
   Arg <- get_lchol_inv(par)
@@ -359,12 +395,12 @@ naiv_gradient_descent <- function(val, step_start, n_threads = 4L,
       new_fun <- par_fn(new_val, comp_derivs = FALSE, n_threads = n_threads, 
                         seed = seed)
       
-      # Wolfe conditions
+      # strong Wolfe conditions
       if(-new_fun <= -prev_fun + c1 * step * m){
         gr_new <- par_fn(new_val, comp_derivs = TRUE, n_threads = n_threads, 
                          seed = seed)
       
-        if(drop(attr(gr_new, "grad") %*% dir) >= c2 * m){
+        if(abs(drop(attr(gr_new, "grad") %*% dir)) >= c2 * m){
           val <- new_val
           break
         }
@@ -391,15 +427,7 @@ res$result
 dat$Sigma
 
 # or plot both of them and compare
-do_plot <- function(x, main){
-  sc <- colorRampPalette(c("Red", "White", "Blue"))(51)
-  image(x, main = main, col = sc, zlim = c(-1, 1), xaxt = "n", yaxt = "n", 
-        bty = "n")
-}
-par(mfcol = c(1, 3), mar  = c(1, 1, 4, 1))
-do_plot(res$result, "Estimates")
-do_plot(dat$Sigma, "Truth")
-do_plot(res$result - dat$Sigma, "Difference")
+do_plot(res$result, dat$Sigma, "Estimates")
 
 res$fun_vals # log marginal likelihood estimates at each iteration
 
@@ -416,7 +444,7 @@ res$fun_vals # log marginal likelihood estimates at each iteration
 adam <- function(val, batch_size, n_threads = 4L, maxit = 10L, 
                  seed = 1L, epsilon = 1e-8, alpha = .001, beta_1 = .9, 
                  beta_2 = .999){
-  indices <- sample(0:(NCOL(dat$lower) - 1L), replace = FALSE)
+  indices <- sample(0:(NROW(dat$seen_obs) - 1L), replace = FALSE)
   blocks <- tapply(indices, (seq_along(indices) - 1L) %/% batch_size, 
                    identity, simplify = FALSE)
   
@@ -468,10 +496,7 @@ res_adam$result
 dat$Sigma
 
 # use plot instead
-par(mfcol = c(1, 3), mar  = c(1, 1, 4, 1))
-do_plot(res_adam$result, "Estimates (ADAM)")
-do_plot(dat$Sigma, "Truth")
-do_plot(res_adam$result - dat$Sigma, "Difference")
+do_plot(res_adam$result, dat$Sigma, "Estimates (ADAM)")
 
 # look at the maximum log marginal likelihood both at the end and after 
 # each iteration
@@ -494,7 +519,7 @@ res_adam_org <- res_adam
 #   lr: learning rate. 
 svrg <- function(val, batch_size, n_threads = 4L, maxit = 10L, 
                  seed = 1L, lr){
-  all_indices <- 0:(NCOL(dat$lower) - 1L)
+  all_indices <- 0:(NROW(dat$seen_obs) - 1L)
   indices <- sample(all_indices, replace = FALSE)
   blocks <- tapply(indices, (seq_along(indices) - 1L) %/% batch_size, 
                    identity, simplify = FALSE)
@@ -547,10 +572,7 @@ res_svrg$result
 dat$Sigma
 
 # use plot instead
-par(mfcol = c(1, 3), mar  = c(1, 1, 4, 1))
-do_plot(res_svrg$result, "Estimates (SVRG)")
-do_plot(dat$Sigma, "Truth")
-do_plot(res_svrg$result - dat$Sigma, "Difference")
+do_plot(res_svrg$result, dat$Sigma, "Estimates (SVRG)")
 
 # look at the maximum log marginal likelihood both at the end and after 
 # each iteration
@@ -575,27 +597,25 @@ get_z_hat <- function(lower, upper, code){
   dim(out) <- dim(lower)
   out
 }
-tmp <- get_z_hat(dat$lower, dat$upper, dat$code)
+tmp <- get_z_hat(mdgc_obj$lower, mdgc_obj$upper, mdgc_obj$code)
 
 # we also have a C++ function to do this which is faster
 all.equal(tmp, mdgc:::get_z_hat(
-  dat$lower, dat$upper, dat$code, n_threads = 4L))
+  mdgc_obj$lower, mdgc_obj$upper, mdgc_obj$code, n_threads = 4L))
 
 # the latter is faster but both are relatively fast
-microbenchmark(
-  `R version  ` = get_z_hat(dat$lower, dat$upper, dat$code), 
+mark(
+  `R version  ` = get_z_hat(mdgc_obj$lower, mdgc_obj$upper, mdgc_obj$code), 
   `C++ verison` = mdgc:::get_z_hat(
-  dat$lower, dat$upper, dat$code, n_threads = 4L), times = 10)
+  mdgc_obj$lower, mdgc_obj$upper, mdgc_obj$code, n_threads = 4L), 
+  min_iterations = 10)
 
 # then we can compute an approximation of the covariance matrix as follows
 system.time(chat <- cov2cor(cov(t(tmp), use = "pairwise.complete.obs")))
 
 # the starting value is already quite close
-par(mfcol = c(1, 3), mar  = c(1, 1, 4, 1))
 norm(chat - dat$Sigma)
-do_plot(chat, "Starting value")
-do_plot(dat$Sigma, "Truth")
-do_plot(chat - dat$Sigma, "Difference")
+do_plot(chat, dat$Sigma, "Starting value")
 
 # run ADAM again 
 start_val <- get_lchol(chat)
@@ -613,11 +633,8 @@ system.time(res_adam_ser  <- adam(
 norm(res_adam$result - res_adam_ser$result)
 
 # plot estimate
-par(mfcol = c(1, 3), mar  = c(1, 1, 4, 1))
 norm(res_adam$result - dat$Sigma)
-do_plot(res_adam$result, "Estimates (ADAM)")
-do_plot(dat$Sigma, "Truth")
-do_plot(res_adam$result - dat$Sigma, "Difference")
+do_plot(res_adam$result, dat$Sigma, "Estimates (ADAM)")
 
 # check log marginal likelihood like before
 log_ml(res_adam$result)
@@ -637,10 +654,7 @@ res_svrg$result
 dat$Sigma
 
 # use plot instead
-par(mfcol = c(1, 3), mar  = c(1, 1, 4, 1))
-do_plot(res_svrg$result, "Estimates (SVRG)")
-do_plot(dat$Sigma, "Truth")
-do_plot(res_svrg$result - dat$Sigma, "Difference")
+do_plot(res_svrg$result, dat$Sigma, "Estimates (SVRG)")
 
 # look at the maximum log marginal likelihood both at the end and after 
 # each iteration

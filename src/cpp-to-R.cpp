@@ -29,8 +29,8 @@ struct ml_terms {
  * 1 is a missing value, and 2 is a value in an interval.
  */
 // [[Rcpp::export(rng = false)]]
-SEXP get_log_lm_terms(arma::mat const &lower, arma::mat const &upper,
-                      arma::imat const &code){
+SEXP get_log_lm_terms_cpp(arma::mat const &lower, arma::mat const &upper,
+                          arma::imat const &code){
   auto out = Rcpp::XPtr<ml_terms>(new ml_terms());
 
   size_t const n = lower.n_cols,

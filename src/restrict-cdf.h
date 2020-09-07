@@ -260,7 +260,7 @@ public:
    */
   static void eval_integrand(
       int const *ndim_in, double *unifs, int const *n_integrands_in,
-      double *integrand_val) MDGC_NOEXCEPT {
+      double * __restrict__ integrand_val) MDGC_NOEXCEPT {
     size_t const udim = ndim,
                  u_integrands = n_integrands;
 
@@ -272,8 +272,8 @@ public:
 #endif
 
     ptr_to_dat map_obj(wk_mem, udim, iwk_mem);
-    double * const out = integrand_val,
-           * const draw = map_obj.draw;
+    double * const __restrict__ out = integrand_val,
+           * const __restrict__ draw = map_obj.draw;
 
     double w(1.);
     double const * __restrict__ sc   = map_obj.sigma_chol,
