@@ -24,8 +24,8 @@ context("restrictcdf unit tests") {
  dput(sigma)
  dput(prob)
 */
-    Rcpp::RNGScope rngScope;
-    parallelrng::set_rng_seeds(1L);
+    std::vector<unsigned> seeds = { 1L };
+    parallelrng::set_rng_seeds(seeds);
 
     arma::vec mean;
     arma::mat sigma;
@@ -38,24 +38,24 @@ context("restrictcdf unit tests") {
     sigma.reshape(4L, 4L);
     restrictcdf::cdf<restrictcdf::likelihood>::set_working_memory(4L, 1L);
 
-    double const abseps = std::pow(std::numeric_limits<double>::epsilon(),
+    double const abs_eps = std::pow(std::numeric_limits<double>::epsilon(),
                                    .33);
     double constexpr E_prop(0.0181507102495727);
     {
       auto res = restrictcdf::cdf<restrictcdf::likelihood>(
-        mean, sigma, false).approximate(1000000L, abseps, -1);
+        mean, sigma, false).approximate(1000000L, abs_eps, -1);
 
       expect_true(res.inform == 0L);
-      expect_true(res.abserr                        < 100. * abseps);
-      expect_true(std::abs(res.finest[0L] - E_prop) < 100. * abseps);
+      expect_true(res.abserr                        < 100. * abs_eps);
+      expect_true(std::abs(res.finest[0L] - E_prop) < 100. * abs_eps);
     }
     {
       auto res = restrictcdf::cdf<restrictcdf::likelihood>(
-        mean, sigma, true).approximate(1000000L, abseps, -1);
+        mean, sigma, true).approximate(1000000L, abs_eps, -1);
 
       expect_true(res.inform == 0L);
-      expect_true(res.abserr                        < 100. * abseps);
-      expect_true(std::abs(res.finest[0L] - E_prop) < 100. * abseps);
+      expect_true(res.abserr                        < 100. * abs_eps);
+      expect_true(std::abs(res.finest[0L] - E_prop) < 100. * abs_eps);
     }
   }
 
@@ -79,8 +79,8 @@ context("restrictcdf unit tests") {
      dput(sigma)
      dput(prob)
      */
-    Rcpp::RNGScope rngScope;
-    parallelrng::set_rng_seeds(1L);
+    std::vector<unsigned> seeds = { 1L };
+    parallelrng::set_rng_seeds(seeds);
     constexpr double const Inf = std::numeric_limits<double>::infinity();
 
     arma::vec lower, upper, mean;
@@ -96,24 +96,24 @@ context("restrictcdf unit tests") {
     sigma.reshape(4L, 4L);
     restrictcdf::cdf<restrictcdf::likelihood>::set_working_memory(4L, 1L);
 
-    double const abseps = std::pow(std::numeric_limits<double>::epsilon(),
+    double const abs_eps = std::pow(std::numeric_limits<double>::epsilon(),
                                    .33);
     double constexpr E_prop(0.0693596863013216);
     {
       auto res = restrictcdf::cdf<restrictcdf::likelihood>(
-        lower, upper, mean, sigma, false).approximate(1000000L, abseps, -1);
+        lower, upper, mean, sigma, false).approximate(1000000L, abs_eps, -1);
 
       expect_true(res.inform == 0L);
-      expect_true(res.abserr                        < 100. * abseps);
-      expect_true(std::abs(res.finest[0L] - E_prop) < 100. * abseps);
+      expect_true(res.abserr                        < 100. * abs_eps);
+      expect_true(std::abs(res.finest[0L] - E_prop) < 100. * abs_eps);
     }
     {
       auto res = restrictcdf::cdf<restrictcdf::likelihood>(
-        lower, upper, mean, sigma, true).approximate(1000000L, abseps, -1);
+        lower, upper, mean, sigma, true).approximate(1000000L, abs_eps, -1);
 
       expect_true(res.inform == 0L);
-      expect_true(res.abserr                        < 100. * abseps);
-      expect_true(std::abs(res.finest[0L] - E_prop) < 100. * abseps);
+      expect_true(res.abserr                        < 100. * abs_eps);
+      expect_true(std::abs(res.finest[0L] - E_prop) < 100. * abs_eps);
     }
   }
 
@@ -269,8 +269,8 @@ context("restrictcdf unit tests") {
 
     dput(c(f_val, jac))
      */
-    Rcpp::RNGScope rngScope;
-    parallelrng::set_rng_seeds(1L);
+    std::vector<unsigned> seeds = { 1L };
+    parallelrng::set_rng_seeds(seeds);
 
     arma::vec mean;
     arma::mat sigma;
@@ -290,11 +290,11 @@ context("restrictcdf unit tests") {
            << 0.00453344700742309 << -0.000140031793841558 << 0.00134120630703679
            << 0.00191440588268495 << 0.00196875385020239 << -0.00114337234043834;
 
-    double const abseps = std::pow(
+    double const abs_eps = std::pow(
       std::numeric_limits<double>::epsilon(), .4);
     {
       auto res = restrictcdf::cdf<restrictcdf::deriv>(
-        mean, sigma, false).approximate(1000000L, abseps, -1);
+        mean, sigma, false).approximate(1000000L, abs_eps, -1);
 
       expect_true(res.inform == 0L);
       expect_true(res.finest.n_elem == expect.n_elem);
@@ -304,7 +304,7 @@ context("restrictcdf unit tests") {
     }
     {
       auto res = restrictcdf::cdf<restrictcdf::deriv>(
-        mean, sigma, true).approximate(1000000L, abseps, -1);
+        mean, sigma, true).approximate(1000000L, abs_eps, -1);
 
       expect_true(res.inform == 0L);
       expect_true(res.finest.n_elem == expect.n_elem);
@@ -348,8 +348,8 @@ context("restrictcdf unit tests") {
 
      dput(c(f_val, jac))
      */
-    Rcpp::RNGScope rngScope;
-    parallelrng::set_rng_seeds(1L);
+    std::vector<unsigned> seeds = { 1L };
+    parallelrng::set_rng_seeds(seeds);
 
     arma::vec lower, upper, mean;
     arma::mat sigma;
@@ -372,11 +372,11 @@ context("restrictcdf unit tests") {
            << 0.00120569609620797  << -0.00426153807790556 << 0.000511171228139317
            << -0.00150307105427825 << 0.000764221234825768 << -0.00178202876555804;
 
-    double const abseps = std::pow(
+    double const abs_eps = std::pow(
       std::numeric_limits<double>::epsilon(), .4);
     {
         auto res = restrictcdf::cdf<restrictcdf::deriv>(
-          lower, upper, mean, sigma, false).approximate(1000000L, abseps, -1);
+          lower, upper, mean, sigma, false).approximate(1000000L, abs_eps, -1);
 
         expect_true(res.inform == 0L);
         expect_true(res.finest.n_elem == expect.n_elem);
@@ -386,7 +386,7 @@ context("restrictcdf unit tests") {
     }
     {
       auto res = restrictcdf::cdf<restrictcdf::deriv>(
-        lower, upper, mean, sigma, true).approximate(1000000L, abseps, -1);
+        lower, upper, mean, sigma, true).approximate(1000000L, abs_eps, -1);
 
       expect_true(res.inform == 0L);
       expect_true(res.finest.n_elem == expect.n_elem);

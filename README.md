@@ -63,6 +63,13 @@ use the package.
 # load the packages we need
 library(bench)
 library(mdgc)
+library(missForest)
+#> Loading required package: randomForest
+#> randomForest 4.6-14
+#> Type rfNews() to see new features/changes/bug fixes.
+#> Loading required package: foreach
+#> Loading required package: itertools
+#> Loading required package: iterators
 ```
 
 ``` r
@@ -75,7 +82,7 @@ library(mdgc)
 # 
 # Returns: 
 #   Simluated masked data and true covariance matrix. 
-sim_dat <- function(n, p = 4, n_lvls = 5L){
+sim_dat <- function(n, p = 3L, n_lvls = 5L){
   # get the covariance matrix
   Sb <- diag(p)
   Sb[lower.tri(Sb)] <- Sb[upper.tri(Sb)] <- .5
@@ -140,41 +147,43 @@ head(dat$seen_obs)
 #> 6    B
 
 # assign objects needed for model estimation
-mdgc_obj <- get_mgdc(dat$seen_obs)
-log_ml_ptr <- get_mgdc_log_ml(mdgc_obj)
-start_val <- mgdc_start_value(mdgc_obj)
+mdgc_obj <- get_mdgc(dat$seen_obs)
+log_ml_ptr <- get_mdgc_log_ml(mdgc_obj)
+start_val <- mdgc_start_value(mdgc_obj)
 
 # this is very fast so we can neglect this when we consider the computation 
 # time
 mark(`Setup time` = {
-  mdgc_obj <- get_mgdc(dat$seen_obs)
-  log_ml_ptr <- get_mgdc_log_ml(mdgc_obj)
-  start_val <- mgdc_start_value(mdgc_obj)
+  mdgc_obj <- get_mdgc(dat$seen_obs)
+  log_ml_ptr <- get_mdgc_log_ml(mdgc_obj)
+  start_val <- mdgc_start_value(mdgc_obj)
 }, min_iterations = 10)
 #> # A tibble: 1 x 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Setup time   10.7ms     11ms      87.8    7.33MB     17.1
+#> 1 Setup time   17.3ms   18.1ms      51.5    8.85MB     12.3
 
 # fit the model using two different methods
 set.seed(60941821)
 system.time(
-  fit_adam <- mgdc_fit(
+  fit_adam <- mdgc_fit(
     ptr = log_ml_ptr, vcov = start_val, n_threads = 4L, 
     lr = 1e-2, maxit = 5L, batch_size = 100L, method = "adam"))
 #>    user  system elapsed 
-#>  15.105   0.003   4.052
+#>  14.732   0.001   3.961
 system.time(
-  fit_svrg <- mgdc_fit(
+  fit_svrg <- mdgc_fit(
     ptr = log_ml_ptr, vcov = start_val, n_threads = 4L, 
     lr = 1e-3, maxit = 5L, batch_size = 100L, method = "svrg"))
 #>    user  system elapsed 
-#>  31.619   0.003   8.564
+#>  30.178   0.008   8.151
+fit_svrg$fun_vals # log marginal likelihood after each iteration
+#> [1] -21725 -21707 -21703 -21702 -21702
 
 # compare the log marginal likelihood 
-mgdc_log_ml(vcov = fit_adam$result, ptr = log_ml_ptr, releps = 1e-3)
+mdgc_log_ml(vcov = fit_adam$result, ptr = log_ml_ptr, rel_eps = 1e-3)
 #> [1] -21703
-mgdc_log_ml(vcov = fit_svrg$result, ptr = log_ml_ptr, releps = 1e-3)
+mdgc_log_ml(vcov = fit_svrg$result, ptr = log_ml_ptr, rel_eps = 1e-3)
 #> [1] -21701
 
 # compare the estimated correlation matrix with the true value
@@ -202,6 +211,224 @@ do_plot(fit_svrg$result, dat$Sigma, "Estimates (SVRG)")
 
 <img src="man/figures/README-sim_dat-2.png" width="100%" />
 
+``` r
+
+# perform the imputation
+system.time(
+  imp_res <- mdgc_impute(mdgc_obj, fit_adam$result, rel_eps = 1e-3,
+                         maxit = 10000L, n_threads = 4L))
+#>    user  system elapsed 
+#>    5.62    0.00    1.89
+
+# look at the result for the one of the observations
+imp_res[2L]
+#> [[1]]
+#> [[1]]$X1
+#> [1] 0.441
+#> 
+#> [[1]]$X2
+#> [1] 1.85
+#> 
+#> [[1]]$X3
+#> [1] 0.132
+#> 
+#> [[1]]$X4
+#> [1] 0.215
+#> 
+#> [[1]]$X5
+#> [1] 0.0967
+#> 
+#> [[1]]$X6
+#>  FALSE   TRUE 
+#> 0.9141 0.0859 
+#> 
+#> [[1]]$X7
+#> FALSE  TRUE 
+#>     0     1 
+#> 
+#> [[1]]$X8
+#> FALSE  TRUE 
+#> 0.781 0.219 
+#> 
+#> [[1]]$X9
+#> FALSE  TRUE 
+#> 0.813 0.187 
+#> 
+#> [[1]]$X10
+#> FALSE  TRUE 
+#>     1     0 
+#> 
+#> [[1]]$X11
+#>      A      B      C      D      E 
+#> 0.2030 0.2792 0.2650 0.1795 0.0733 
+#> 
+#> [[1]]$X12
+#> A B C D E 
+#> 1 0 0 0 0 
+#> 
+#> [[1]]$X13
+#>      A      B      C      D      E 
+#> 0.2894 0.3555 0.2122 0.1170 0.0259 
+#> 
+#> [[1]]$X14
+#> A B C D E 
+#> 1 0 0 0 0 
+#> 
+#> [[1]]$X15
+#> A B C D E 
+#> 0 1 0 0 0
+
+# compare with the observed and true data
+rbind(truth = dat$truth_obs[2L, ], observed = dat$seen_obs[2L, ])
+#>             X1   X2    X3    X4      X5    X6   X7    X8    X9   X10  X11 X12
+#> truth    0.616 1.85 0.132 0.215 0.00782 FALSE TRUE FALSE FALSE FALSE    D   A
+#> observed    NA 1.85 0.132 0.215      NA    NA TRUE    NA    NA FALSE <NA>   A
+#>           X13 X14 X15
+#> truth       C   A   B
+#> observed <NA>   A   B
+
+# we can threshold the data like this
+threshold <- function(org_data, imputed){
+  # checks
+  stopifnot(NROW(org_data) == length(imputed), 
+            is.list(imputed), is.data.frame(org_data))
+  
+  # threshold
+  is_cont <- which(sapply(org_data, is.numeric))
+  is_bin  <- which(sapply(org_data, is.logical)) 
+  is_ord  <- which(sapply(org_data, is.ordered))
+  stopifnot(
+    length(is_cont) + length(is_bin) + length(is_ord) == NCOL(org_data))
+  is_cat <- c(is_bin, is_ord)
+  
+  out_cont <- as.data.frame(
+    t(sapply(imputed, function(x) unlist(x[is_cont]))))
+  out_cat <- as.data.frame(t(sapply(imputed, function(x) 
+    sapply(x[is_cat], which.max))))
+  out <- cbind(out_cont, out_cat)
+  
+  # set factor levels etc. 
+  out <- out[, order(c(is_cont, is_bin, is_ord))]
+  if(length(is_bin) > 0)
+    out[, is_bin] <- out[, is_bin] > 1L
+  if(length(is_ord) > 0)
+    for(i in is_ord){
+      out[[i]] <- ordered(
+        unlist(out[[i]]), labels = levels(org_data[, i]))
+    }
+  
+  colnames(out) <- colnames(org_data)
+  out
+}
+thresh_dat <- threshold(dat$seen_obs, imp_res)
+
+# compare thresholded data with observed and true data
+head(thresh_dat)
+#>      X1    X2    X3    X4     X5    X6    X7    X8    X9   X10 X11 X12 X13 X14
+#> 1 0.560 0.797 0.869 0.812 0.8000  TRUE  TRUE  TRUE  TRUE  TRUE   C   D   C   C
+#> 2 0.441 1.845 0.132 0.215 0.0967 FALSE  TRUE FALSE FALSE FALSE   B   A   B   A
+#> 3 1.435 0.664 0.609 0.575 0.8906  TRUE  TRUE  TRUE FALSE  TRUE   A   D   B   C
+#> 4 0.636 0.406 0.455 0.227 1.7270  TRUE FALSE  TRUE FALSE  TRUE   C   B   B   B
+#> 5 0.664 1.056 1.334 1.138 1.0669  TRUE  TRUE FALSE  TRUE  TRUE   E   E   D   D
+#> 6 0.285 0.262 0.309 0.178 0.1564 FALSE FALSE FALSE FALSE FALSE   A   A   B   A
+#>   X15
+#> 1   D
+#> 2   B
+#> 3   C
+#> 4   B
+#> 5   D
+#> 6   B
+head(dat$seen_obs)  # observed data
+#>      X1   X2    X3    X4    X5    X6    X7    X8    X9   X10  X11  X12  X13 X14
+#> 1 0.560   NA    NA 0.812 0.800  TRUE    NA  TRUE    NA    NA    C    D    C   C
+#> 2    NA 1.85 0.132 0.215    NA    NA  TRUE    NA    NA FALSE <NA>    A <NA>   A
+#> 3 1.435   NA    NA 0.575 0.891  TRUE  TRUE  TRUE    NA  TRUE    A <NA>    B   C
+#> 4 0.636   NA 0.455 0.227 1.727  TRUE FALSE  TRUE FALSE  TRUE    C    B <NA>   B
+#> 5 0.664   NA 1.334    NA    NA  TRUE  TRUE FALSE    NA    NA    E <NA>    D   D
+#> 6 0.285   NA 0.309 0.178 0.156 FALSE    NA FALSE    NA    NA <NA>    A    B   A
+#>    X15
+#> 1    D
+#> 2    B
+#> 3 <NA>
+#> 4 <NA>
+#> 5 <NA>
+#> 6    B
+head(dat$truth_obs) # true data
+#>      X1    X2    X3    X4      X5    X6    X7    X8    X9   X10 X11 X12 X13 X14
+#> 1 0.560 1.034 0.862 0.812 0.79996  TRUE  TRUE  TRUE FALSE FALSE   C   D   C   C
+#> 2 0.616 1.845 0.132 0.215 0.00782 FALSE  TRUE FALSE FALSE FALSE   D   A   C   A
+#> 3 1.435 1.089 1.390 0.575 0.89061  TRUE  TRUE  TRUE FALSE  TRUE   A   D   B   C
+#> 4 0.636 0.409 0.455 0.227 1.72698  TRUE FALSE  TRUE FALSE  TRUE   C   B   D   B
+#> 5 0.664 1.218 1.334 3.924 0.98331  TRUE  TRUE FALSE  TRUE  TRUE   E   C   D   D
+#> 6 0.285 0.054 0.309 0.178 0.15641 FALSE FALSE FALSE FALSE FALSE   A   A   B   A
+#>   X15
+#> 1   D
+#> 2   B
+#> 3   D
+#> 4   D
+#> 5   E
+#> 6   B
+
+# compare correct categories
+get_classif_error <- function(impu_dat){
+  is_cat <- sapply(dat$truth_obs, function(x)
+    is.logical(x) || is.ordered(x))
+  is_match <- impu_dat[, is_cat] == dat$truth_obs[, is_cat]
+  is_match[!is.na(dat$seen_obs[, is_cat])] <- NA_integer_
+  1 - colMeans(is_match, na.rm = TRUE)
+}
+get_classif_error(thresh_dat)
+#>    X6    X7    X8    X9   X10   X11   X12   X13   X14   X15 
+#> 0.254 0.284 0.240 0.254 0.233 0.623 0.630 0.599 0.586 0.589
+
+# compare RMSE
+get_rmse <- function(impu_dat){
+  is_con <- sapply(dat$truth_obs, is.numeric)
+  err <- as.matrix(impu_dat[, is_con] - dat$truth_obs[, is_con])
+  err[!is.na(dat$seen_obs[, is_con])] <- NA_real_
+  sqrt(colMeans(err^2, na.rm = TRUE))
+}
+get_rmse(thresh_dat)
+#>    X1    X2    X3    X4    X5 
+#> 0.812 0.880 0.717 0.788 0.763
+
+# we can compare this with missForest
+miss_forest_arg <- dat$seen_obs
+is_log <- sapply(miss_forest_arg, is.logical)
+miss_forest_arg[, is_log] <- lapply(miss_forest_arg[, is_log], as.factor)
+set.seed(1)
+system.time(miss_res <- missForest(miss_forest_arg))
+#>   missForest iteration 1 in progress...done!
+#>   missForest iteration 2 in progress...done!
+#>   missForest iteration 3 in progress...done!
+#>   missForest iteration 4 in progress...done!
+#>   missForest iteration 5 in progress...done!
+#>   missForest iteration 6 in progress...done!
+#>   missForest iteration 7 in progress...done!
+#>   missForest iteration 8 in progress...done!
+#>   missForest iteration 9 in progress...done!
+#>   missForest iteration 10 in progress...done!
+#>    user  system elapsed 
+#>  48.559   0.032  48.591
+
+# turn binary variables back to logicals
+miss_res$ximp[, is_log] <- lapply(
+  miss_res$ximp[, is_log], function(x) as.integer(x) > 1L)
+
+rbind(
+  mdgc       = get_classif_error(thresh_dat),
+  missForest = get_classif_error(miss_res$ximp))
+#>               X6    X7    X8    X9   X10   X11   X12   X13   X14   X15
+#> mdgc       0.254 0.284 0.240 0.254 0.233 0.623 0.630 0.599 0.586 0.589
+#> missForest 0.262 0.279 0.264 0.259 0.255 0.635 0.635 0.637 0.608 0.611
+rbind(
+  mdgc       = get_rmse(thresh_dat),
+  missForest = get_rmse(miss_res$ximp))
+#>               X1    X2    X3    X4    X5
+#> mdgc       0.812 0.880 0.717 0.788 0.763
+#> missForest 0.867 0.897 0.742 0.808 0.791
+```
+
 ### Detailed Example
 
 In this section, we show a more detailed example where we use some of
@@ -211,7 +438,7 @@ give an idea of what is going on under the hood.
 ``` r
 # assign function to evalute the log marginal likelihood
 log_ml <- function(...)
-  mgdc_log_ml(ptr = log_ml_ptr, ...)
+  mdgc_log_ml(ptr = log_ml_ptr, ...)
 
 # print the approximate log marginal likelihood at the true parameters
 set.seed(1)
@@ -248,17 +475,17 @@ mark(
 #> # A tibble: 6 x 6
 #>   expression                     min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>                <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 1 thread                     494ms    495ms      2.01    33.9KB        0
-#> 2 1 thread  (w/o rordering)    760ms    771ms      1.29    33.9KB        0
-#> 3 2 threads                    260ms    265ms      3.79    33.9KB        0
-#> 4 2 threads (w/o rordering)    398ms    421ms      2.40    33.9KB        0
-#> 5 4 threads                    135ms    138ms      7.16    33.9KB        0
-#> 6 4 threads (w/o rordering)    225ms    230ms      4.37    33.9KB        0
+#> 1 1 thread                     486ms    487ms      2.05    33.9KB        0
+#> 2 1 thread  (w/o rordering)    727ms    741ms      1.35    33.9KB        0
+#> 3 2 threads                    251ms    255ms      3.94    33.9KB        0
+#> 4 2 threads (w/o rordering)    371ms    386ms      2.58    33.9KB        0
+#> 5 4 threads                    126ms    129ms      7.77    33.9KB        0
+#> 6 4 threads (w/o rordering)    208ms    215ms      4.64    33.9KB        0
 
 #####
 # we can also get an approximation of the gradient
-t1 <- log_ml(dat$Sigma, comp_derivs = TRUE, n_threads = 1L, releps = 1e-3)
-t2 <- log_ml(dat$Sigma, comp_derivs = TRUE, n_threads = 4L, releps = 1e-3)
+t1 <- log_ml(dat$Sigma, comp_derivs = TRUE, n_threads = 1L, rel_eps = 1e-3)
+t2 <- log_ml(dat$Sigma, comp_derivs = TRUE, n_threads = 4L, rel_eps = 1e-3)
 all.equal(t1, t2, tolerance = 1e-2)
 #> [1] TRUE
   
@@ -279,12 +506,12 @@ mark(
 #> # A tibble: 6 x 6
 #>   expression                     min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>                <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 1 thread                     2.35s    2.38s     0.419    35.7KB        0
-#> 2 1 thread  (w/o rordering)    4.13s    4.28s     0.234    35.7KB        0
-#> 3 2 threads                    1.22s    1.26s     0.784    35.7KB        0
-#> 4 2 threads (w/o rordering)    2.13s    2.17s     0.456    35.7KB        0
-#> 5 4 threads                 664.58ms 685.15ms     1.45     35.7KB        0
-#> 6 4 threads (w/o rordering)    1.16s    1.23s     0.822    35.7KB        0
+#> 1 1 thread                     2.29s    2.34s     0.430    35.7KB        0
+#> 2 1 thread  (w/o rordering)    4.08s    4.09s     0.242    35.7KB        0
+#> 3 2 threads                    1.18s    1.24s     0.810    35.7KB        0
+#> 4 2 threads (w/o rordering)    2.09s     2.1s     0.474    35.7KB        0
+#> 5 4 threads                 672.61ms 698.88ms     1.44     35.7KB        0
+#> 6 4 threads (w/o rordering)    1.19s    1.25s     0.807    35.7KB        0
 
 #####
 # the main code in the packages provides an approximation to the CDF similar 
@@ -305,7 +532,7 @@ use_mvtnorm <- function()
     algorithm = GenzBretz(maxpts = 100000L, abseps = -1, releps = 1e-5))
 use_this_pkg <- function(derivs = FALSE)
   mdgc:::pmvnorm(lower = lower_ex, upper = upper_ex, mu = m_ex, 
-                 Sigma = S_ex, maxvls = 100000L, abseps = -1, releps = 1e-5, 
+                 Sigma = S_ex, maxvls = 100000L, abs_eps = -1, rel_eps = 1e-5, 
                  derivs = derivs)
 use_mvtnorm()
 #> [1] 0.00136
@@ -329,13 +556,13 @@ mark(mvtnorm = use_mvtnorm(), mdgc = use_this_pkg(),
 #> # A tibble: 2 x 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 mvtnorm      1.07ms   3.61ms      258.    4.43KB     2.01
-#> 2 mdgc         3.02ms   7.59ms      134.    2.49KB     0
+#> 1 mvtnorm      1.07ms   4.46ms      261.    4.43KB        0
+#> 2 mdgc         2.91ms   7.28ms      143.    2.49KB        0
 
 sd(replicate(25, use_mvtnorm()))
-#> [1] 3.29e-09
+#> [1] 4.47e-09
 sd(replicate(25, use_this_pkg()))
-#> [1] 2.96e-09
+#> [1] 3.63e-09
 
 # the latter function can also provide gradients with respect to the mean 
 # and covariance matrix
@@ -394,17 +621,17 @@ com_vec <- mdgc:::get_commutation_vec(p, p, FALSE)
 #   seed: seed to use.  
 #   comp_derivs: logical for whether to approximate the gradient. 
 #   n_threads: number of threads. 
-#   releps: relative error for each term.
+#   rel_eps: relative error for each term.
 #   indices: integer vector with which terms to include. 
 par_fn <- function(par, seed = NULL, comp_derivs = FALSE, 
-                   n_threads = 1L, releps = 1e-2, 
+                   n_threads = 1L, rel_eps = 1e-2, 
                    indices = 0:(NROW(dat$seen_obs) - 1L)){
   if(!is.null(seed))
     set.seed(seed)
   Arg <- get_lchol_inv(par)
   
   res <- log_ml(Arg, comp_derivs = comp_derivs, indices = indices,
-                n_threads = n_threads, releps = releps)
+                n_threads = n_threads, rel_eps = rel_eps)
   log_ml <- c(res)
   if(comp_derivs){
     gr <- attr(res, "grad")
@@ -427,10 +654,10 @@ par_fn <- function(par, seed = NULL, comp_derivs = FALSE,
 # check that the function gives the correct log marginal likelihood
 # approximation and gradient approximation.
 lSig <- get_lchol(dat$Sigma)
-r1 <- par_fn(lSig, comp_derivs = TRUE, n_threads = 4L, releps = 1e-3, 
+r1 <- par_fn(lSig, comp_derivs = TRUE, n_threads = 4L, rel_eps = 1e-3, 
              indices = 1:100)
 r2 <- numDeriv::jacobian(par_fn, lSig, seed = 1L, n_threads = 6L, 
-                         releps = 1e-3, indices = 1:100)
+                         rel_eps = 1e-3, indices = 1:100)
 all.equal(attr(r1, "grad"), drop(r2), tolerance = 1e-2)
 #> [1] TRUE
 
@@ -494,7 +721,7 @@ start_val <- numeric(p * (p + 1) / 2)
 system.time(res <- naiv_gradient_descent(val = start_val, step_start = .001, 
                                          maxit = 20L, eps = 1e-2))
 #>    user  system elapsed 
-#>  85.122   0.004  21.862
+#>  85.187   0.008  21.913
 
 # compare estimates with truth
 norm(res$result - dat$Sigma)
@@ -637,7 +864,7 @@ set.seed(1)
 system.time(res_adam  <- adam(
   val = start_val, alpha = 1e-2, maxit = 10L, batch_size = 100L))
 #>    user  system elapsed 
-#>  34.358   0.004   9.392
+#>   33.86    0.00    9.25
 
 # compare estimates with the truth
 norm(res_adam$result - dat$Sigma)
@@ -724,7 +951,7 @@ log_ml(res_adam$result)
 funvals_adam_org <- 
   apply(res_adam$estimates, 2L, function(x) log_ml(get_lchol_inv(x)))
 funvals_adam_org
-#>  [1] -22679 -22055 -21846 -21775 -21740 -21720 -21710 -21706 -21704 -21703
+#>  [1] -22679 -22055 -21846 -21775 -21740 -21721 -21710 -21706 -21704 -21703
 res_adam$fun_vals # likely lower bounds on the log-marginal likelihood
 #>  [1] -23903 -22346 -21953 -21829 -21780 -21755 -21742 -21735 -21732 -21731
 res_adam_org <- res_adam
@@ -788,7 +1015,7 @@ set.seed(1)
 system.time(res_svrg  <- svrg(
   val = start_val, lr = 1e-3, maxit = 10L, batch_size = 100L))
 #>    user  system elapsed 
-#>    68.4     0.0    18.7
+#>  67.162   0.019  18.395
 
 # compare estimates with the truth
 norm(res_svrg$result - dat$Sigma)
@@ -909,8 +1136,8 @@ mark(
 #> # A tibble: 2 x 6
 #>   expression       min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>  <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 R version     76.8ms   82.5ms      12.1    1019KB    32.6 
-#> 2 C++ verison  698.6µs  767.6µs    1246.      234KB     6.00
+#> 1 R version     71.9ms   80.1ms      12.0    1020KB     37.3
+#> 2 C++ verison  184.6µs  230.1µs    3675.      234KB     18.0
 
 # then we can compute an approximation of the covariance matrix as follows
 system.time(chat <- cov2cor(cov(t(tmp), use = "pairwise.complete.obs")))
@@ -933,7 +1160,7 @@ set.seed(1)
 system.time(res_adam  <- adam(
   val = start_val, alpha = 1e-2, maxit = 5L, batch_size = 100L))
 #>    user  system elapsed 
-#>  16.618   0.004   4.503
+#>   16.35    0.00    4.41
 
 # for comparisons, we also run the code using one thread
 set.seed(1)
@@ -941,7 +1168,7 @@ system.time(res_adam_ser  <- adam(
   val = start_val, alpha = 1e-2, maxit = 5L, batch_size = 100L, 
   n_threads = 1L))
 #>    user  system elapsed 
-#>    12.6     0.0    12.6
+#>  11.899   0.004  11.910
 
 # we get (roughly) the same
 norm(res_adam$result - res_adam_ser$result)
@@ -972,7 +1199,7 @@ set.seed(1)
 system.time(res_svrg  <- svrg(
   val = start_val, lr = 1e-3, maxit = 5L, batch_size = 100L))
 #>    user  system elapsed 
-#>  32.797   0.004   8.970
+#>   32.03    0.00    8.77
 
 # compare estimates with the truth
 norm(res_svrg$result - dat$Sigma)

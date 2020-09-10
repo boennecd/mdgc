@@ -46,13 +46,13 @@ context("pmvnorm unit tests") {
           << -4.177 << 7.966;
     sigma.reshape(4L, 4L);
 
-    double const abseps = std::sqrt(std::numeric_limits<double>::epsilon());
+    double const abs_eps = std::sqrt(std::numeric_limits<double>::epsilon());
     {
-      auto res = pmvnorm::cdf(lower, upper, mean, sigma, 1000000L, abseps,
+      auto res = pmvnorm::cdf(lower, upper, mean, sigma, 1000000L, abs_eps,
                               -1);
       expect_true(res.inform == 0L);
-      expect_true(res.error                                < 100. * abseps);
-      expect_true(std::abs(res.value - 0.0196461341023563) < 100. * abseps);
+      expect_true(res.error                                < 100. * abs_eps);
+      expect_true(std::abs(res.value - 0.0196461341023563) < 100. * abs_eps);
     }
 
     auto const infin = pmvnorm::get_infin(lower, upper);
@@ -64,10 +64,10 @@ context("pmvnorm unit tests") {
 
     {
       auto res = pmvnorm::cdf(lower, upper, infin, mean,
-                              cor_vec_res.cor_vec, 1000000L, abseps, -1);
+                              cor_vec_res.cor_vec, 1000000L, abs_eps, -1);
       expect_true(res.inform == 0L);
-      expect_true(res.error                                < 100. * abseps);
-      expect_true(std::abs(res.value - 0.0196461341023563) < 100. * abseps);
+      expect_true(res.error                                < 100. * abs_eps);
+      expect_true(std::abs(res.value - 0.0196461341023563) < 100. * abs_eps);
     }
   }
 }

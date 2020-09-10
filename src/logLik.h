@@ -47,18 +47,19 @@ public:
    * likelihood term.
    * @param derivs Matrix with derivatives to increament.
    * @param maxpts Maximum number of integrand evaluations.
-   * @param abseps Absolute convergence threshold.
-   * @param releps Relative convergence threshold.
+   * @param abs_eps Absolute convergence threshold.
+   * @param rel_eps Relative convergence threshold.
    * @param comp_deriv true if the derivative should be computed.
    * @param do_reorder true if the order of integrations may be reordered.
+   * @param minvls Minimum number of samples.
    *
    * @return the log marginal likelihood approximation.
    *
    */
   double approximate(arma::mat const &vcov, arma::mat &derivs,
-                     int const maxpts, double const abseps,
-                     double const releps, bool const comp_deriv,
-                     bool const do_reorder) const;
+                     int const maxpts, double const abs_eps,
+                     double const rel_eps, bool const comp_deriv,
+                     bool const do_reorder, size_t const minvls) const;
 
   /**
    * sets the working memory. Must be called prior to calling approximate.

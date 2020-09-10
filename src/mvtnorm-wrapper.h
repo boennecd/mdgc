@@ -33,12 +33,12 @@ struct cdf_res {
  * @param mean Mean vector.
  * @param cov Covariance matrix.
  * @param maxpts Maximum number of integrand evaluations.
- * @param abseps Absolute convergence threshold.
- * @param releps Relative convergence threshold.
+ * @param abs_eps Absolute convergence threshold.
+ * @param rel_eps Relative convergence threshold.
  */
 cdf_res cdf(arma::vec lower, arma::vec upper, arma::vec mean,
             arma::mat const &cov, int const maxpts = -1L,
-            double const abseps = -1, double const releps = 1e-5);
+            double const abs_eps = -1, double const rel_eps = 1e-5);
 
 /**
  * Approximates the multivariate normal CDF over a hyperrectangle.
@@ -49,13 +49,13 @@ cdf_res cdf(arma::vec lower, arma::vec upper, arma::vec mean,
  * @param mean Mean vector.
  * @param cor_vec upper triangle of the correlation matrix.
  * @param maxpts Maximum number of integrand evaluations.
- * @param abseps Absolute convergence threshold.
- * @param releps Relative convergence threshold.
+ * @param abs_eps Absolute convergence threshold.
+ * @param rel_eps Relative convergence threshold.
  */
 cdf_res cdf(arma::vec const &lower, arma::vec const &upper,
             arma::ivec const &infin, arma::vec const &mean,
             arma::vec const &cor_vec, int const maxpts = -1L,
-            double const abseps = -1, double const releps = 1e-5);
+            double const abs_eps = -1, double const rel_eps = 1e-5);
 }
 
 #endif

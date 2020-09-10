@@ -5,16 +5,16 @@ get_log_lm_terms_cpp <- function(lower, upper, code) {
     .Call(`_mdgc_get_log_lm_terms_cpp`, lower, upper, code)
 }
 
-eval_log_lm_terms <- function(ptr, indices, vcov, maxpts, abseps, releps, n_threads, comp_derivs, do_reorder = TRUE) {
-    .Call(`_mdgc_eval_log_lm_terms`, ptr, indices, vcov, maxpts, abseps, releps, n_threads, comp_derivs, do_reorder)
+eval_log_lm_terms <- function(ptr, indices, vcov, maxpts, abs_eps, rel_eps, n_threads, comp_derivs, minvls, do_reorder = TRUE) {
+    .Call(`_mdgc_eval_log_lm_terms`, ptr, indices, vcov, maxpts, abs_eps, rel_eps, n_threads, comp_derivs, minvls, do_reorder)
 }
 
 get_z_hat <- function(lower, upper, code, n_threads) {
     .Call(`_mdgc_get_z_hat`, lower, upper, code, n_threads)
 }
 
-pmvnorm <- function(lower, upper, mu, Sigma, maxvls, abseps, releps, derivs, do_reorder = TRUE) {
-    .Call(`_mdgc_pmvnorm_to_R`, lower, upper, mu, Sigma, maxvls, abseps, releps, derivs, do_reorder)
+pmvnorm <- function(lower, upper, mu, Sigma, maxvls, abs_eps, rel_eps, derivs, do_reorder = TRUE) {
+    .Call(`_mdgc_pmvnorm_to_R`, lower, upper, mu, Sigma, maxvls, abs_eps, rel_eps, derivs, do_reorder)
 }
 
 get_commutation <- function(n, m) {
@@ -27,5 +27,9 @@ get_commutation_vec <- function(n, m, transpose) {
 
 x_dot_X_kron_I <- function(x, X, l) {
     .Call(`_mdgc_x_dot_X_kron_I_wrap`, x, X, l)
+}
+
+impute <- function(lower, upper, code, Sigma, truth, margs, rel_eps, abs_eps, maxit, passed_names, outer_names, n_threads, do_reorder, minvls) {
+    .Call(`_mdgc_impute`, lower, upper, code, Sigma, truth, margs, rel_eps, abs_eps, maxit, passed_names, outer_names, n_threads, do_reorder, minvls)
 }
 

@@ -73,6 +73,7 @@ the package.
 # load the packages we need
 library(bench)
 library(mdgc)
+library(missForest)
 ```
 
 ```{r sim_dat, cache = 1, fig.height = 3, fig.width = 7}
@@ -85,7 +86,7 @@ library(mdgc)
 # 
 # Returns: 
 #   Simluated masked data and true covariance matrix. 
-sim_dat <- function(n, p = 4, n_lvls = 5L){
+sim_dat <- function(n, p = 3L, n_lvls = 5L){
   # get the covariance matrix
   Sb <- diag(p)
   Sb[lower.tri(Sb)] <- Sb[upper.tri(Sb)] <- .5
@@ -136,32 +137,33 @@ dat <- sim_dat(2000L, p = p)
 head(dat$seen_obs)
 
 # assign objects needed for model estimation
-mdgc_obj <- get_mgdc(dat$seen_obs)
-log_ml_ptr <- get_mgdc_log_ml(mdgc_obj)
-start_val <- mgdc_start_value(mdgc_obj)
+mdgc_obj <- get_mdgc(dat$seen_obs)
+log_ml_ptr <- get_mdgc_log_ml(mdgc_obj)
+start_val <- mdgc_start_value(mdgc_obj)
 
 # this is very fast so we can neglect this when we consider the computation 
 # time
 mark(`Setup time` = {
-  mdgc_obj <- get_mgdc(dat$seen_obs)
-  log_ml_ptr <- get_mgdc_log_ml(mdgc_obj)
-  start_val <- mgdc_start_value(mdgc_obj)
+  mdgc_obj <- get_mdgc(dat$seen_obs)
+  log_ml_ptr <- get_mdgc_log_ml(mdgc_obj)
+  start_val <- mdgc_start_value(mdgc_obj)
 }, min_iterations = 10)
 
 # fit the model using two different methods
 set.seed(60941821)
 system.time(
-  fit_adam <- mgdc_fit(
+  fit_adam <- mdgc_fit(
     ptr = log_ml_ptr, vcov = start_val, n_threads = 4L, 
     lr = 1e-2, maxit = 5L, batch_size = 100L, method = "adam"))
 system.time(
-  fit_svrg <- mgdc_fit(
+  fit_svrg <- mdgc_fit(
     ptr = log_ml_ptr, vcov = start_val, n_threads = 4L, 
     lr = 1e-3, maxit = 5L, batch_size = 100L, method = "svrg"))
+fit_svrg$fun_vals # log marginal likelihood after each iteration
 
 # compare the log marginal likelihood 
-mgdc_log_ml(vcov = fit_adam$result, ptr = log_ml_ptr, releps = 1e-3)
-mgdc_log_ml(vcov = fit_svrg$result, ptr = log_ml_ptr, releps = 1e-3)
+mdgc_log_ml(vcov = fit_adam$result, ptr = log_ml_ptr, rel_eps = 1e-3)
+mdgc_log_ml(vcov = fit_svrg$result, ptr = log_ml_ptr, rel_eps = 1e-3)
 
 # compare the estimated correlation matrix with the true value
 do_plot <- function(est, truth, main){
@@ -179,6 +181,94 @@ do_plot <- function(est, truth, main){
 
 do_plot(fit_adam$result, dat$Sigma, "Estimates (ADAM)")
 do_plot(fit_svrg$result, dat$Sigma, "Estimates (SVRG)")
+
+# perform the imputation
+system.time(
+  imp_res <- mdgc_impute(mdgc_obj, fit_adam$result, rel_eps = 1e-3,
+                         maxit = 10000L, n_threads = 4L))
+
+# look at the result for the one of the observations
+imp_res[2L]
+
+# compare with the observed and true data
+rbind(truth = dat$truth_obs[2L, ], observed = dat$seen_obs[2L, ])
+
+# we can threshold the data like this
+threshold <- function(org_data, imputed){
+  # checks
+  stopifnot(NROW(org_data) == length(imputed), 
+            is.list(imputed), is.data.frame(org_data))
+  
+  # threshold
+  is_cont <- which(sapply(org_data, is.numeric))
+  is_bin  <- which(sapply(org_data, is.logical)) 
+  is_ord  <- which(sapply(org_data, is.ordered))
+  stopifnot(
+    length(is_cont) + length(is_bin) + length(is_ord) == NCOL(org_data))
+  is_cat <- c(is_bin, is_ord)
+  
+  out_cont <- as.data.frame(
+    t(sapply(imputed, function(x) unlist(x[is_cont]))))
+  out_cat <- as.data.frame(t(sapply(imputed, function(x) 
+    sapply(x[is_cat], which.max))))
+  out <- cbind(out_cont, out_cat)
+  
+  # set factor levels etc. 
+  out <- out[, order(c(is_cont, is_bin, is_ord))]
+  if(length(is_bin) > 0)
+    out[, is_bin] <- out[, is_bin] > 1L
+  if(length(is_ord) > 0)
+    for(i in is_ord){
+      out[[i]] <- ordered(
+        unlist(out[[i]]), labels = levels(org_data[, i]))
+    }
+  
+  colnames(out) <- colnames(org_data)
+  out
+}
+thresh_dat <- threshold(dat$seen_obs, imp_res)
+
+# compare thresholded data with observed and true data
+head(thresh_dat)
+head(dat$seen_obs)  # observed data
+head(dat$truth_obs) # true data
+
+# compare correct categories
+get_classif_error <- function(impu_dat){
+  is_cat <- sapply(dat$truth_obs, function(x)
+    is.logical(x) || is.ordered(x))
+  is_match <- impu_dat[, is_cat] == dat$truth_obs[, is_cat]
+  is_match[!is.na(dat$seen_obs[, is_cat])] <- NA_integer_
+  1 - colMeans(is_match, na.rm = TRUE)
+}
+get_classif_error(thresh_dat)
+
+# compare RMSE
+get_rmse <- function(impu_dat){
+  is_con <- sapply(dat$truth_obs, is.numeric)
+  err <- as.matrix(impu_dat[, is_con] - dat$truth_obs[, is_con])
+  err[!is.na(dat$seen_obs[, is_con])] <- NA_real_
+  sqrt(colMeans(err^2, na.rm = TRUE))
+}
+get_rmse(thresh_dat)
+
+# we can compare this with missForest
+miss_forest_arg <- dat$seen_obs
+is_log <- sapply(miss_forest_arg, is.logical)
+miss_forest_arg[, is_log] <- lapply(miss_forest_arg[, is_log], as.factor)
+set.seed(1)
+system.time(miss_res <- missForest(miss_forest_arg))
+
+# turn binary variables back to logicals
+miss_res$ximp[, is_log] <- lapply(
+  miss_res$ximp[, is_log], function(x) as.integer(x) > 1L)
+
+rbind(
+  mdgc       = get_classif_error(thresh_dat),
+  missForest = get_classif_error(miss_res$ximp))
+rbind(
+  mdgc       = get_rmse(thresh_dat),
+  missForest = get_rmse(miss_res$ximp))
 ```
 
 ### Detailed Example
@@ -190,7 +280,7 @@ idea of what is going on under the hood.
 ```{r detailed, cache = 1, fig.height = 3, fig.width = 7}
 # assign function to evalute the log marginal likelihood
 log_ml <- function(...)
-  mgdc_log_ml(ptr = log_ml_ptr, ...)
+  mdgc_log_ml(ptr = log_ml_ptr, ...)
 
 # print the approximate log marginal likelihood at the true parameters
 set.seed(1)
@@ -223,8 +313,8 @@ mark(
 
 #####
 # we can also get an approximation of the gradient
-t1 <- log_ml(dat$Sigma, comp_derivs = TRUE, n_threads = 1L, releps = 1e-3)
-t2 <- log_ml(dat$Sigma, comp_derivs = TRUE, n_threads = 4L, releps = 1e-3)
+t1 <- log_ml(dat$Sigma, comp_derivs = TRUE, n_threads = 1L, rel_eps = 1e-3)
+t2 <- log_ml(dat$Sigma, comp_derivs = TRUE, n_threads = 4L, rel_eps = 1e-3)
 all.equal(t1, t2, tolerance = 1e-2)
   
 mark(
@@ -261,7 +351,7 @@ use_mvtnorm <- function()
     algorithm = GenzBretz(maxpts = 100000L, abseps = -1, releps = 1e-5))
 use_this_pkg <- function(derivs = FALSE)
   mdgc:::pmvnorm(lower = lower_ex, upper = upper_ex, mu = m_ex, 
-                 Sigma = S_ex, maxvls = 100000L, abseps = -1, releps = 1e-5, 
+                 Sigma = S_ex, maxvls = 100000L, abs_eps = -1, rel_eps = 1e-5, 
                  derivs = derivs)
 use_mvtnorm()
 use_this_pkg()
@@ -325,17 +415,17 @@ com_vec <- mdgc:::get_commutation_vec(p, p, FALSE)
 #   seed: seed to use.  
 #   comp_derivs: logical for whether to approximate the gradient. 
 #   n_threads: number of threads. 
-#   releps: relative error for each term.
+#   rel_eps: relative error for each term.
 #   indices: integer vector with which terms to include. 
 par_fn <- function(par, seed = NULL, comp_derivs = FALSE, 
-                   n_threads = 1L, releps = 1e-2, 
+                   n_threads = 1L, rel_eps = 1e-2, 
                    indices = 0:(NROW(dat$seen_obs) - 1L)){
   if(!is.null(seed))
     set.seed(seed)
   Arg <- get_lchol_inv(par)
   
   res <- log_ml(Arg, comp_derivs = comp_derivs, indices = indices,
-                n_threads = n_threads, releps = releps)
+                n_threads = n_threads, rel_eps = rel_eps)
   log_ml <- c(res)
   if(comp_derivs){
     gr <- attr(res, "grad")
@@ -358,10 +448,10 @@ par_fn <- function(par, seed = NULL, comp_derivs = FALSE,
 # check that the function gives the correct log marginal likelihood
 # approximation and gradient approximation.
 lSig <- get_lchol(dat$Sigma)
-r1 <- par_fn(lSig, comp_derivs = TRUE, n_threads = 4L, releps = 1e-3, 
+r1 <- par_fn(lSig, comp_derivs = TRUE, n_threads = 4L, rel_eps = 1e-3, 
              indices = 1:100)
 r2 <- numDeriv::jacobian(par_fn, lSig, seed = 1L, n_threads = 6L, 
-                         releps = 1e-3, indices = 1:100)
+                         rel_eps = 1e-3, indices = 1:100)
 all.equal(attr(r1, "grad"), drop(r2), tolerance = 1e-2)
 
 #####

@@ -60,8 +60,8 @@ static double const log_2_pi = log(2 * M_PI);
 
 double log_ml_term::approximate
 (arma::mat const &vcov, arma::mat &derivs, int const maxpts,
- double const abseps, double const releps, bool const comp_deriv,
- bool const do_reorder) const {
+ double const abs_eps, double const rel_eps, bool const comp_deriv,
+ bool const do_reorder, size_t const minvls) const {
 #ifdef DO_CHECKS
   {
     size_t const i1 =
@@ -155,7 +155,7 @@ double log_ml_term::approximate
     if(comp_deriv){
       auto res =
         cdf<deriv>(lower, upper, mea, V, do_reorder).approximate(
-            maxpts, abseps, releps);
+            maxpts, abs_eps, rel_eps, minvls);
       double const p_hat = res.finest[0];
       arma::vec d_mu(res.finest.memptr() + 1L, n_int, false, true),
                  d_V(res.finest.memptr() + 1L + n_int,
@@ -237,7 +237,7 @@ double log_ml_term::approximate
     } else {
       auto res =
         cdf<likelihood>(lower, upper, mea, V, do_reorder).approximate(
-            maxpts, abseps, releps);
+            maxpts, abs_eps, rel_eps);
       out += log(res.finest[0]);
     }
   }

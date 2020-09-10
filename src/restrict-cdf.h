@@ -10,6 +10,7 @@
 #include "qnorm.h"
 #include "mvtnorm-wrapper.h"
 #include "config.h"
+#include <algorithm>
 
 namespace restrictcdf {
 extern "C"
@@ -72,7 +73,9 @@ std::array<double, 2> draw_trunc_mean
 template<> inline std::array<double, 2> draw_trunc_mean<-1L>
 (double const a, double const b, double const u,
  bool const comp_quantile) MDGC_NOEXCEPT {
-  return { 1., u };
+   if(comp_quantile)
+     return { 1., qnorm_w(u, 0, 1, 1L, 0L) };
+   return { 1., std::numeric_limits<double>::quiet_NaN() };
 }
 
 template<> inline std::array<double, 2> draw_trunc_mean<0L>
@@ -140,10 +143,19 @@ void set_mvkbrv_ptr(mvkbrv_ptr);
  * @param X Matrix top copy.
  * @param x Pointer to copy to.
  */
-inline void copy_upper_tri(arma::mat const &X, double *x) noexcept {
+inline void copy_upper_tri
+  (arma::mat const &X, double * __restrict__ x) noexcept {
   size_t const p = X.n_cols;
   for(unsigned c = 0; c < p; c++)
     for(unsigned r = 0; r <= c; r++, x++)
+      *x = X.at(r, c);
+}
+
+inline void copy_lower_tri
+  (arma::mat const &X, double * __restrict__ x) noexcept {
+  size_t const p = X.n_cols;
+  for(unsigned c = 0; c < p; c++)
+    for(unsigned r = c; r < p; r++, x++)
       *x = X.at(r, c);
 }
 
@@ -153,12 +165,12 @@ inline void copy_upper_tri(arma::mat const &X, double *x) noexcept {
  * @param ndim Dimension of the integral.
  * @param n_integrands Dimension of the integrand.
  * @param maxvls Maximum number of integrand evaluations.
- * @param abseps Absolute convergence threshold.
- * @param releps Relative convergence threshold.
+ * @param abs_eps Absolute convergence threshold.
+ * @param rel_eps Relative convergence threshold.
  */
 output approximate_integral(
     int const ndim, int const n_integrands, int const maxvls,
-    double const abseps, double const releps);
+    double const abs_eps, double const rel_eps, int const minvls);
 
 /**
  * Approximates the integrals of the multivariate normal cdf over a
@@ -315,7 +327,7 @@ public:
         }
         else if(*infin == -1L){
           sc += j;
-          return draw_trunc_mean<-1L>(0, 0, *unif, needs_q);
+          return draw_trunc_mean<-1L>(0, 1, *unif, needs_q);
 
         }
 
@@ -392,6 +404,9 @@ public:
     upper -= mu;
 
     is_permutated = false;
+    for(size_t i = 0; i < udim; ++i)
+      *(map_obj.idx + i) = i;
+
     if(do_reorder and udim > 1L){
       double * const y     = map_obj.draw,
              * const A     = map_obj.tmp_vec,
@@ -406,8 +421,6 @@ public:
       for(size_t i = 0; i < udim; ++i)
         *(delta + i) = 0.;
 
-      for(size_t i = 0; i < udim; ++i)
-        *(map_obj.idx + i) = i;
       arma::ivec infi(udim);
 
       F77_CALL(mvsort)(
@@ -416,7 +429,7 @@ public:
         DL, sigma_chol.memptr(), infi.memptr(), &F_inform, map_obj.idx,
         &doscale);
 
-      if(F_inform != 0 or ndim != nddim)
+      if(F_inform != 0)
         throw std::runtime_error("cdf::cdf: error in mvsort");
 
       int prev = *map_obj.idx;
@@ -436,12 +449,14 @@ public:
         arma::vec mu_permu(map_obj.tmp_vec, udim, false, true);
         for(size_t i = 0; i < udim; ++i){
           uidx[i]     = *(map_obj.idx + i);
-          mu_permu[i] = mu[uidx[i]];
+          mu_permu[i] = mu_in[uidx[i]];
         }
 
         arma::mat sigma_permu(map_obj.tmp_mat, udim, udim, false, true);
         sigma_permu = sigma_in.submat(uidx, uidx);
-        funcs::set_child_wk_mem(mu_permu, sigma_permu, map_obj.child_mem);
+
+        funcs::set_child_wk_mem(mu_permu, sigma_permu, map_obj.child_mem,
+                                map_obj.idx);
         return;
       }
 
@@ -470,7 +485,7 @@ public:
       }
     }
 
-    funcs::set_child_wk_mem(mu_in, sigma_in, map_obj.child_mem);
+    funcs::set_child_wk_mem(mu_in, sigma_in, map_obj.child_mem, nullptr);
   }
 
   /**
@@ -494,8 +509,9 @@ public:
    * Performs the approximation.
    *
    * @param maxvls Maximum number of function evaluations allowed.
-   * @param abseps Required absolute accuracy.
-   * @param releps Required relative accuracy.
+   * @param abs_eps Required absolute accuracy.
+   * @param rel_eps Required relative accuracy.
+   * @param minvls Minimum number of samples.
    *
    * @return Either a one-dimension or a (1 + p + p(p + 1)/2)-dimensional
    * vector. The latter contains the likelihood approximation, derivative
@@ -504,9 +520,10 @@ public:
    * the covariance matrix. Notice that the latter are not scaled by 2.
    */
   static output approximate
-  (int const maxvls, double const abseps, double const releps){
+  (int const maxvls, double const abs_eps, double const rel_eps,
+   int const minvls = 0L){
 #ifdef DO_CHECKS
-    if(abseps <= 0 and releps <= 0)
+    if(abs_eps <= 0 and rel_eps <= 0)
       throw std::invalid_argument("cdf::approximate: no valid convergence threshold");
     if(maxvls <= 0L)
       throw std::invalid_argument("cdf::approximate: invalid 'maxvls'");
@@ -537,7 +554,8 @@ public:
     /* set pointer to this class' member function */
     set_mvkbrv_ptr(&cdf<funcs>::eval_integrand);
     output out =
-      approximate_integral(ndim, n_integrands, maxvls, abseps, releps);
+      approximate_integral(ndim, n_integrands, maxvls, abs_eps, rel_eps,
+                           minvls);
 
     funcs::post_process(out.finest, ndim, map_obj.child_mem);
     if(is_permutated){
@@ -555,7 +573,8 @@ public:
 class likelihood {
 public:
   static void set_child_wk_mem
-    (arma::vec const&, arma::mat const&, double const * const) noexcept { }
+    (arma::vec const&, arma::mat const&, double const * const,
+     int const*) noexcept { }
 
   constexpr static int get_n_integrands
     (arma::vec const&, arma::mat const&) {
@@ -598,7 +617,7 @@ class deriv {
 public:
   static void set_child_wk_mem
   (arma::vec const &mu, arma::mat const &sigma,
-   double * const wk_mem){
+   double * const wk_mem, int const*){
     size_t const p = mu.n_elem,
            size_up = (p * (p + 1L)) / 2L;
 
@@ -684,6 +703,230 @@ public:
       dmu[c] = cmu[c];
     for(size_t i = 0; i < dim_cov; ++i)
       dcov[i] = ccov[i];
+  }
+};
+
+class imputation {
+public:
+  class type_base {
+  public:
+    virtual size_t n_ele() const noexcept = 0;
+    virtual void set_val(double const, double *& __restrict__)
+      const noexcept = 0;
+    virtual ~type_base() = default;
+  };
+
+  class known final : public type_base {
+  public:
+    inline size_t n_ele() const noexcept {
+      return 0L;
+    };
+    inline void set_val(double const, double *& __restrict__)
+      const noexcept { };
+  };
+
+  class contin final : public type_base {
+  public:
+    inline size_t n_ele() const noexcept {
+      return 1L;
+    }
+
+    inline void set_val(double const v, double *& __restrict__ res)
+    const noexcept {
+      *res++ = v;
+    }
+  };
+
+  class binary final : public type_base {
+  public:
+    double const border;
+
+    binary(double const border): border(border) { }
+
+    inline size_t n_ele() const noexcept {
+      return 2L;
+    }
+
+    inline void set_val(double const v, double *& __restrict__ res)
+      const noexcept {
+      if(v < border){
+        *res++ = 1.;
+        *res++ = 0.;
+
+      } else {
+        *res++ = 0.;
+        *res++ = 1.;
+
+      }
+    }
+  };
+
+  class ordinal final : public type_base {
+  public:
+    size_t const n_bs;
+    std::unique_ptr<double[]> const borders;
+
+    ordinal(double const *br, size_t const n_ele):
+    n_bs(n_ele - 2L),
+    borders(([&](){
+#ifdef DO_CHECKS
+      if(n_ele < 3L)
+        throw std::invalid_argument("ordinal: n_ele less than three");
+#endif
+      std::unique_ptr<double[]> out(new double[n_bs]);
+      for(size_t i = 0; i < n_bs; ++i)
+        *(out.get() + i) = *(br + i + 1L);
+      return out;
+    })()) { }
+
+    ordinal(ordinal const &o):
+    n_bs(o.n_bs),
+    borders(([&](){
+      std::unique_ptr<double[]> out(new double[n_bs]);
+      for(size_t i = 0; i < n_bs; ++i)
+        *(out.get() + i) = *(o.borders.get() + i);
+      return out;
+    })()) { }
+
+    inline size_t n_ele() const noexcept {
+      return n_bs + 1L;
+    }
+
+    inline void set_val(double const v, double *& __restrict__ res)
+    const noexcept {
+      size_t i = 0L;
+      double const *b = borders.get();
+      for(; i < n_bs; ++i, ++b)
+        if(v < *b){
+          *res++ = 1.;
+          break;
+        } else
+          *res++ = 0.;
+
+      if(i == n_bs)
+        *res++ = 1.;
+      else {
+        ++i;
+        for(; i <= n_bs; ++i)
+          *res++ = 0.;
+      }
+    }
+  };
+
+private:
+  static std::vector<type_base const*> const &get_current_list();
+  static void permutate_current_list(int const*);
+
+public:
+  static void set_current_list(std::vector<type_base const *>&);
+
+  static void set_child_wk_mem
+  (arma::vec const &mu, arma::mat const &sigma,
+   double * const wk_mem, int const *permu_idx){
+    if(permu_idx)
+      permutate_current_list(permu_idx);
+
+    size_t const p = mu.n_elem,
+           size_up = (p * (p + 1L)) / 2L;
+
+    arma::mat tmp_mat(wk_mem + size_up, p, p, false, true);
+    if(!arma::chol(tmp_mat, sigma))
+      throw std::runtime_error("imputation::set_child_wk_mem: chol failed");
+    copy_upper_tri(tmp_mat, wk_mem);
+
+    double *m = wk_mem + size_up;
+    double const *mea = mu.begin();
+    for(size_t i = 0; i < p; ++i, ++m, ++mea)
+      *m = *mea;
+  }
+
+  static int get_n_integrands(arma::vec const&, arma::mat const&) noexcept {
+    auto &cur_list = get_current_list();
+    int out(1L);
+    for(auto &x : cur_list)
+      out += x->n_ele();
+    return out;
+  }
+
+  static void integrand
+  (double const * const __restrict__ draw, int const ndim,
+   double * const __restrict__ out,
+   double * const __restrict__ wk_mem) noexcept {
+    arma::uword const p = ndim;
+    double *scale_draw = wk_mem + p + (p * (p + 1L)) / 2L;
+    {
+      // re-locate
+      double * scale_draw_i = scale_draw;
+      double const *mea = wk_mem + (p * (p + 1L)) / 2L;
+      for(size_t i = 0; i < p; ++i, ++scale_draw_i, ++mea)
+        *scale_draw_i = *mea;
+    }
+
+    {
+      // re-scale
+      double const *sig_chol = wk_mem;
+      double * scale_draw_c = scale_draw;
+      for(size_t c = 0; c < p; ++c, ++scale_draw_c){
+        double const * draw_r = draw;
+        for(size_t r = 0; r <= c; ++r, ++sig_chol, ++draw_r)
+          *scale_draw_c += *sig_chol * *draw_r;
+      }
+    }
+
+    auto const &cur_list = get_current_list();
+    double * o = out;
+    *o++ = 1.;
+    double const *scale_draw_i = scale_draw;
+    for(size_t i = 0; i < cur_list.size(); ++i, ++scale_draw_i)
+      cur_list[i]->set_val(*scale_draw_i, o);
+  }
+
+  static void post_process
+    (arma::vec&, int const, double const * const) noexcept { }
+
+  constexpr static bool needs_last_unif() {
+    return true;
+  }
+
+  static arma::vec univariate(double const lw, double const ub,
+                              double const * const wk_mem){
+    throw std::runtime_error("imputation::univariate: not implemented");
+  }
+
+  static void permutate
+    (arma::vec &finest, int const ndim, arma::ivec const &idx,
+     double * const work_mem) noexcept {
+    arma::vec permu_res(finest.size());
+    arma::uvec offset(ndim);
+    auto &cur_list = get_current_list();
+
+    /* we make two passes. One to figure out where to write the ith type
+     * to and one to do the writting */
+    for(int c = 0; c < ndim; ++c)
+      offset[idx[c]] = cur_list[c]->n_ele();
+
+    {
+      size_t cur = 1L;
+      for(int i = 0L; i < ndim; ++i){
+        cur += offset[i];
+        offset[i] = cur - offset[i];
+      }
+    }
+
+    // do the copying
+    permu_res[0] = finest[0];
+    {
+      double const *v = finest.begin() + 1L;
+      for(int c = 0; c < ndim; ++c){
+        int const org_c = idx[c];
+        size_t const n_ele = cur_list[c]->n_ele();
+        double *r = permu_res.begin() + offset[org_c];
+        for(size_t i = 0; i < n_ele; ++i, ++r, ++v)
+          *r = *v;
+      }
+    }
+
+    finest = permu_res;
   }
 };
 

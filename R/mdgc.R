@@ -1,7 +1,11 @@
+#' Get mdgc Object
+#' @param dat \code{\link{data.frame}} with continuous, ordinal, and binary
+#' data.
 #' @importFrom stats na.omit
 #' @importFrom utils head
 #' @export
-get_mgdc <- function(dat){
+#' @importFrom stats qnorm ecdf quantile
+get_mdgc <- function(dat){
   # checks
   stopifnot(is.data.frame(dat), NROW(dat) > 0L)
 
@@ -24,13 +28,15 @@ get_mgdc <- function(dat){
       n <- length(x)
       scal <- n / (n + 1)
       mi <- min(x)
-      return(function(x) cbind(NA_real_, scal * cdf_func(pmax(x, mi))))
+      return(function(x)
+        cbind(NA_real_, qnorm(scal * cdf_func(pmax(x, mi)))))
 
     } else if(is.logical(x) || is.ordered(x)){
       phat <- table(x) / length(x)
       stopifnot(all(phat > 0))
-      lb <- c(0, cumsum(head(phat, -1)))
-      ub <- c(cumsum(head(phat, -1)), 1)
+      lb <- c(-Inf, qnorm(cumsum(head(phat, -1))))
+      ub <- c(qnorm(cumsum(head(phat, -1))), Inf)
+
       lvls <- if(is.logical(x))
         c(FALSE, TRUE) else levels(x)
 
@@ -45,6 +51,7 @@ get_mgdc <- function(dat){
           cbind(lb[idx], ub[idx])
         }
       attr(out, "levels") <- lvls
+      attr(out, "borders") <- c(-Inf, ub)
       return(out)
 
     }
@@ -55,8 +62,8 @@ get_mgdc <- function(dat){
   # get upper and lower bounds or points for the latent variables
   Z <- mapply(function(x, func) func(x), x = dat, func = margs,
                 SIMPLIFY = "array")
-  lower <- qnorm(t(Z[, 1L, ]))
-  upper <- qnorm(t(Z[, 2L, ]))
+  lower <- t(Z[, 1L, ])
+  upper <- t(Z[, 2L, ])
 
   # assign codes for missingness pattern
   code <- matrix(0L, NROW(lower), NCOL(lower))
@@ -64,22 +71,38 @@ get_mgdc <- function(dat){
   code[is_na == 0L] <- 2L
   code[is_na == 2L] <- 1L
 
+  # get the true values (needed for imputation)
+  truth <- t(matrix(as.numeric(unlist(dat)), NROW(dat), NCOL(dat)))
+
   structure(list(
     lower = lower, upper = upper, code = code, margs = margs,
-    reals = reals, bins = bins, ords = ords), class = "mdgc")
+    reals = reals, bins = bins, ords = ords, truth = truth), class = "mdgc")
 }
 
+#' Get Pointer to C++ to Approximate  the Log Marginal Likelihood
+#' @param object mdgc object from \code{\link{get_mdgc}}. Ignored by the
+#' default method.
+#' @param lower #variables x #observation matrix with lower bounds
+#' for each variable on the normal scale.
+#' @param upper #variables x #observation matrix with upper bounds
+#' for each variable on the normal scale.
+#' @param code #variables x #observation matrix integer code for the
+#' each variable on the normal scale. Zero implies an observed value,
+#' one implies a missing value, and two implies an interval.
+#' @param ... used to pass arguments to S3 methods.
 #' @export
-get_mgdc_log_ml <- function(object, ...)
-  UseMethod("get_mgdc_log_ml")
+get_mdgc_log_ml <- function(object, ...)
+  UseMethod("get_mdgc_log_ml")
 
+#' @rdname get_mdgc_log_ml
 #' @export
-get_mgdc_log_ml.mdgc <- function(object, ...)
-  get_mgdc_log_ml.default(lower = object$lower, upper = object$upper,
+get_mdgc_log_ml.mdgc <- function(object, ...)
+  get_mdgc_log_ml.default(lower = object$lower, upper = object$upper,
                           code = object$code)
 
+#' @rdname get_mdgc_log_ml
 #' @export
-get_mgdc_log_ml.default <- function(object, lower, upper, code, ...){
+get_mdgc_log_ml.default <- function(object, lower, upper, code, ...){
   # checks
   di <- dim(lower)
   stopifnot(
@@ -88,85 +111,103 @@ get_mgdc_log_ml.default <- function(object, lower, upper, code, ...){
     is.numeric(lower), is.numeric(upper), is.integer(code),
     all(is.finite(code)), all(range(code) %in% 0:2))
 
-  out <- get_log_lm_terms_cpp(lower = lower, upper = upper, code = code)
+  keep <- colSums(is.na(lower) & is.na(upper)) < NROW(upper)
+  out <- get_log_lm_terms_cpp(lower = lower[, keep], upper = upper[, keep],
+                              code = code[, keep])
   attr(out, "nobs") <- NCOL(upper)
   attr(out, "nvars") <- NROW(lower)
   out
 }
 
 #' Evaluate the Log Marginal Likelihood and Its Derivatives
-#' @param ptr object returned by \code{\link{get_mgdc_log_ml}}.
+#' @param ptr object returned by \code{\link{get_mdgc_log_ml}}.
 #' @param vcov correlation matrix.
-#' @param releps relative error for each term.
-#' @param n_threads number of threads.
+#' @param rel_eps relative error for each term.
+#' @param n_threads number of threads to use.
 #' @param comp_derivs logical for whether to approximate the gradient.
 #' @param indices integer vector with which terms to include. Must be zero
 #' indexed. \code{NULL} yields all observations.
 #' @param do_reorder logical for whether to use heuristic variable reordering.
 #' @param maxpts maximum number of samples to draw.
-#' @param abseps absolute convergence threshold for each term.
+#' @param abs_eps absolute convergence threshold for each term.
+#' @param minvls minimum number of samples.
 #' @export
-mgdc_log_ml <- function(ptr, vcov, releps = 1e-2, n_threads = 4L,
+mdgc_log_ml <- function(ptr, vcov, rel_eps = 1e-2, n_threads = 1L,
                         comp_derivs = FALSE, indices = NULL,
                         do_reorder = TRUE, maxpts = 100000L,
-                        abseps = -1.){
+                        abs_eps = -1., minvls = 100L){
   nvars <- attr(ptr, "nvars")
   nobs <- attr(ptr, "nobs")
   stopifnot(!is.null(nvars), !is.null(nobs))
-
   if(is.null(indices))
     indices <- 0:(nobs - 1L)
 
   stopifnot(
     all(indices >= 0L & indices < nobs),
     all(dim(vcov) == c(nvars, nvars)),
-    is.numeric(releps), length(releps) == 1L, is.finite(releps),
+    is.numeric(rel_eps), length(rel_eps) == 1L, is.finite(rel_eps),
     is.integer(n_threads), length(n_threads) == 1L, n_threads > 0L,
     is.logical(comp_derivs), length(comp_derivs) == 1L, !is.na(comp_derivs),
     is.logical(do_reorder), length(do_reorder) == 1L, !is.na(do_reorder),
     is.integer(maxpts), length(maxpts) == 1L, maxpts > 0L,
-    is.numeric(abseps), length(abseps) == 1L, is.finite(abseps))
+    is.numeric(abs_eps), length(abs_eps) == 1L, is.finite(abs_eps),
+    is.integer(minvls), length(minvls) == 1L, minvls <= maxpts,
+    minvls >= 0L)
 
-  eval_log_lm_terms(
+  .mdgc_log_ml(
     ptr = ptr, vcov = vcov, indices = indices, maxpts = maxpts,
-    abseps = abseps, releps = releps, n_threads = n_threads,
-    comp_derivs = comp_derivs, do_reorder = do_reorder)
+    abs_eps = abs_eps, rel_eps = rel_eps, n_threads = n_threads,
+    comp_derivs = comp_derivs, do_reorder = do_reorder, minvls = minvls)
 }
 
-#' @export
-mgdc_start_value <- function(object, ...)
-  UseMethod("mgdc_start_value")
+.mdgc_log_ml <- function(
+  ptr, vcov, rel_eps, n_threads, comp_derivs, indices, do_reorder,
+  maxpts, abs_eps, minvls)
+  eval_log_lm_terms(
+    ptr = ptr, vcov = vcov, indices = indices, maxpts = maxpts,
+    abs_eps = abs_eps, rel_eps = rel_eps, n_threads = n_threads,
+    comp_derivs = comp_derivs, do_reorder = do_reorder, minvls = minvls)
 
+#' Get Starting Value for Correlation Matrix Using a Heuristic
+#' @inheritParams get_mdgc_log_ml
+#' @param n_threads number of threads to use.
 #' @export
-mgdc_start_value <- function(object, ...)
-  mgdc_start_value.default(lower = object$lower, upper = object$upper,
-                           code = object$code)
+mdgc_start_value <- function(...)
+  UseMethod("mdgc_start_value")
 
+#' @rdname mdgc_start_value
+#' @export
+mdgc_start_value <- function(object, ...)
+  mdgc_start_value.default(lower = object$lower, upper = object$upper,
+                           code = object$code, ...)
+
+#' @rdname mdgc_start_value
 #' @importFrom stats cov cov2cor
 #' @export
-mgdc_start_value.default <- function(object, lower, upper, code,
+mdgc_start_value.default <- function(object, lower, upper, code,
                                      n_threads = 1L, ...){
   Z <- get_z_hat(lower, upper, code, n_threads = n_threads)
   cov2cor(cov(t(Z), use = "pairwise.complete.obs"))
 }
 
-#' Estimates the Correlation Matrix
-#' @param ptr returned object from \code{\link{get_mgdc_log_ml}}.
+#' Estimate the Correlation Matrix
+#' @param ptr returned object from \code{\link{get_mdgc_log_ml}}.
 #' @param vcov starting value.
 #' @param batch_size number of observations in each batch.
-#' @param n_threads number of threads to use.
 #' @param lr learning rate.
-#' @param releps relative error for each term in quasi-Monte Carlo method.
 #' @param method estimation method to use.
 #' @param maxit maximum number of iteration.
 #' @param seed fixed seed to use. Use \code{NULL} if the seed should not be
 #' fixed.
 #' @param epsilon,beta_1,beta_2 ADAM parameters.
+#' @inheritParams mdgc_log_ml
 #' @export
-mgdc_fit <- function(ptr, vcov, lr = 1e-3, releps = 1e-2,
+mdgc_fit <- function(ptr, vcov, lr = 1e-3, rel_eps = 1e-2,
                      maxit = 10L, batch_size = NULL,
                      method = c("svrg", "adam"), seed = 1L, epsilon = 1e-8,
-                     beta_1 = .9, beta_2 = .999, n_threads = 4L){
+                     beta_1 = .9, beta_2 = .999, n_threads = 1L,
+                     do_reorder = TRUE, abs_eps = -1., maxpts = 100000L,
+                     minvls = 100L){
   #####
   # checks
   nvars <- attr(ptr, "nvars")
@@ -183,13 +224,18 @@ mgdc_fit <- function(ptr, vcov, lr = 1e-3, releps = 1e-2,
     is.integer(maxit), length(maxit) == 1L, maxit > 0L,
     is.integer(batch_size), length(batch_size) == 1L, batch_size > 0L,
     batch_size <= nobs,
-    is.numeric(releps), length(releps) == 1L, releps >= 0.,
+    is.numeric(rel_eps), length(rel_eps) == 1L, rel_eps >= 0.,
     is.character(method), method %in% c("svrg", "adam"),
     is.integer(seed), length(seed) == 1L, is.finite(seed) || is.null(seed),
     is.integer(n_threads), length(n_threads) == 1L, n_threads > 0L,
     is.numeric(epsilon), length(epsilon) == 1L, epsilon >= 0.,
     is.numeric(beta_1), length(beta_1) == 1L, beta_1 >= 0.,
-    is.numeric(beta_2), length(beta_2) == 1L, beta_2 >= 0.)
+    is.numeric(beta_2), length(beta_2) == 1L, beta_2 >= 0.,
+    is.numeric(abs_eps), length(abs_eps) == 1L, is.finite(abs_eps),
+    is.logical(do_reorder), length(do_reorder) == 1L, !is.na(do_reorder),
+    is.integer(maxpts), length(maxpts) == 1L, maxpts > 0L,
+    is.integer(minvls), length(minvls) == 1L, minvls <= maxpts,
+    minvls >= 0L)
 
   #####
   # assign functions to use
@@ -207,9 +253,10 @@ mgdc_fit <- function(ptr, vcov, lr = 1e-3, releps = 1e-2,
       set.seed(seed)
     Arg <- .get_lchol_inv(par)
 
-    res <- mgdc_log_ml(
+    res <- .mdgc_log_ml(
       ptr = ptr, Arg, comp_derivs = comp_derivs, indices = indices,
-      n_threads = n_threads, releps = releps)
+      n_threads = n_threads, rel_eps = rel_eps, do_reorder = do_reorder,
+      abs_eps = abs_eps, maxpts = maxpts, minvls = minvls)
     log_ml <- c(res)
     if(comp_derivs){
       gr <- attr(res, "grad")
@@ -217,7 +264,7 @@ mgdc_fit <- function(ptr, vcov, lr = 1e-3, releps = 1e-2,
       tmp[lower.tri(tmp, TRUE)] <- par
       diag(tmp) <- exp(diag(tmp))
       gr <- gr[com_vec] + c(gr)
-      gr <- mdgc:::x_dot_X_kron_I(x = gr, X = tmp, l = nvars)
+      gr <- x_dot_X_kron_I(x = gr, X = tmp, l = nvars)
       gr <- gr[, lower.tri(tmp, TRUE)]
       idx_diag <- c(1L, 1L + cumsum(NCOL(tmp):2))
       gr[idx_diag] <- gr[idx_diag] * diag(tmp)
@@ -371,3 +418,56 @@ svrg <- function(par_fn, nobs, val, batch_size, maxit = 10L, seed = 1L, lr){
   lSig[lower.tri(lSig, TRUE)]
 }
 
+#' Impute Missing Values
+#' @param object returned object from \code{\link{get_mdgc}}.
+#' @param vcov correlation matrix to condition on in the imputation.
+#' @inheritParams mdgc_fit
+#' @inheritParams mdgc_log_ml
+#' @export
+mdgc_impute <- function(object, vcov, rel_eps = 1e-3, maxit = 10000L,
+                        abs_eps = -1, n_threads = 1L, do_reorder = TRUE,
+                        minvls = 1000L){
+  #####
+  # checks
+  margs <- object$margs
+  nvars <- length(margs)
+  stopifnot(
+    inherits(object, "mdgc"),
+    is.matrix(vcov), is.numeric(vcov), all(dim(vcov) == nvars),
+    all(is.finite(vcov)),
+    is.numeric(rel_eps), length(rel_eps) == 1L, is.finite(rel_eps),
+    is.numeric(abs_eps), length(abs_eps) == 1L, is.finite(abs_eps),
+    is.integer(maxit), length(maxit) == 1L, maxit > 0L,
+    is.integer(n_threads), length(n_threads) == 1L, n_threads > 0L,
+    is.logical(do_reorder), length(do_reorder) == 1L, !is.na(do_reorder),
+    is.integer(minvls), length(minvls) == 1L, minvls <= maxit,
+    minvls >= 0L)
+
+  #####
+  # perform the imputation
+  passed_names <- lapply(margs, function(x){
+    x <- attr(x, "levels")
+    if(is.null(x))
+      x <- ""
+    x
+  })
+
+  margs_pass <- lapply(margs, function(f){
+    if(!is.null(attr(f, "levels")))
+      return(f)
+
+    # continuos outcomes; need the inverse emp. cdf
+    ev <- environment(f)
+    cdf_func <- ev$cdf_func
+    eps <- 1 / ev$n
+    function(x)
+      quantile(cdf_func, max(x, eps))
+  })
+
+  impute(lower = object$lower, upper = object$upper, code = object$code,
+         Sigma = vcov, truth = object$truth,
+         margs = margs_pass, rel_eps = rel_eps, abs_eps = abs_eps,
+         maxit = maxit, passed_names = passed_names,
+         outer_names = rownames(object$lower), n_threads = n_threads,
+         do_reorder = do_reorder, minvls = minvls)
+}

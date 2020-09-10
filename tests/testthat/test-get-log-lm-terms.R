@@ -51,7 +51,7 @@ test_that("'get_log_lm_terms' gives the correct result with and without gradient
     L
   }
 
-  log_ml <- function(vcov_log_chol, releps = 1e-5, n_threads = 1L,
+  log_ml <- function(vcov_log_chol, rel_eps = 1e-5, n_threads = 1L,
                      comp_derivs = FALSE, seed = NULL){
     if(!is.null(seed))
       set.seed(seed)
@@ -59,8 +59,8 @@ test_that("'get_log_lm_terms' gives the correct result with and without gradient
 
     mdgc:::eval_log_lm_terms(
       ptr = ptr, vcov = Arg, indices = 0:(NCOL(dat$lower) - 1L),
-      maxpts = 1000000L, abseps = -1, releps = releps, n_threads = n_threads,
-      comp_derivs = comp_derivs)
+      maxpts = 1000000L, abs_eps = -1, rel_eps = rel_eps, n_threads = n_threads,
+      comp_derivs = comp_derivs, minvls = 0L)
   }
 
   set.seed(1)
@@ -176,7 +176,7 @@ test_that("'get_log_lm_terms' gives the correct result with and without gradient
     L
   }
 
-  log_ml <- function(vcov_log_chol, releps = 1e-5, n_threads = 1L,
+  log_ml <- function(vcov_log_chol, rel_eps = 1e-5, n_threads = 1L,
                      comp_derivs = FALSE, seed = NULL){
     if(!is.null(seed))
       set.seed(seed)
@@ -184,8 +184,8 @@ test_that("'get_log_lm_terms' gives the correct result with and without gradient
 
     mdgc:::eval_log_lm_terms(
       ptr = ptr, vcov = Arg, indices = 0:(NCOL(dat$lower) - 1L),
-      maxpts = 1000000L, abseps = -1, releps = releps, n_threads = n_threads,
-      comp_derivs = comp_derivs)
+      maxpts = 1000000L, abs_eps = -1, rel_eps = rel_eps, n_threads = n_threads,
+      comp_derivs = comp_derivs, minvls = 0L)
   }
 
   set.seed(1)

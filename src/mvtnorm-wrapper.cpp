@@ -10,7 +10,7 @@ void F77_NAME(mvtdst)(
     double const* /* lower */, double const* /* upper */,
     int const* /* infin */, double const* /* correl */,
     double const* /* delta */, int const* /* maxpts  */,
-    double const* /* abseps */, double const* /* releps */,
+    double const* /* abs_eps */, double const* /* rel_eps */,
     double* /* error */, double* /* value */,
     int* /* inform */, int* /* intvls */);
 }
@@ -69,7 +69,7 @@ cor_vec_res get_cor_vec(const arma::mat &cov){
 cdf_res cdf(arma::vec const &lower, arma::vec const &upper,
             arma::ivec const &infin, arma::vec const &mean,
             arma::vec const &cor_vec, int const maxpts,
-            double const abseps, double const releps){
+            double const abs_eps, double const rel_eps){
   /* checks */
   int const dim = lower.size();
 #ifdef DO_CHECKS
@@ -84,8 +84,8 @@ cdf_res cdf(arma::vec const &lower, arma::vec const &upper,
     throw std::invalid_argument("cdf: invalid 'mean'");
   if(cor_vec.size() != (udim * (udim - 1L)) / 2L)
     throw std::invalid_argument("cdf: invalid 'cor_vec'");
-  if(abseps <= 0. and releps <= 0.)
-    throw std::invalid_argument("cdf: invalid 'abseps' and 'releps'");
+  if(abs_eps <= 0. and rel_eps <= 0.)
+    throw std::invalid_argument("cdf: invalid 'abs_eps' and 'rel_eps'");
 #endif
 
   int const maxpts_arg = maxpts <= 0L ? dim * 100L : maxpts,
@@ -95,15 +95,15 @@ cdf_res cdf(arma::vec const &lower, arma::vec const &upper,
 
   F77_NAME(mvtdst)(
       &dim, &nu, lower.begin(), upper.begin(), infin.begin(),
-      cor_vec.begin(), mean.begin(), &maxpts_arg, &abseps, &releps, &error,
+      cor_vec.begin(), mean.begin(), &maxpts_arg, &abs_eps, &rel_eps, &error,
       &value, &inform, &intvls);
 
   return { error, value, inform, intvls };
 }
 
 cdf_res cdf(arma::vec lower, arma::vec upper, arma::vec mean,
-            arma::mat const &cov, int const maxpts, double const abseps,
-            double const releps){
+            arma::mat const &cov, int const maxpts, double const abs_eps,
+            double const rel_eps){
 #ifdef DO_CHECKS
   arma::uword const n = lower.size();
   if(n <= 0L)
@@ -129,6 +129,6 @@ cdf_res cdf(arma::vec lower, arma::vec upper, arma::vec mean,
 
   arma::ivec const infin = get_infin(lower, upper);
 
-  return cdf(lower, upper, infin, mean, cor_vec, maxpts, abseps, releps);
+  return cdf(lower, upper, infin, mean, cor_vec, maxpts, abs_eps, rel_eps);
 }
 }

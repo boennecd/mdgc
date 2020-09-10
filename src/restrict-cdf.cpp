@@ -115,13 +115,13 @@ void cdf<funcs>::set_working_memory
 
 output approximate_integral(
     int const ndim, int const n_integrands, int const maxvls,
-    double const abseps, double const releps){
+    double const abs_eps, double const rel_eps, int const minvls){
   output out;
   out.finest.resize(n_integrands);
-  out.minvls = 0L;
+  out.minvls = minvls;
 
   F77_CALL(mvkbrveval)(
-      &ndim, &maxvls, &n_integrands, &abseps, &releps,
+      &ndim, &maxvls, &n_integrands, &abs_eps, &rel_eps,
       &out.abserr, out.finest.memptr(), &out.inform,
       &out.minvls);
 
@@ -192,6 +192,34 @@ void deriv::post_process(arma::vec &finest, int const ndim,
   }
 }
 
+static std::vector<imputation::type_base const*> * type_list;
+#ifdef _OPENMP
+#pragma omp threadprivate(type_list)
+#endif
+
+std::vector<imputation::type_base const*> const
+  &imputation::get_current_list(){
+  return *type_list;
+}
+
+void imputation::set_current_list
+  (std::vector<imputation::type_base const*> &x){
+  type_list = &x;
+}
+
+void imputation::permutate_current_list(int const *new_idx){
+  std::vector<imputation::type_base const*> &cur_list = *type_list;
+  std::vector<imputation::type_base const*> new_list;
+  size_t const n_ele = cur_list.size();
+  new_list.reserve(n_ele);
+  for(size_t i = 0; i < n_ele; ++i, ++new_idx)
+    new_list.emplace_back(cur_list[*new_idx]);
+
+  cur_list = new_list;
+  type_list = &cur_list;
+}
+
 template class cdf<likelihood>;
 template class cdf<deriv>;
-}
+template class cdf<imputation>;
+} // namespace restrictcdf
