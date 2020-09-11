@@ -79,7 +79,7 @@ get_mdgc <- function(dat){
     reals = reals, bins = bins, ords = ords, truth = truth), class = "mdgc")
 }
 
-#' Get Pointer to C++ to Approximate  the Log Marginal Likelihood
+#' Get Pointer to C++ Object to Approximate the Log Marginal Likelihood
 #' @param object mdgc object from \code{\link{get_mdgc}}. Ignored by the
 #' default method.
 #' @param lower #variables x #observation matrix with lower bounds
@@ -168,7 +168,7 @@ mdgc_log_ml <- function(ptr, vcov, rel_eps = 1e-2, n_threads = 1L,
     abs_eps = abs_eps, rel_eps = rel_eps, n_threads = n_threads,
     comp_derivs = comp_derivs, do_reorder = do_reorder, minvls = minvls)
 
-#' Get Starting Value for Correlation Matrix Using a Heuristic
+#' Get Starting Value for the Correlation Matrix Using a Heuristic
 #' @inheritParams get_mdgc_log_ml
 #' @param n_threads number of threads to use.
 #' @export
@@ -200,14 +200,15 @@ mdgc_start_value.default <- function(object, lower, upper, code,
 #' @param seed fixed seed to use. Use \code{NULL} if the seed should not be
 #' fixed.
 #' @param epsilon,beta_1,beta_2 ADAM parameters.
+#' @param verbose logical for whether to print output during the estimation.
 #' @inheritParams mdgc_log_ml
 #' @export
-mdgc_fit <- function(ptr, vcov, lr = 1e-3, rel_eps = 1e-2,
+mdgc_fit <- function(ptr, vcov, lr = 1e-3, rel_eps = 1e-3,
                      maxit = 10L, batch_size = NULL,
                      method = c("svrg", "adam"), seed = 1L, epsilon = 1e-8,
                      beta_1 = .9, beta_2 = .999, n_threads = 1L,
-                     do_reorder = TRUE, abs_eps = -1., maxpts = 100000L,
-                     minvls = 100L){
+                     do_reorder = TRUE, abs_eps = -1., maxpts = 10000L,
+                     minvls = 100L, verbose = FALSE){
   #####
   # checks
   nvars <- attr(ptr, "nvars")
@@ -215,7 +216,7 @@ mdgc_fit <- function(ptr, vcov, lr = 1e-3, rel_eps = 1e-2,
   stopifnot(!is.null(nvars), !is.null(nobs))
 
   if(is.null(batch_size))
-    batch_size <- as.integer(max(min(10, nobs), nobs / 20))
+    batch_size <- as.integer(max(min(10L, nobs), nobs / 20))
 
   method <- method[1L]
   stopifnot(
@@ -235,7 +236,8 @@ mdgc_fit <- function(ptr, vcov, lr = 1e-3, rel_eps = 1e-2,
     is.logical(do_reorder), length(do_reorder) == 1L, !is.na(do_reorder),
     is.integer(maxpts), length(maxpts) == 1L, maxpts > 0L,
     is.integer(minvls), length(minvls) == 1L, minvls <= maxpts,
-    minvls >= 0L)
+    minvls >= 0L,
+    is.logical(verbose), length(verbose) == 1L, !is.na(verbose))
 
   #####
   # assign functions to use
@@ -248,7 +250,9 @@ mdgc_fit <- function(ptr, vcov, lr = 1e-3, rel_eps = 1e-2,
   #   par: log-Cholesky decomposition.
   #   comp_derivs: logical for whether to approximate the gradient.
   #   indices: indices to use.
-  par_fn <- function(par, comp_derivs = FALSE, indices){
+  #   maxpts: maximum number of samples to draw.
+  par_fn <- function(par, comp_derivs = FALSE, indices,
+                     maxpts){
     if(!is.null(seed))
       set.seed(seed)
     Arg <- .get_lchol_inv(par)
@@ -276,15 +280,22 @@ mdgc_fit <- function(ptr, vcov, lr = 1e-3, rel_eps = 1e-2,
     log_ml
   }
 
+  maxpts_base <- exp(log(minvls / maxpts) / (maxit - 1))
+  maxpts_scale <- maxpts_base^(maxit:1)
+  maxpts_scale <- maxpts_scale / max(maxpts_scale)
+  maxpts_use <- pmax(minvls, as.integer(floor(maxpts * maxpts_scale)))
+
   if(method == "adam")
     return(adam(
       par_fn = par_fn, nobs = nobs, val = .get_lchol(vcov),
       batch_size = batch_size, maxit = maxit, seed = seed,
-      epsilon = epsilon, alpha = lr, beta_1 = beta_1, beta_2 = beta_2))
+      epsilon = epsilon, alpha = lr, beta_1 = beta_1, beta_2 = beta_2,
+      maxpts = maxpts_use))
   else if(method == "svrg")
     return(svrg(
       par_fn = par_fn, nobs = nobs, val = .get_lchol(vcov),
-      batch_size = batch_size, maxit = maxit, seed = seed, lr = lr))
+      batch_size = batch_size, maxit = maxit, seed = seed, lr = lr,
+      verbose = verbose, maxpts = maxpts_use))
 
   stop(sprintf("Method '%s' is not implemented", method))
 }
@@ -300,9 +311,10 @@ mdgc_fit <- function(ptr, vcov, lr = 1e-3, rel_eps = 1e-2,
 #   maxit: maximum number of iteration.
 #   seed: seed to use.
 #   epsilon, alpha, beta_1, beta_2: ADAM parameters.
+#   maxpts: maximum number of samples to draw.
 adam <- function(par_fn, nobs, val, batch_size, maxit = 10L,
                  seed = 1L, epsilon = 1e-8, alpha = .001, beta_1 = .9,
-                 beta_2 = .999){
+                 beta_2 = .999, maxpts){
   indices <- sample.int(nobs, replace = FALSE) - 1L
   blocks <- tapply(indices, (seq_along(indices) - 1L) %/% batch_size,
                    identity, simplify = FALSE)
@@ -320,7 +332,8 @@ adam <- function(par_fn, nobs, val, batch_size, maxit = 10L,
       idx_b <- (i %% n_blocks) + 1L
       m_old <- m
       v_old <- v
-      res <- par_fn(val, comp_derivs = TRUE, indices = blocks[[idx_b]])
+      res <- par_fn(val, comp_derivs = TRUE, indices = blocks[[idx_b]],
+                    maxpts[k])
       fun_vals[(i %/% n_blocks) + 1L] <-
         fun_vals[(i %/% n_blocks) + 1L] + c(res)
 
@@ -354,7 +367,10 @@ adam <- function(par_fn, nobs, val, batch_size, maxit = 10L,
 #   maxit: maximum number of iteration.
 #   seed: seed to use.
 #   lr: learning rate.
-svrg <- function(par_fn, nobs, val, batch_size, maxit = 10L, seed = 1L, lr){
+#   verbose: print output during the estimation.
+#   maxpts: maximum number of samples to draw.
+svrg <- function(par_fn, nobs, val, batch_size, maxit = 10L, seed = 1L, lr,
+                 verbose = FALSE, maxpts){
   indices <- sample.int(nobs, replace = FALSE) - 1L
   blocks <- tapply(indices, (seq_along(indices) - 1L) %/% batch_size,
                    identity, simplify = FALSE)
@@ -365,12 +381,15 @@ svrg <- function(par_fn, nobs, val, batch_size, maxit = 10L, seed = 1L, lr){
   fun_vals <- numeric(maxit + 1L)
   estimates[, 1L] <- val
 
+  decay <- .98
+  lr_use <- lr / decay
   for(k in 1:maxit + 1L){
     old_val <- estimates[, k - 1L]
     old_grs <- sapply(1:n_blocks - 1L, function(ii){
       idx_b <- (ii %% n_blocks) + 1L
       res_old <- par_fn(
-        old_val, comp_derivs = TRUE, indices = blocks[[idx_b]])
+        old_val, comp_derivs = TRUE, indices = blocks[[idx_b]],
+        maxpts[k - 1L])
       c(res_old, attr(res_old, "grad"))
     })
 
@@ -378,17 +397,28 @@ svrg <- function(par_fn, nobs, val, batch_size, maxit = 10L, seed = 1L, lr){
     old_grs <- old_grs[-1L, , drop = FALSE ]
     old_gr <- rowSums(old_grs) / n_blocks
 
+    lr_use <- lr_use * decay
     for(ii in 1:n_blocks - 1L){
       idx_b <- (ii %% n_blocks) + 1L
-      res <- par_fn(val, comp_derivs = TRUE, indices = blocks[[idx_b]])
+      res <- par_fn(val, comp_derivs = TRUE, indices = blocks[[idx_b]],
+                    maxpts[k - 1L])
       fun_vals[k] <- fun_vals[k] + c(res)
       dir <- attr(res, "grad") - old_grs[, ii + 1L] + old_gr
 
-      val <- val + lr * dir
+      val <- val + lr_use * dir
       val <- .get_lchol(cov2cor(.get_lchol_inv(val)))
     }
 
     estimates[, k] <- val
+
+    if(verbose)
+      cat(
+        sprintf("End if iteration %4d with learning rate %.8f", k - 1L,
+                lr_use),
+        sprintf("Log marginal likelihood approximation is %12.2f", fun_vals[k]),
+        sprintf("Previous approximate gradient norm was %14.2f\n",
+                n_blocks * norm(as.matrix(old_gr))),
+        sep = "\n")
   }
 
   list(result = .get_lchol_inv(val), fun_vals = fun_vals[-1L],
@@ -418,7 +448,7 @@ svrg <- function(par_fn, nobs, val, batch_size, maxit = 10L, seed = 1L, lr){
   lSig[lower.tri(lSig, TRUE)]
 }
 
-#' Impute Missing Values
+#' Impute Missing Values Given Correlation Matrix
 #' @param object returned object from \code{\link{get_mdgc}}.
 #' @param vcov correlation matrix to condition on in the imputation.
 #' @inheritParams mdgc_fit
@@ -470,4 +500,79 @@ mdgc_impute <- function(object, vcov, rel_eps = 1e-3, maxit = 10000L,
          maxit = maxit, passed_names = passed_names,
          outer_names = rownames(object$lower), n_threads = n_threads,
          do_reorder = do_reorder, minvls = minvls)
+}
+
+#' Perform Model Estimation and Imputation
+#' @inheritParams mdgc_fit
+#' @inheritParams get_mdgc
+#' @param irel_eps relative error for each term in the imputation.
+#' @param imaxit maximum number of samples to draw in the imputation.
+#' @param iabs_eps absolute convergence threshold for each term in the imputation.
+#' @param iminvls minimum number of samples in the imputation.
+#' @export
+#'
+#' @seealso
+#' \code{\link{get_mdgc}}, \code{\link{get_mdgc_log_ml}},
+#' \code{\link{mdgc_start_value}}, \code{\link{mdgc_fit}},
+#' \code{\link{mdgc_impute}}
+mdgc <- function(dat, lr = 1e-3, maxit = 10L, batch_size = NULL,
+                 rel_eps = 1e-3,
+                 method = c("svrg", "adam"), seed = 1L, epsilon = 1e-8,
+                 beta_1 = .9, beta_2 = .999, n_threads = 1L,
+                 do_reorder = TRUE, abs_eps = -1, maxpts = 10000L,
+                 minvls = 100L, verbose = FALSE, irel_eps = rel_eps,
+                 imaxit = maxpts, iabs_eps = abs_eps, iminvls = 1000L){
+  mdgc_obj <- get_mdgc(dat)
+  log_ml_ptr <- get_mdgc_log_ml(mdgc_obj)
+  start_val <- mdgc_start_value(mdgc_obj, n_threads = n_threads)
+
+  if(verbose)
+    cat("Estimating the model...\n")
+  fit <- mdgc_fit(
+    ptr = log_ml_ptr, vcov = start_val, lr = lr, rel_eps = rel_eps,
+    maxit = maxit, batch_size = batch_size, method = method, seed = seed,
+    epsilon = epsilon, beta_1 = beta_1, beta_2 = beta_2,
+    n_threads = n_threads, do_reorder = do_reorder, abs_eps = abs_eps,
+    maxpts = maxpts, minvls = minvls, verbose = verbose)
+
+  if(verbose)
+    cat("Performing imputation...\n")
+  impu <- mdgc_impute(mdgc_obj, fit$result, rel_eps = irel_eps,
+                      maxit = imaxit, abs_eps = iabs_eps,
+                      n_threads = n_threads, do_reorder = do_reorder,
+                      minvls = iminvls)
+  list(ximp = .threshold(dat, impu), imputed = impu, vcov = fit$result)
+}
+
+.threshold <- function(org_data, imputed){
+  # checks
+  stopifnot(NROW(org_data) == length(imputed),
+            is.list(imputed), is.data.frame(org_data))
+
+  # threshold
+  is_cont <- which(sapply(org_data, is.numeric))
+  is_bin  <- which(sapply(org_data, is.logical))
+  is_ord  <- which(sapply(org_data, is.ordered))
+  stopifnot(
+    length(is_cont) + length(is_bin) + length(is_ord) == NCOL(org_data))
+  is_cat <- c(is_bin, is_ord)
+
+  out_cont <- as.data.frame(
+    t(sapply(imputed, function(x) unlist(x[is_cont]))))
+  out_cat <- as.data.frame(t(sapply(imputed, function(x)
+    sapply(x[is_cat], which.max))))
+  out <- cbind(out_cont, out_cat)
+
+  # set factor levels etc.
+  out <- out[, order(c(is_cont, is_bin, is_ord))]
+  if(length(is_bin) > 0)
+    out[, is_bin] <- out[, is_bin] > 1L
+  if(length(is_ord) > 0)
+    for(i in is_ord){
+      out[[i]] <- ordered(
+        unlist(out[[i]]), labels = levels(org_data[, i]))
+    }
+
+  colnames(out) <- colnames(org_data)
+  out
 }

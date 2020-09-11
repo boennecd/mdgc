@@ -3,7 +3,7 @@
 \name{mdgc_start_value}
 \alias{mdgc_start_value}
 \alias{mdgc_start_value.default}
-\title{Get Starting Value for Correlation Matrix Using a Heuristic}
+\title{Get Starting Value for the Correlation Matrix Using a Heuristic}
 \usage{
 mdgc_start_value(object, ...)
 
@@ -30,5 +30,5 @@ one implies a missing value, and two implies an interval.}
 \item{n_threads}{number of threads to use.}
 }
 \description{
-Get Starting Value for Correlation Matrix Using a Heuristic
+Get Starting Value for the Correlation Matrix Using a Heuristic
 }

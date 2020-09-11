@@ -4,7 +4,7 @@
 \alias{get_mdgc_log_ml}
 \alias{get_mdgc_log_ml.mdgc}
 \alias{get_mdgc_log_ml.default}
-\title{Get Pointer to C++ to Approximate  the Log Marginal Likelihood}
+\title{Get Pointer to C++ Object to Approximate the Log Marginal Likelihood}
 \usage{
 get_mdgc_log_ml(object, ...)
 
@@ -29,5 +29,5 @@ each variable on the normal scale. Zero implies an observed value,
 one implies a missing value, and two implies an interval.}
 }
 \description{
-Get Pointer to C++ to Approximate  the Log Marginal Likelihood
+Get Pointer to C++ Object to Approximate the Log Marginal Likelihood
 }

@@ -2,7 +2,7 @@
 % Please edit documentation in R/mdgc.R
 \name{mdgc_impute}
 \alias{mdgc_impute}
-\title{Impute Missing Values}
+\title{Impute Missing Values Given Correlation Matrix}
 \usage{
 mdgc_impute(
   object,
@@ -33,5 +33,5 @@ mdgc_impute(
 \item{minvls}{minimum number of samples.}
 }
 \description{
-Impute Missing Values
+Impute Missing Values Given Correlation Matrix
 }
