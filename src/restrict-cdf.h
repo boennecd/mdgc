@@ -52,6 +52,17 @@ extern "C"
       int* /* idx */, int const* /* doscale */);
 }
 
+inline double safe_qnorm(double const x) noexcept {
+  constexpr double const eps_1 = std::numeric_limits<double>::epsilon(),
+                         eps_2 = 1. - eps_1;
+  if(x <= 0)
+    return qnorm_w(eps_1, 0, 1, 1L, 0L);
+  else if(x >= 1.)
+    return qnorm_w(eps_2, 0, 1, 1L, 0L);
+
+  return qnorm_w  (x    , 0, 1, 1L, 0L);
+}
+
 /**
  * draws from a truncated normal distribution.
  *
@@ -74,7 +85,7 @@ template<> inline std::array<double, 2> draw_trunc_mean<-1L>
 (double const a, double const b, double const u,
  bool const comp_quantile) MDGC_NOEXCEPT {
    if(comp_quantile)
-     return { 1., qnorm_w(u, 0, 1, 1L, 0L) };
+     return { 1., safe_qnorm(u) };
    return { 1., std::numeric_limits<double>::quiet_NaN() };
 }
 
@@ -83,7 +94,7 @@ template<> inline std::array<double, 2> draw_trunc_mean<0L>
  bool const comp_quantile) MDGC_NOEXCEPT {
   double const qb = pnorm_std(b, 1L, 0L);
   if(comp_quantile)
-    return { qb, qnorm_w(qb * u, 0, 1, 1L, 0L) };
+    return { qb, safe_qnorm(qb * u) };
   return { qb, std::numeric_limits<double>::quiet_NaN() };
 }
 
@@ -92,21 +103,20 @@ template<> inline std::array<double, 2> draw_trunc_mean<1L>
  bool const comp_quantile) MDGC_NOEXCEPT {
   double const qa = pnorm_std(a, 1L, 0L);
   if(comp_quantile)
-    return { 1 - qa, qnorm_w(qa + u * (1 - qa), 0, 1, 1L, 0L) };
+    return { 1 - qa, safe_qnorm(qa + u * (1 - qa)) };
   return { 1 - qa, std::numeric_limits<double>::quiet_NaN() };
 }
 
 template<> inline std::array<double, 2> draw_trunc_mean<2L>
 (double const a, double const b, double const u,
  bool const comp_quantile) MDGC_NOEXCEPT {
+  if(b <= a)
+    return { 0., 0. };
+
   double const qa = pnorm_std(a, 1L, 0L),
                qb = pnorm_std(b, 1L, 0L);
-#ifdef DO_CHECKS
-  if(qb <= qa)
-    throw std::runtime_error("draw_trunc_mean: qb <= qa");
-#endif
   if(comp_quantile)
-    return { qb - qa, qnorm_w(qa + u * (qb - qa), 0, 1, 1L, 0L) };
+    return { qb - qa, safe_qnorm(qa + u * (qb - qa)) };
   return { qb - qa, std::numeric_limits<double>::quiet_NaN() };
 }
 
@@ -316,12 +326,12 @@ public:
 
         } else if(*infin == 2L){
           double a(*lw),
-                 b(*up);
-          for(size_t i = 0; i < j; ++i, sc++, d++){
-            double const term = *sc * *d;
-            a -= term;
-            b -= term;
-          }
+                 b(*up),
+                su(0.);
+          for(size_t i = 0; i < j; ++i, sc++, d++)
+            su += *sc * *d;
+          a -= su;
+          b -= su;
 
           return draw_trunc_mean<2L>(a, b, *unif, needs_q);
         }
@@ -335,7 +345,7 @@ public:
         throw std::runtime_error("draw_trunc_mean: not implemented");
 #endif
         sc += j;
-        return draw_trunc_mean<-1L>(0, 0, *unif, needs_q);
+        return draw_trunc_mean<-2L>(0, 0, *unif, needs_q);
       })();
 
       w           *= draw_n_p[0];
@@ -404,8 +414,11 @@ public:
     upper -= mu;
 
     is_permutated = false;
-    for(size_t i = 0; i < udim; ++i)
-      *(map_obj.idx + i) = i;
+    {
+      int *idx = map_obj.idx;
+      for(size_t i = 0; i < udim; ++i, ++idx)
+        *idx = i;
+    }
 
     if(do_reorder and udim > 1L){
       double * const y     = map_obj.draw,
@@ -432,11 +445,15 @@ public:
       if(F_inform != 0)
         throw std::runtime_error("cdf::cdf: error in mvsort");
 
-      int prev = *map_obj.idx;
-      for(size_t i = 1; !is_permutated or i < udim;
-          prev = *(map_obj.idx + i), ++i)
-        is_permutated = is_permutated or *(map_obj.idx + i) != prev + 1L;
-
+      {
+        int const *prev = map_obj.idx;
+        for(size_t i = 0; i < udim; ++prev, ++i){
+          if(static_cast<size_t>(*prev) != i){
+            is_permutated = true;
+            break;
+          }
+        }
+      }
 
       if(is_permutated){
         for(size_t i = 0; i < udim; ++i){
@@ -458,6 +475,13 @@ public:
         funcs::set_child_wk_mem(mu_permu, sigma_permu, map_obj.child_mem,
                                 map_obj.idx);
         return;
+
+      } else {
+        for(size_t i = 0; i < udim; ++i){
+          lower[i] = *(A + i);
+          upper[i] = *(B + i);
+        }
+
       }
 
     } else if(!do_reorder and udim > 1L) {
@@ -470,18 +494,17 @@ public:
       else
         copy_upper_tri(tmp, sigma_chol.memptr());
 
-    }
-
-    if(udim > 1L){
-      /* rescale such that choleksy decomposition has ones in the diagonal */
-      double * sc = sigma_chol.begin();
-      for(size_t i = 0; i < udim; ++i){
-        double const scal = *(sc + i);
-        lower[i] /= scal;
-        upper[i] /= scal;
-        double * const sc_end = sc + i + 1L;
-        for(; sc != sc_end; ++sc)
-          *sc /= scal;
+      if(udim > 1L){
+        /* rescale such that choleksy decomposition has ones in the diagonal */
+        double * sc = sigma_chol.begin();
+        for(size_t i = 0; i < udim; ++i){
+          double const scal = *(sc + i);
+          lower[i] /= scal;
+          upper[i] /= scal;
+          double * const sc_end = sc + i + 1L;
+          for(; sc != sc_end; ++sc)
+            *sc /= scal;
+        }
       }
     }
 
@@ -586,7 +609,7 @@ public:
     MDGC_NOEXCEPT {
 #ifdef DO_CHECKS
     if(!out)
-      throw invalid_argument("likelihood::integrand: invalid out");
+      throw std::invalid_argument("likelihood::integrand: invalid out");
 #endif
     *out = 1;
   }

@@ -24,7 +24,8 @@ mdgc(
   irel_eps = rel_eps,
   imaxit = maxpts,
   iabs_eps = abs_eps,
-  iminvls = 1000L
+  iminvls = 1000L,
+  start_val = NULL
 )
 }
 \arguments{
@@ -69,6 +70,8 @@ fixed.}
 \item{iabs_eps}{absolute convergence threshold for each term in the imputation.}
 
 \item{iminvls}{minimum number of samples in the imputation.}
+
+\item{start_val}{starting value for the correlation matrix. Use \code{NULL} if unspecified.}
 }
 \description{
 Perform Model Estimation and Imputation

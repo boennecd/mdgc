@@ -26,10 +26,9 @@ threshold <- function(org_data, imputed){
   if(length(is_bin) > 0)
     out[, is_bin] <- out[, is_bin] > 1L
   if(length(is_ord) > 0)
-    for(i in is_ord){
+    for(i in is_ord)
       out[[i]] <- ordered(
         unlist(out[[i]]), labels = levels(org_data[, i]))
-    }
 
   colnames(out) <- colnames(org_data)
   out

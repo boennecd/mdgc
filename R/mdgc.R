@@ -509,6 +509,7 @@ mdgc_impute <- function(object, vcov, rel_eps = 1e-3, maxit = 10000L,
 #' @param imaxit maximum number of samples to draw in the imputation.
 #' @param iabs_eps absolute convergence threshold for each term in the imputation.
 #' @param iminvls minimum number of samples in the imputation.
+#' @param start_val starting value for the correlation matrix. Use \code{NULL} if unspecified.
 #' @export
 #'
 #' @seealso
@@ -521,10 +522,15 @@ mdgc <- function(dat, lr = 1e-3, maxit = 10L, batch_size = NULL,
                  beta_1 = .9, beta_2 = .999, n_threads = 1L,
                  do_reorder = TRUE, abs_eps = -1, maxpts = 10000L,
                  minvls = 100L, verbose = FALSE, irel_eps = rel_eps,
-                 imaxit = maxpts, iabs_eps = abs_eps, iminvls = 1000L){
+                 imaxit = maxpts, iabs_eps = abs_eps, iminvls = 1000L,
+                 start_val = NULL){
   mdgc_obj <- get_mdgc(dat)
+  p <- NCOL(dat)
   log_ml_ptr <- get_mdgc_log_ml(mdgc_obj)
-  start_val <- mdgc_start_value(mdgc_obj, n_threads = n_threads)
+  if(is.null(start_val))
+    start_val <- mdgc_start_value(mdgc_obj, n_threads = n_threads)
+  stopifnot(is.matrix(start_val), all(dim(start_val) == p),
+            all(is.finite(start_val)))
 
   if(verbose)
     cat("Estimating the model...\n")
@@ -541,7 +547,11 @@ mdgc <- function(dat, lr = 1e-3, maxit = 10L, batch_size = NULL,
                       maxit = imaxit, abs_eps = iabs_eps,
                       n_threads = n_threads, do_reorder = do_reorder,
                       minvls = iminvls)
-  list(ximp = .threshold(dat, impu), imputed = impu, vcov = fit$result)
+  out <- list(ximp = .threshold(dat, impu), imputed = impu,
+              vcov = fit$result)
+  if(!is.null(fit$fun_vals))
+    out$logLik <- fit$fun_vals
+  out
 }
 
 .threshold <- function(org_data, imputed){
@@ -557,10 +567,16 @@ mdgc <- function(dat, lr = 1e-3, maxit = 10L, batch_size = NULL,
     length(is_cont) + length(is_bin) + length(is_ord) == NCOL(org_data))
   is_cat <- c(is_bin, is_ord)
 
-  out_cont <- as.data.frame(
-    t(sapply(imputed, function(x) unlist(x[is_cont]))))
-  out_cat <- as.data.frame(t(sapply(imputed, function(x)
-    sapply(x[is_cat], which.max))))
+  trans_to_df <- function(x){
+    if(is.matrix(x))
+      as.data.frame(t(x))
+    else
+      as.data.frame(  x )
+  }
+
+  out_cont <- trans_to_df(sapply(imputed, function(x) unlist(x[is_cont])))
+  out_cat <- trans_to_df(sapply(imputed, function(x)
+    sapply(x[is_cat], which.max)))
   out <- cbind(out_cont, out_cat)
 
   # set factor levels etc.
@@ -568,10 +584,9 @@ mdgc <- function(dat, lr = 1e-3, maxit = 10L, batch_size = NULL,
   if(length(is_bin) > 0)
     out[, is_bin] <- out[, is_bin] > 1L
   if(length(is_ord) > 0)
-    for(i in is_ord){
+    for(i in is_ord)
       out[[i]] <- ordered(
         unlist(out[[i]]), labels = levels(org_data[, i]))
-    }
 
   colnames(out) <- colnames(org_data)
   out

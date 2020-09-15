@@ -127,6 +127,7 @@ double log_ml_term::approximate
         size_t const jj = idx_obs[j];
         for(size_t i = 0; i < n_obs; ++i){
           size_t const ii = idx_obs[i];
+          // TODO: use that it is symmetric
           derivs.at(ii, jj) +=
             (obs_scaled[i] * obs_scaled[j] - S_00_inv.at(i , j)) / 2.;
         }

@@ -2,11 +2,13 @@
 # mdgc
 
 This package contains a marginal likelihood approach to estimating the
-model discussed by D. Hoff (2007) and Zhao and Udell (2019). We have
-modified the Fortran code by Genz and Bretz (2002) to supply an
-approximation gradient for the log marginal likelihood and to use an
-approximation of the marginal likelihood similar to the CDF
-approximation in Genz and Bretz (2002).
+model discussed by D. Hoff (2007) and Zhao and Udell (2019). That is, a
+missing data approach where one uses Gaussian copulas. We have modified
+the Fortran code by Genz and Bretz (2002) to supply an approximation of
+the gradient for the log marginal likelihood and to use an approximation
+of the marginal likelihood similar to the CDF approximation in Genz and
+Bretz (2002). We have also used the same Fortran code to perform the
+imputation conditional on a correlation matrix.
 
 However, the package can be useful for a lot of other models. For
 instance, the methods are directly applicable to other Gaussian copula
@@ -28,49 +30,47 @@ approximate EM algorithm converges in what seems to be 20-25 seconds
 than 150 seconds for the MCMC algorithm used by D. Hoff (2007). These
 figures should be kept in mind when looking at the results below.
 Importantly, Zhao and Udell (2019) use an approximation in the E-step of
-the EM algorithm which is fast but might be crude is some settings.
-Using a potentially arbitrarily precise approximation of the marginal
+an EM algorithm which is fast but might be crude is some settings. Using
+a potentially arbitrarily precise approximation of the marginal
 likelihood is useful if this can be done quickly enough.
 
-To summarize, we do the following below:
+We will provide a [quick-example](#quick-example) and [an even shorter
+example](#an-even-shorter-example) where we show how to use the methods
+in the package to estimate the correlation matrix and to perform the
+imputation. We then show a [simulation study](#simulation-study) where
+we compare with the method suggested by Zhao and Udell (2019).
 
-1.  simulate the data set we will use.
-2.  show how to use the C++ functions and that these provide an
+We end by provding a [detailed example](#detailed-example) where we:
+
+1.  show how to use the C++ functions and that these provide an
     approximation of the log marginal likelihood and its gradient.
     Moreover, we show that the methods scales well in the number of
     threads.
-3.  define functions to perform maximum likelihood estimation.
-4.  estimate the parameters using a simple gradient descent algorithm
-    and stochastic gradient descent using ADAM.
-5.  show how to improve 4. by using better starting values which are
+2.  define functions to perform maximum likelihood estimation.
+3.  estimate the parameters using a simple gradient descent algorithm,
+    and stochastic gradient descent methods.
+4.  show how to improve 4. by using better starting values which are
     quick to compute. As of this writing, this reduces the estimation
     time to about 4 seconds using four threads and about 12 seconds
     using one thread.
 
-Presumably/likely, computing the marginals of each variable should be
-extremely fast, as should the imputation once the model parameters are
-estimated. Given that this is true, then the main concern should be the
-time it takes to estimate the model parameters. As we show, this can be
-done quickly using our code. We start of with the example using the high
-end API. Then we turn to a more detailed explanation.
+The last section is added to give an idea about what is going on under
+the hood and can likely be skipped.
 
 ### Quick Example
 
 We first simulate a data set and provide an example which shows how to
 use the package. The [An Even Shorter Example](an-even-shorter-example)
-section shows a shorter example then what is shown here.
+section shows a shorter example then what is shown here. You may want to
+see this first if you just want to perform some quick imputation.
 
 ``` r
 # load the packages we need
 library(bench)
 library(mdgc)
-library(missForest)
-#> Loading required package: randomForest
+library(missForest, quietly = TRUE)
 #> randomForest 4.6-14
 #> Type rfNews() to see new features/changes/bug fixes.
-#> Loading required package: foreach
-#> Loading required package: itertools
-#> Loading required package: iterators
 # remotes::install_github("udellgroup/mixedgcImp", ref = "5ad6d523d")
 library(mixedgcImp)
 ```
@@ -91,7 +91,7 @@ sim_dat <- function(n, p = 3L, n_lvls = 5L){
   Sb[lower.tri(Sb)] <- Sb[upper.tri(Sb)] <- .5
   Sb <- Sb / p / 5
   Sig <- cov2cor(drop(rWishart(1L, 5L * p, Sb)))
-  
+    
   # draw the observations
   truth <- matrix(rnorm(n * p), n) %*% chol(Sig)
   
@@ -104,12 +104,17 @@ sim_dat <- function(n, p = 3L, n_lvls = 5L){
   # sample which are masked data 
   is_mask <- matrix(runif(n * p) < .3, n)
   
+  # make sure we have no rows with all missing data
+  while(any(all_nans <- rowSums(is_mask) == NCOL(is_mask)))
+    is_mask[all_nans, ] <- runif(sum(all_nans) * p) < .3
+  
   # create observed data
   truth_obs <- data.frame(truth)
   truth_obs[, is_con] <- qexp(pnorm(as.matrix(truth_obs[, is_con])))
   
-  bs_bin <- c(-Inf, 0., Inf)
-  truth_obs[, is_bin] <- truth_obs[, is_bin] > bs_bin[2]
+  bs_border <- 0
+  truth_obs[, is_bin] <- 
+    truth_obs[, is_bin] > rep(bs_border, each = NROW(truth_obs))
   
   bs_ord <- qnorm(seq(0, 1, length.out = n_lvls + 1L))
   truth_obs[, is_ord] <- as.integer(cut(truth[, is_ord], breaks = bs_ord))
@@ -164,17 +169,17 @@ mark(`Setup time` = {
 #> # A tibble: 1 x 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Setup time   16.4ms     17ms      57.3    8.85MB     12.5
+#> 1 Setup time   16.3ms   16.9ms      57.6    8.85MB     15.0
 
 # fit the model using two different methods
 set.seed(60941821)
 system.time(
   fit_adam <- mdgc_fit(
     ptr = log_ml_ptr, vcov = start_val, n_threads = 4L, 
-    lr = 3e-3, maxit = 10L, batch_size = 100L, method = "adam", 
+    lr = 1e-3, maxit = 10L, batch_size = 100L, method = "adam", 
      rel_eps = 1e-3, maxpts = 5000L))
 #>    user  system elapsed 
-#>   15.03    0.00    3.76
+#>   15.45    0.00    3.87
 system.time(
   fit_svrg <- mdgc_fit(
     ptr = log_ml_ptr, vcov = start_val, n_threads = 4L, 
@@ -220,11 +225,11 @@ system.time(
 #> Log marginal likelihood approximation is    -21701.14
 #> Previous approximate gradient norm was         151.51
 #>    user  system elapsed 
-#>   30.10    0.00    7.53
+#>   30.64    0.00    7.66
 
 # compare the log marginal likelihood 
 mdgc_log_ml(vcov = fit_adam$result, ptr = log_ml_ptr, rel_eps = 1e-3)
-#> [1] -21702
+#> [1] -21711
 mdgc_log_ml(vcov = fit_svrg$result, ptr = log_ml_ptr, rel_eps = 1e-3)
 #> [1] -21701
 
@@ -232,7 +237,7 @@ mdgc_log_ml(vcov = fit_svrg$result, ptr = log_ml_ptr, rel_eps = 1e-3)
 do_plot <- function(est, truth, main){
   par_old <- par(mfcol = c(1, 3), mar  = c(1, 1, 4, 1))
   on.exit(par(par_old))
-  sc <- colorRampPalette(c("Red", "White", "Blue"))(51)
+  sc <- colorRampPalette(c("Red", "White", "Blue"))(201)
   
   f <- function(x, main)
     image(x[, NCOL(x):1], main = main, col = sc, zlim = c(-1, 1), 
@@ -260,7 +265,7 @@ system.time(
   imp_res <- mdgc_impute(mdgc_obj, fit_svrg$result, rel_eps = 1e-3,
                          maxit = 10000L, n_threads = 4L))
 #>    user  system elapsed 
-#>    5.39    0.00    1.79
+#>    5.42    0.00    1.80
 
 # look at the result for the one of the observations
 imp_res[2L]
@@ -343,10 +348,16 @@ threshold <- function(org_data, imputed){
     length(is_cont) + length(is_bin) + length(is_ord) == NCOL(org_data))
   is_cat <- c(is_bin, is_ord)
   
-  out_cont <- as.data.frame(
-    t(sapply(imputed, function(x) unlist(x[is_cont]))))
-  out_cat <- as.data.frame(t(sapply(imputed, function(x) 
-    sapply(x[is_cat], which.max))))
+  trans_to_df <- function(x){
+    if(is.matrix(x))
+      as.data.frame(t(x))
+    else
+      as.data.frame(  x )
+  }
+  
+  out_cont <- trans_to_df(sapply(imputed, function(x) unlist(x[is_cont])))
+  out_cat <- trans_to_df(sapply(imputed, function(x) 
+    sapply(x[is_cat], which.max)))
   out <- cbind(out_cont, out_cat)
   
   # set factor levels etc. 
@@ -453,52 +464,390 @@ system.time(miss_res <- missForest(miss_forest_arg))
 #>   missForest iteration 9 in progress...done!
 #>   missForest iteration 10 in progress...done!
 #>    user  system elapsed 
-#>  46.968   0.047  47.016
+#>  46.848   0.047  46.896
 
 # turn binary variables back to logicals
 miss_res$ximp[, is_log] <- lapply(
   miss_res$ximp[, is_log], function(x) as.integer(x) > 1L)
 
-rbind(
-  mdgc       = get_classif_error(thresh_dat),
-  missForest = get_classif_error(miss_res$ximp))
+rbind(mdgc       = get_classif_error(thresh_dat),
+      missForest = get_classif_error(miss_res$ximp))
 #>               X6    X7    X8    X9   X10   X11   X12   X13   X14   X15
 #> mdgc       0.257 0.285 0.240 0.254 0.234 0.620 0.627 0.596 0.588 0.581
 #> missForest 0.262 0.279 0.264 0.259 0.255 0.635 0.635 0.637 0.608 0.611
-rbind(
-  mdgc       = get_rmse(thresh_dat),
-  missForest = get_rmse(miss_res$ximp))
+rbind(mdgc       = get_rmse(thresh_dat),
+      missForest = get_rmse(miss_res$ximp))
 #>               X1    X2    X3    X4    X5
 #> mdgc       0.812 0.880 0.717 0.786 0.763
 #> missForest 0.867 0.897 0.742 0.808 0.791
 ```
 
-### An Even Shorter Example
+#### An Even Shorter Example
 
-Here is an example where we use the `mdgc` function to do model
-estimation and imputation:
+Here is an example where we use the `mdgc` function to do the model
+estimation and the imputation:
 
 ``` r
 # have a data set with missing continous, binary, and ordinal variables
 head(dat$seen_obs)
+#>      X1   X2    X3    X4    X5    X6    X7    X8    X9   X10  X11  X12  X13 X14
+#> 1 0.560   NA    NA 0.812 0.800  TRUE    NA  TRUE    NA    NA    C    D    C   C
+#> 2    NA 1.85 0.132 0.215    NA    NA  TRUE    NA    NA FALSE <NA>    A <NA>   A
+#> 3 1.435   NA    NA 0.575 0.891  TRUE  TRUE  TRUE    NA  TRUE    A <NA>    B   C
+#> 4 0.636   NA 0.455 0.227 1.727  TRUE FALSE  TRUE FALSE  TRUE    C    B <NA>   B
+#> 5 0.664   NA 1.334    NA    NA  TRUE  TRUE FALSE    NA    NA    E <NA>    D   D
+#> 6 0.285   NA 0.309 0.178 0.156 FALSE    NA FALSE    NA    NA <NA>    A    B   A
+#>    X15
+#> 1    D
+#> 2    B
+#> 3 <NA>
+#> 4 <NA>
+#> 5 <NA>
+#> 6    B
 
 # perform the estimation and imputation
 system.time(res <- mdgc(dat$seen_obs, verbose = TRUE, maxpts = 5000L, 
-                        n_threads = 4L))
+                        n_threads = 4L, maxit = 10L))
+#> Estimating the model...
+#> End if iteration    1 with learning rate 0.00100000
+#> Log marginal likelihood approximation is    -21762.41
+#> Previous approximate gradient norm was        4050.92
+#> 
+#> End if iteration    2 with learning rate 0.00098000
+#> Log marginal likelihood approximation is    -21717.34
+#> Previous approximate gradient norm was        1809.21
+#> 
+#> End if iteration    3 with learning rate 0.00096040
+#> Log marginal likelihood approximation is    -21706.32
+#> Previous approximate gradient norm was         961.09
+#> 
+#> End if iteration    4 with learning rate 0.00094119
+#> Log marginal likelihood approximation is    -21703.07
+#> Previous approximate gradient norm was         551.68
+#> 
+#> End if iteration    5 with learning rate 0.00092237
+#> Log marginal likelihood approximation is    -21701.97
+#> Previous approximate gradient norm was         351.61
+#> 
+#> End if iteration    6 with learning rate 0.00090392
+#> Log marginal likelihood approximation is    -21701.53
+#> Previous approximate gradient norm was         253.17
+#> 
+#> End if iteration    7 with learning rate 0.00088584
+#> Log marginal likelihood approximation is    -21701.39
+#> Previous approximate gradient norm was         209.66
+#> 
+#> End if iteration    8 with learning rate 0.00086813
+#> Log marginal likelihood approximation is    -21701.29
+#> Previous approximate gradient norm was         176.64
+#> 
+#> End if iteration    9 with learning rate 0.00085076
+#> Log marginal likelihood approximation is    -21701.18
+#> Previous approximate gradient norm was         162.66
+#> 
+#> End if iteration   10 with learning rate 0.00083375
+#> Log marginal likelihood approximation is    -21701.17
+#> Previous approximate gradient norm was         150.95
+#> 
+#> Performing imputation...
+#>    user  system elapsed 
+#>  34.487   0.024   9.102
 
-# compare the estimated correlation matrix with the truth
+# compute the estimated correlation matrix with the truth
 norm(dat$Sigma - res$vcov, "F") / norm(dat$Sigma, "F")
+#> [1] 0.0634
 
-# compare the classifcation error and RMSE
+# compute the classifcation error and RMSE
 get_classif_error(res$ximp)
+#>    X6    X7    X8    X9   X10   X11   X12   X13   X14   X15 
+#> 0.259 0.282 0.242 0.252 0.236 0.608 0.632 0.592 0.588 0.586
 get_rmse(res$ximp)
+#>    X1    X2    X3    X4    X5 
+#> 0.813 0.880 0.717 0.786 0.763
 ```
 
 We can compare this with the `mixedgcImp` which uses the method
 described in Zhao and Udell (2019):
 
 ``` r
-imp_apr_em <- impute_mixedgc(dat$seen_obs)
+# prepare data to a format that can be bassed
+dat_pass <- dat$seen_obs
+is_cat <- sapply(dat_pass, function(x) is.logical(x) | is.ordered(x))
+dat_pass[, is_cat] <- lapply(dat_pass[, is_cat], as.integer)
+
+system.time(imp_apr_em <- impute_mixedgc(dat_pass, eps = 1e-4))
+#>    user  system elapsed 
+#>  13.656   0.016  13.673
+
+# compare the estimated correlation matrix with the truth
+get_rel_err <- function(est, keep = seq_len(NROW(truth)), truth = dat$Sigma)
+  norm(truth[keep, keep] - est[keep, keep], "F") / 
+  norm(truth, "F")
+
+c(mdgc               = get_rel_err(res$vcov), 
+  mixedgcImp         = get_rel_err(imp_apr_em$R), 
+  `mdgc bin/ordered` = get_rel_err(res$vcov    , is_cat),
+  `mdgc bin/ordered` = get_rel_err(imp_apr_em$R, is_cat),
+  `mdgc continuous`  = get_rel_err(res$vcov    , !is_cat),
+  `mdgc continuous`  = get_rel_err(imp_apr_em$R, !is_cat))
+#>             mdgc       mixedgcImp mdgc bin/ordered mdgc bin/ordered 
+#>           0.0634           0.0495           0.0477           0.0332 
+#>  mdgc continuous  mdgc continuous 
+#>           0.0138           0.0129
+
+# compare the classifcation error and RMSE
+imp_apr_res <- as.data.frame(imp_apr_em$Ximp)
+is_bin <- sapply(dat$seen_obs, is.logical)
+imp_apr_res[, is_bin] <- lapply(imp_apr_res[, is_bin], `>`, e2 = 0)
+is_ord <- sapply(dat$seen_obs, is.ordered)
+imp_apr_res[, is_ord] <- mapply(function(x, idx)
+  ordered(x, labels = levels(dat$seen_obs[[idx]])), 
+  x = imp_apr_res[, is_ord], i = which(is_ord), SIMPLIFY = FALSE)
+
+rbind(mdgc       = get_classif_error(res$ximp),
+      mixedgcImp = get_classif_error(imp_apr_res))
+#>               X6    X7    X8    X9   X10   X11   X12   X13   X14   X15
+#> mdgc       0.259 0.282 0.242 0.252 0.236 0.608 0.632 0.592 0.588 0.586
+#> mixedgcImp 0.255 0.277 0.239 0.259 0.223 0.600 0.614 0.613 0.577 0.588
+rbind(mdgc       = get_rmse(res$ximp),
+      mixedgcImp = get_rmse(imp_apr_res))
+#>               X1    X2    X3    X4    X5
+#> mdgc       0.813 0.880 0.717 0.786 0.763
+#> mixedgcImp 0.810 0.879 0.717 0.785 0.764
+```
+
+### Simulation Study
+
+We will perform a simulation study in this section to compare different
+methods in terms of their computation time and performance. We first
+perform the simulation.
+
+``` r
+# the seeds we will use
+seeds <- c(293498804L, 311878062L, 370718465L, 577520465L, 336825034L, 661670751L, 750947065L, 255824398L, 281823005L, 721186455L, 251974931L, 643568686L, 273097364L, 328663824L, 490259480L, 517126385L, 651705963L, 43381670L, 503505882L, 609251792L, 643001919L, 244401725L, 983414550L, 850590318L, 714971434L, 469416928L, 237089923L, 131313381L, 689679752L, 344399119L, 330840537L, 6287534L, 735760574L, 477353355L, 579527946L, 83409653L, 710142087L, 830103443L, 94094987L, 422058348L, 117889526L, 259750108L, 180244429L, 762680168L, 112163383L, 10802048L, 440434442L, 747282444L, 736836365L, 837303896L, 50697895L, 231661028L, 872653438L, 297024405L, 719108161L, 201103881L, 485890767L, 852715172L, 542126886L, 155221223L, 18987375L, 203133067L, 460377933L, 949381283L, 589083178L, 820719063L, 543339683L, 154667703L, 480316186L, 310795921L, 287317945L, 30587393L, 381290126L, 178269809L, 939854883L, 660119506L, 825302990L, 764135140L, 433746745L, 173637986L, 100446967L, 333304121L, 225525537L, 443031789L, 587486506L, 245392609L, 469144801L, 44073812L, 462948652L, 226692940L, 165285895L, 546908869L, 550076645L, 872290900L, 452044364L, 620131127L, 600097817L, 787537854L, 15915195L, 64220696L)
+
+# gather or compute the results
+res <- lapply(head(seeds, 25), function(s){
+  file_name <- file.path("sim-res", sprintf("seed-%d.RDS", s))
+  
+  if(file.exists(file_name)){
+    message(sprintf("Reading '%s'", file_name))
+    out <- readRDS(file_name)
+  } else { 
+    message(sprintf("Running '%s'", file_name))
+    
+    # simulate the data
+    set.seed(s)
+    dat <- sim_dat(2000L, p = 15L)
+    
+    # fit models
+    mdgc_time <- system.time(
+      mdgc_res <- mdgc(dat$seen_obs, verbose = FALSE, maxpts = 5000L, 
+                        n_threads = 4L, maxit = 10L))
+    
+    dat_pass <- dat$seen_obs
+    is_cat <- sapply(dat_pass, function(x) is.logical(x) | is.ordered(x))
+    dat_pass[, is_cat] <- lapply(dat_pass[, is_cat], as.integer)
+    mixedgc_time <- 
+      system.time(mixedgc_res <- impute_mixedgc(dat_pass, eps = 1e-4))
+    
+    # impute using the other estimate
+    mdgc_obj <- get_mdgc(dat$seen_obs)
+    impu_mixedgc_est <- mdgc_impute(mdgc_obj, mixedgc_res$R)
+    impu_mixedgc_est <- threshold(dat$seen_obs, impu_mixedgc_est)
+    
+    # gather output for the correlation matrix estimates
+    vcov_res <- list(truth = dat$Sigma, mdgc = mdgc_res$vcov, 
+                     mixedgc = mixedgc_res$R)
+    get_rel_err <- function(est, truth, keep = seq_len(NROW(truth)))
+      norm(truth[keep, keep] - est[keep, keep], "F") / norm(truth, "F")
+    
+    vcov_res <- within(vcov_res, {
+      mdgc_rel_err    = get_rel_err(mdgc   , truth)
+      mixedgc_rel_err = get_rel_err(mixedgc, truth)
+    })
+    
+    # gather output for the imputation 
+    mixedgc_imp_res <- as.data.frame(mixedgc_res$Ximp)
+    is_bin <- sapply(dat$seen_obs, is.logical)
+    mixedgc_imp_res[, is_bin] <- 
+      lapply(mixedgc_imp_res[, is_bin, drop = FALSE], `>`, e2 = 0)
+    is_ord <- sapply(dat$seen_obs, is.ordered)
+    mixedgc_imp_res[, is_ord] <- mapply(function(x, idx)
+      ordered(x, labels = levels(dat$seen_obs[[idx]])), 
+      x = mixedgc_imp_res[, is_ord, drop = FALSE], 
+      i = which(is_ord), SIMPLIFY = FALSE)
+    
+    get_bin_err <- function(x){
+      . <- function(z) z[, is_bin, drop = FALSE]
+      get_classif_error(
+        .(x), truth = .(dat$truth_obs), observed = .(dat$seen_obs))
+    }
+    get_ord_err <- function(x){
+      . <- function(z) z[, is_ord, drop = FALSE]
+      get_classif_error(
+        .(x), truth = .(dat$truth_obs), observed = .(dat$seen_obs))
+    }
+          
+    err <- list(
+      mdgc_bin = get_bin_err(mdgc_res$ximp), 
+      mixedgc_bin = get_bin_err(mixedgc_imp_res), 
+      mixed_bin = get_bin_err(impu_mixedgc_est),
+      
+      mdgc_class = get_ord_err(mdgc_res$ximp), 
+      mixedgc_class = get_ord_err(mixedgc_imp_res), 
+      mixed_class = get_ord_err(impu_mixedgc_est),
+      
+      mdgc_rmse = get_rmse(
+        mdgc_res$ximp, truth = dat$truth_obs, observed = dat$seen_obs),
+      mixedgc_rmse = get_rmse(
+        mixedgc_imp_res, truth = dat$truth_obs, observed = dat$seen_obs),
+      mixed_rmse = get_rmse(
+        impu_mixedgc_est, truth = dat$truth_obs, observed = dat$seen_obs))
+    
+    # gather the times
+    times <- list(mdgc = mdgc_time, mixedgc = mixedgc_time)
+    
+    # save stats to check convergence
+    conv_stats <- list(mdgc = mdgc_res$logLik, 
+                       mixedgc = mixedgc_res$loglik)
+    
+    # save output 
+    out <- list(vcov_res = vcov_res, err = err, times = times, 
+                conv_stats = conv_stats)
+    saveRDS(out, file_name)
+  }
+  
+  # print summary stat to the console while knitting
+  . <- function(x)
+    message(paste(sprintf("%8.3f", x), collapse = " "))
+  with(out, {
+    message(paste(
+      "mdgc    logLik", 
+      paste(sprintf("%.2f", conv_stats$mdgc), collapse = " ")))
+    message(paste(
+      "mixedgc logLik", 
+      paste(sprintf("%.2f", conv_stats$mixedgc), collapse = " ")))
+    message(sprintf(
+      "Relative correlation estimate errors are %.4f %.4f", 
+      vcov_res$mdgc_rel_err, vcov_res$mixedgc_rel_err))
+    message(sprintf(
+      "Times are %.2f %.2f", 
+      times$mdgc["elapsed"], times$mixedgc["elapsed"]))
+    
+    message(sprintf(
+      "Binary classifcation errors are %.2f %.2f %.2f", 
+      mean(err$mdgc_bin), mean(err$mixedgc_bin), 
+      mean(err$mixed_bin)))
+    .(err$mdgc_bin)
+    .(err$mixedgc_bin)
+    .(err$mixed_bin)
+    
+    message(sprintf(
+      "Ordinal classifcation errors are %.2f %.2f %.2f", 
+      mean(err$mdgc_class), mean(err$mixedgc_class), 
+      mean(err$mixed_class)))
+    .(err$mdgc_class)
+    .(err$mixedgc_class)
+    .(err$mixed_class)
+    
+    message(sprintf(
+      "Mean RMSEs are %.2f %.2f %.2f",
+      mean(err$mdgc_rmse), mean(err$mixedgc_rmse), mean(err$mixed_rmse)))
+    .(err$mdgc_rmse)
+    .(err$mixedgc_rmse)
+    .(err$mixed_rmse)
+    message("")
+  })
+  
+  out  
+})
+```
+
+The difference in computation time is given below:
+
+``` r
+# assign function to show the summary stats
+show_sim_stats <- function(v1, v2, what, sub_ele = NULL){
+  vals <- sapply(res, function(x) 
+    do.call(rbind, x[[what]][c(v1, v2)]), 
+    simplify = "array")
+  if(!is.null(sub_ele))
+    vals <- vals[, sub_ele, , drop = FALSE]
+    
+  cat("Means and standard errors:\n")
+  mea_se <- function(x)
+    c(mean = mean(x), SE = sd(x) / sqrt(length(x)))
+  print(t(apply(vals, 1L, mea_se)))
+  
+  cat("\nDifference:\n")
+  mea_se(vals[v1, , ] - vals[v2, , ])
+}
+
+# compare estimation time
+show_sim_stats(1L, 2L, "times", "elapsed")
+#> Means and standard errors:
+#>          mean    SE
+#> mdgc     9.76 0.037
+#> mixedgc 15.18 0.192
+#> 
+#> Difference:
+#>  mean    SE 
+#> -5.42  0.19
+```
+
+The summary stats for the relative Frobenius norm between the estimated
+and true correlation matrix is given below:
+
+``` r
+# relative norms
+show_sim_stats("mixedgc_rel_err", "mdgc_rel_err", "vcov_res")
+#> Means and standard errors:
+#>                   mean      SE
+#> mixedgc_rel_err 0.0550 0.00220
+#> mdgc_rel_err    0.0487 0.00154
+#> 
+#> Difference:
+#>    mean      SE 
+#> 0.00631 0.00155
+```
+
+Finally, here are the results for the classification error for the
+binary and ordinal outcomes and the root mean square error:
+
+``` r
+# the binary variables
+show_sim_stats("mdgc_bin", "mixedgc_bin", "err")
+#> Means and standard errors:
+#>              mean      SE
+#> mdgc_bin    0.253 0.00294
+#> mixedgc_bin 0.254 0.00291
+#> 
+#> Difference:
+#>      mean        SE 
+#> -0.000972  0.000734
+
+# the ordinal variables
+show_sim_stats("mdgc_class", "mixedgc_class", "err")
+#> Means and standard errors:
+#>                mean      SE
+#> mdgc_class    0.594 0.00343
+#> mixedgc_class 0.618 0.00433
+#> 
+#> Difference:
+#>     mean       SE 
+#> -0.02432  0.00217
+
+# the continous variables
+show_sim_stats("mdgc_rmse", "mixedgc_rmse", "err")
+#> Means and standard errors:
+#>               mean      SE
+#> mdgc_rmse    0.762 0.00670
+#> mixedgc_rmse 0.762 0.00669
+#> 
+#> Difference:
+#>     mean       SE 
+#> 0.000221 0.000095
 ```
 
 ### Detailed Example
@@ -547,12 +896,12 @@ mark(
 #> # A tibble: 6 x 6
 #>   expression                     min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>                <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 1 thread                     475ms    477ms      2.09    33.9KB        0
-#> 2 1 thread  (w/o rordering)    712ms    727ms      1.37    33.9KB        0
-#> 3 2 threads                    241ms    247ms      4.07    33.9KB        0
-#> 4 2 threads (w/o rordering)    369ms    382ms      2.64    33.9KB        0
-#> 5 4 threads                    124ms    124ms      8.06    33.9KB        0
-#> 6 4 threads (w/o rordering)    202ms    204ms      4.90    33.9KB        0
+#> 1 1 thread                     475ms    479ms      2.09    33.9KB     0   
+#> 2 1 thread  (w/o rordering)    713ms    725ms      1.38    33.9KB     0   
+#> 3 2 threads                    243ms    244ms      4.10    33.9KB     0   
+#> 4 2 threads (w/o rordering)    363ms    377ms      2.66    33.9KB     0   
+#> 5 4 threads                    126ms    128ms      7.83    33.9KB     0   
+#> 6 4 threads (w/o rordering)    207ms    208ms      4.80    33.9KB     1.20
 
 #####
 # we can also get an approximation of the gradient
@@ -578,12 +927,12 @@ mark(
 #> # A tibble: 6 x 6
 #>   expression                     min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>                <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 1 thread                     2.24s    2.31s     0.436    35.7KB        0
-#> 2 1 thread  (w/o rordering)    3.94s    4.05s     0.248    35.7KB        0
-#> 3 2 threads                    1.16s    1.24s     0.810    35.7KB        0
-#> 4 2 threads (w/o rordering)    2.04s    2.07s     0.482    35.7KB        0
-#> 5 4 threads                 645.65ms 672.54ms     1.48     35.7KB        0
-#> 6 4 threads (w/o rordering)    1.15s    1.21s     0.832    35.7KB        0
+#> 1 1 thread                      2.3s    2.37s     0.426    35.7KB        0
+#> 2 1 thread  (w/o rordering)    3.99s    4.08s     0.243    35.7KB        0
+#> 3 2 threads                    1.21s    1.27s     0.794    35.7KB        0
+#> 4 2 threads (w/o rordering)    2.15s    2.17s     0.460    35.7KB        0
+#> 5 4 threads                 651.82ms 686.98ms     1.48     35.7KB        0
+#> 6 4 threads (w/o rordering)    1.18s    1.23s     0.775    35.7KB        0
 
 #####
 # the main code in the packages provides an approximation to the CDF similar 
@@ -628,13 +977,13 @@ mark(mvtnorm = use_mvtnorm(), mdgc = use_this_pkg(),
 #> # A tibble: 2 x 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 mvtnorm      1.09ms   3.56ms      259.    4.43KB     0   
-#> 2 mdgc         2.96ms    7.4ms      139.    2.49KB     2.02
+#> 1 mvtnorm      1.07ms   4.44ms      261.    4.43KB        0
+#> 2 mdgc         2.86ms   7.33ms      142.    2.49KB        0
 
 sd(replicate(25, use_mvtnorm()))
-#> [1] 4.68e-09
+#> [1] 4.47e-09
 sd(replicate(25, use_this_pkg()))
-#> [1] 3.48e-09
+#> [1] 3.63e-09
 
 # the latter function can also provide gradients with respect to the mean 
 # and covariance matrix
@@ -793,7 +1142,7 @@ start_val <- numeric(p * (p + 1) / 2)
 system.time(res <- naiv_gradient_descent(val = start_val, step_start = .001, 
                                          maxit = 20L, eps = 1e-2))
 #>    user  system elapsed 
-#>    84.5     0.0    21.7
+#>  82.417   0.004  21.189
 
 # compare estimates with truth
 norm(res$result - dat$Sigma)
@@ -936,7 +1285,7 @@ set.seed(1)
 system.time(res_adam  <- adam(
   val = start_val, alpha = 1e-2, maxit = 10L, batch_size = 100L))
 #>    user  system elapsed 
-#>  32.925   0.008   8.984
+#>   32.87    0.00    8.98
 
 # compare estimates with the truth
 norm(res_adam$result - dat$Sigma)
@@ -1087,7 +1436,7 @@ set.seed(1)
 system.time(res_svrg  <- svrg(
   val = start_val, lr = 1e-3, maxit = 10L, batch_size = 100L))
 #>    user  system elapsed 
-#>  63.824   0.004  17.380
+#>    62.8     0.0    17.1
 
 # compare estimates with the truth
 norm(res_svrg$result - dat$Sigma)
@@ -1208,8 +1557,8 @@ mark(
 #> # A tibble: 2 x 6
 #>   expression       min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>  <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 R version     70.4ms     78ms      12.6    1020KB     43.0
-#> 2 C++ verison  184.2µs    271µs    3396.      234KB     16.0
+#> 1 R version     70.9ms   80.6ms      12.5    1020KB     36.1
+#> 2 C++ verison  186.5µs  211.2µs    3965.      234KB     20.0
 
 # then we can compute an approximation of the covariance matrix as follows
 system.time(chat <- cov2cor(cov(t(tmp), use = "pairwise.complete.obs")))
@@ -1232,7 +1581,7 @@ set.seed(1)
 system.time(res_adam  <- adam(
   val = start_val, alpha = 1e-2, maxit = 5L, batch_size = 100L))
 #>    user  system elapsed 
-#>   15.38    0.00    4.14
+#>  15.937   0.004   4.302
 
 # for comparisons, we also run the code using one thread
 set.seed(1)
@@ -1240,7 +1589,7 @@ system.time(res_adam_ser  <- adam(
   val = start_val, alpha = 1e-2, maxit = 5L, batch_size = 100L, 
   n_threads = 1L))
 #>    user  system elapsed 
-#>    11.7     0.0    11.7
+#>    12.3     0.0    12.3
 
 # we get (roughly) the same
 norm(res_adam$result - res_adam_ser$result)
@@ -1271,7 +1620,7 @@ set.seed(1)
 system.time(res_svrg  <- svrg(
   val = start_val, lr = 1e-3, maxit = 5L, batch_size = 100L))
 #>    user  system elapsed 
-#>  32.195   0.008   8.836
+#>    30.1     0.0     8.2
 
 # compare estimates with the truth
 norm(res_svrg$result - dat$Sigma)
