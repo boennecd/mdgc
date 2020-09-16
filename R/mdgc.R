@@ -187,7 +187,17 @@ mdgc_start_value <- function(object, ...)
 mdgc_start_value.default <- function(object, lower, upper, code,
                                      n_threads = 1L, ...){
   Z <- get_z_hat(lower, upper, code, n_threads = n_threads)
-  cov2cor(cov(t(Z), use = "pairwise.complete.obs"))
+  out <- cov(t(Z), use = "pairwise.complete.obs")
+
+  # handle non-postive definite estimates
+  eg <- eigen(out, symmetric = TRUE)
+  eps <- 1e-2 * max(eg$values)
+  if(any(is_small <- eg$values < eps)){
+    eg$values[is_small] <- eps
+    out <- tcrossprod(eg$vectors * rep(eg$values, each = NROW(Z)), eg$vectors)
+  }
+
+  cov2cor(out)
 }
 
 #' Estimate the Correlation Matrix
@@ -195,11 +205,13 @@ mdgc_start_value.default <- function(object, lower, upper, code,
 #' @param vcov starting value.
 #' @param batch_size number of observations in each batch.
 #' @param lr learning rate.
+#' @param decay the learning rate used by SVRG is given by \code{lr * decay^iteration_number}.
 #' @param method estimation method to use.
 #' @param maxit maximum number of iteration.
 #' @param seed fixed seed to use. Use \code{NULL} if the seed should not be
 #' fixed.
 #' @param epsilon,beta_1,beta_2 ADAM parameters.
+#' @param conv_crit relative convergence threshold.
 #' @param verbose logical for whether to print output during the estimation.
 #' @inheritParams mdgc_log_ml
 #' @export
@@ -208,7 +220,8 @@ mdgc_fit <- function(ptr, vcov, lr = 1e-3, rel_eps = 1e-3,
                      method = c("svrg", "adam"), seed = 1L, epsilon = 1e-8,
                      beta_1 = .9, beta_2 = .999, n_threads = 1L,
                      do_reorder = TRUE, abs_eps = -1., maxpts = 10000L,
-                     minvls = 100L, verbose = FALSE){
+                     minvls = 100L, verbose = FALSE, decay = .98,
+                     conv_crit = 1e-6){
   #####
   # checks
   nvars <- attr(ptr, "nvars")
@@ -237,7 +250,9 @@ mdgc_fit <- function(ptr, vcov, lr = 1e-3, rel_eps = 1e-3,
     is.integer(maxpts), length(maxpts) == 1L, maxpts > 0L,
     is.integer(minvls), length(minvls) == 1L, minvls <= maxpts,
     minvls >= 0L,
-    is.logical(verbose), length(verbose) == 1L, !is.na(verbose))
+    is.logical(verbose), length(verbose) == 1L, !is.na(verbose),
+    is.numeric(decay), length(decay) == 1L, decay > 0,
+    is.numeric(conv_crit), length(conv_crit) == 1L, is.finite(conv_crit))
 
   #####
   # assign functions to use
@@ -295,7 +310,8 @@ mdgc_fit <- function(ptr, vcov, lr = 1e-3, rel_eps = 1e-3,
     return(svrg(
       par_fn = par_fn, nobs = nobs, val = .get_lchol(vcov),
       batch_size = batch_size, maxit = maxit, seed = seed, lr = lr,
-      verbose = verbose, maxpts = maxpts_use))
+      verbose = verbose, maxpts = maxpts_use, decay = decay,
+      conv_crit = conv_crit, rel_eps = rel_eps))
 
   stop(sprintf("Method '%s' is not implemented", method))
 }
@@ -369,8 +385,11 @@ adam <- function(par_fn, nobs, val, batch_size, maxit = 10L,
 #   lr: learning rate.
 #   verbose: print output during the estimation.
 #   maxpts: maximum number of samples to draw.
+#   decay: numeric scalar used to decrease the learning rate.
+#   conv_crit: relative convergence threshold.
+#   rel_eps: relative error for each term.
 svrg <- function(par_fn, nobs, val, batch_size, maxit = 10L, seed = 1L, lr,
-                 verbose = FALSE, maxpts){
+                 verbose = FALSE, maxpts, decay, conv_crit, rel_eps){
   indices <- sample.int(nobs, replace = FALSE) - 1L
   blocks <- tapply(indices, (seq_along(indices) - 1L) %/% batch_size,
                    identity, simplify = FALSE)
@@ -381,8 +400,8 @@ svrg <- function(par_fn, nobs, val, batch_size, maxit = 10L, seed = 1L, lr,
   fun_vals <- numeric(maxit + 1L)
   estimates[, 1L] <- val
 
-  decay <- .98
   lr_use <- lr / decay
+  V_mult <- qnorm(1 - .99 / maxit)
   for(k in 1:maxit + 1L){
     old_val <- estimates[, k - 1L]
     old_grs <- sapply(1:n_blocks - 1L, function(ii){
@@ -419,10 +438,15 @@ svrg <- function(par_fn, nobs, val, batch_size, maxit = 10L, seed = 1L, lr,
         sprintf("Previous approximate gradient norm was %14.2f\n",
                 n_blocks * norm(as.matrix(old_gr))),
         sep = "\n")
+
+    old_v <- fun_vals[k - 1L]
+    new_v <- fun_vals[k]
+    if(new_v - old_v  < conv_crit * (abs(old_v) + conv_crit))
+      break
   }
 
-  list(result = .get_lchol_inv(val), fun_vals = fun_vals[-1L],
-       estimates = estimates[, -1L, drop = FALSE])
+  list(result = .get_lchol_inv(val), fun_vals = fun_vals[2:k],
+       estimates = estimates[, 2:k, drop = FALSE])
 }
 
 # creates a matrix from a log-Cholesky decomposition.
@@ -523,7 +547,7 @@ mdgc <- function(dat, lr = 1e-3, maxit = 10L, batch_size = NULL,
                  do_reorder = TRUE, abs_eps = -1, maxpts = 10000L,
                  minvls = 100L, verbose = FALSE, irel_eps = rel_eps,
                  imaxit = maxpts, iabs_eps = abs_eps, iminvls = 1000L,
-                 start_val = NULL){
+                 start_val = NULL, decay = .98, conv_crit = 1e-5){
   mdgc_obj <- get_mdgc(dat)
   p <- NCOL(dat)
   log_ml_ptr <- get_mdgc_log_ml(mdgc_obj)
@@ -539,7 +563,8 @@ mdgc <- function(dat, lr = 1e-3, maxit = 10L, batch_size = NULL,
     maxit = maxit, batch_size = batch_size, method = method, seed = seed,
     epsilon = epsilon, beta_1 = beta_1, beta_2 = beta_2,
     n_threads = n_threads, do_reorder = do_reorder, abs_eps = abs_eps,
-    maxpts = maxpts, minvls = minvls, verbose = verbose)
+    maxpts = maxpts, minvls = minvls, verbose = verbose, decay = decay,
+    conv_crit = conv_crit)
 
   if(verbose)
     cat("Performing imputation...\n")
