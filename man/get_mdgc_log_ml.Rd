@@ -25,9 +25,14 @@ for each variable on the normal scale.}
 for each variable on the normal scale.}
 
 \item{code}{#variables x #observation matrix integer code for the
-each variable on the normal scale. Zero implies an observed value,
-one implies a missing value, and two implies an interval.}
+each variable on the normal scale. Zero implies an observed value (the
+value in \code{upper}), one implies a missing value, and two implies an
+interval.}
 }
 \description{
-Get Pointer to C++ Object to Approximate the Log Marginal Likelihood
+Creates a C++ object which is needed to approximate the log marginal
+likelihood. The object cannot be saved.
+}
+\seealso{
+\code{\link{mdgc_fit}}, \code{\link{mdgc_log_ml}}
 }

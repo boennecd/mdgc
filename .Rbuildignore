@@ -3,3 +3,5 @@
 ^README\.Rmd$
 ^ref\.bib$
 ^sim-res
+^README_cache
+^\.travis\.yml

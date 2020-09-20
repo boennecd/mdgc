@@ -141,7 +141,7 @@
 *  Code added to fix ND = 0 bug, 24/03/2009 ->
             VL = 1
 *  <- Code added to fix ND = 0 bug, 24/03/2009
-         ELSE IF ( ND.EQ.1 .AND. ( NU.LT.1 .OR. ABS(DL(1)).EQ.0 ) ) THEN
+         ELSE IF ( ND.EQ.1 .AND. ( NU.LT.1 .OR. ABS(DL(1)).LE.0 ) ) THEN
 *
 *           1-d case for normal or central t
 *
@@ -152,7 +152,7 @@
             ER = 2D-16
             ND = 0
          ELSE IF ( ND .EQ. 2 .AND.
-     &            ( NU .LT. 1 .OR. ABS(DL(1))+ABS(DL(2)) .EQ. 0 ) ) THEN
+     &            ( NU .LT. 1 .OR. ABS(DL(1))+ABS(DL(2)) .LE. 0 ) ) THEN
 *
 *           2-d case for normal or central t
 *

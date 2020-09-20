@@ -28,10 +28,11 @@ mdgc_log_ml(
 
 \item{comp_derivs}{logical for whether to approximate the gradient.}
 
-\item{indices}{integer vector with which terms to include. Must be zero
-indexed. \code{NULL} yields all observations.}
+\item{indices}{integer vector with which terms (observations) to include.
+Must be zero indexed. \code{NULL} yields all observations.}
 
-\item{do_reorder}{logical for whether to use heuristic variable reordering.}
+\item{do_reorder}{logical for whether to use heuristic variable
+reordering. \code{TRUE} is likely the best option.}
 
 \item{maxpts}{maximum number of samples to draw.}
 
@@ -40,5 +41,9 @@ indexed. \code{NULL} yields all observations.}
 \item{minvls}{minimum number of samples.}
 }
 \description{
-Evaluate the Log Marginal Likelihood and Its Derivatives
+Approximates the log marginal likelihood and the derivatives using
+quasi-random numbers.
+}
+\seealso{
+\code{\link{mdgc_fit}}
 }

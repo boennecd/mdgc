@@ -24,11 +24,13 @@ for each variable on the normal scale.}
 for each variable on the normal scale.}
 
 \item{code}{#variables x #observation matrix integer code for the
-each variable on the normal scale. Zero implies an observed value,
-one implies a missing value, and two implies an interval.}
+each variable on the normal scale. Zero implies an observed value (the
+value in \code{upper}), one implies a missing value, and two implies an
+interval.}
 
 \item{n_threads}{number of threads to use.}
 }
 \description{
-Get Starting Value for the Correlation Matrix Using a Heuristic
+Uses a heuristic to get starting values for the correlation matrix. These
+can be passed e.g. to \code{\link{mdgc_fit}}.
 }

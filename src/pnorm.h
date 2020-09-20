@@ -1,11 +1,15 @@
 #ifndef PNORM_H
 #define PNORM_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 #include <Rmath.h>
+
+#ifdef __cplusplus
+#include <cmath>
+using std::isinf;
+using std::isnan;
+#else
 #include <math.h>
+#endif
 
 /**
  * evaluates the standard normal CDF after avoiding some checks in the
@@ -101,9 +105,5 @@ inline double pnorm_std_aprx(double const x) {
 
   return pnorm_std(x, 1L, 1L);
 }
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif

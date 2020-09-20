@@ -1,10 +1,17 @@
 #' Get mdgc Object
+#' @description
+#' Creates a mdgc object which is needed for estimation of the
+#' correlation matrix and to perform imputation.
+#'
 #' @param dat \code{\link{data.frame}} with continuous, ordinal, and binary
 #' data.
 #' @importFrom stats na.omit
 #' @importFrom utils head
 #' @export
 #' @importFrom stats qnorm ecdf quantile
+#'
+#' @seealso
+#' \code{\link{get_mdgc_log_ml}}, \code{\link{mdgc_impute}}
 get_mdgc <- function(dat){
   # checks
   stopifnot(is.data.frame(dat), NROW(dat) > 0L)
@@ -80,6 +87,10 @@ get_mdgc <- function(dat){
 }
 
 #' Get Pointer to C++ Object to Approximate the Log Marginal Likelihood
+#' @description
+#' Creates a C++ object which is needed to approximate the log marginal
+#' likelihood. The object cannot be saved.
+#'
 #' @param object mdgc object from \code{\link{get_mdgc}}. Ignored by the
 #' default method.
 #' @param lower #variables x #observation matrix with lower bounds
@@ -87,9 +98,14 @@ get_mdgc <- function(dat){
 #' @param upper #variables x #observation matrix with upper bounds
 #' for each variable on the normal scale.
 #' @param code #variables x #observation matrix integer code for the
-#' each variable on the normal scale. Zero implies an observed value,
-#' one implies a missing value, and two implies an interval.
+#' each variable on the normal scale. Zero implies an observed value (the
+#' value in \code{upper}), one implies a missing value, and two implies an
+#' interval.
 #' @param ... used to pass arguments to S3 methods.
+#'
+#' @seealso
+#' \code{\link{mdgc_fit}}, \code{\link{mdgc_log_ml}}
+#'
 #' @export
 get_mdgc_log_ml <- function(object, ...)
   UseMethod("get_mdgc_log_ml")
@@ -120,14 +136,23 @@ get_mdgc_log_ml.default <- function(object, lower, upper, code, ...){
 }
 
 #' Evaluate the Log Marginal Likelihood and Its Derivatives
+#'
+#' @description
+#' Approximates the log marginal likelihood and the derivatives using
+#' quasi-random numbers.
+#'
+#' @seealso
+#' \code{\link{mdgc_fit}}
+#'
 #' @param ptr object returned by \code{\link{get_mdgc_log_ml}}.
 #' @param vcov correlation matrix.
 #' @param rel_eps relative error for each term.
 #' @param n_threads number of threads to use.
 #' @param comp_derivs logical for whether to approximate the gradient.
-#' @param indices integer vector with which terms to include. Must be zero
-#' indexed. \code{NULL} yields all observations.
-#' @param do_reorder logical for whether to use heuristic variable reordering.
+#' @param indices integer vector with which terms (observations) to include.
+#' Must be zero indexed. \code{NULL} yields all observations.
+#' @param do_reorder logical for whether to use heuristic variable
+#' reordering. \code{TRUE} is likely the best option.
 #' @param maxpts maximum number of samples to draw.
 #' @param abs_eps absolute convergence threshold for each term.
 #' @param minvls minimum number of samples.
@@ -169,6 +194,11 @@ mdgc_log_ml <- function(ptr, vcov, rel_eps = 1e-2, n_threads = 1L,
     comp_derivs = comp_derivs, do_reorder = do_reorder, minvls = minvls)
 
 #' Get Starting Value for the Correlation Matrix Using a Heuristic
+#'
+#' @description
+#' Uses a heuristic to get starting values for the correlation matrix. These
+#' can be passed e.g. to \code{\link{mdgc_fit}}.
+#'
 #' @inheritParams get_mdgc_log_ml
 #' @param n_threads number of threads to use.
 #' @export
@@ -201,6 +231,18 @@ mdgc_start_value.default <- function(object, lower, upper, code,
 }
 
 #' Estimate the Correlation Matrix
+#'
+#' @description
+#' Estimates the correlation matrix. The \code{lr} parameter is data
+#' and \code{batch_size} dependent. Convergence should be monitored e.g.
+#' using \code{verbose = TRUE} with \code{method = "svrg"}.
+#'
+#' See the README at \url{https://github.com/boennecd/mdgc} for examples.
+#'
+#' @seealso
+#' \code{\link{mdgc_log_ml}}, \code{\link{mdgc_start_value}},
+#' \code{\link{mdgc_impute}}.
+#'
 #' @param ptr returned object from \code{\link{get_mdgc_log_ml}}.
 #' @param vcov starting value.
 #' @param batch_size number of observations in each batch.
@@ -214,6 +256,12 @@ mdgc_start_value.default <- function(object, lower, upper, code,
 #' @param conv_crit relative convergence threshold.
 #' @param verbose logical for whether to print output during the estimation.
 #' @inheritParams mdgc_log_ml
+#'
+#' @references
+#' Kingma, D.P., & Ba, J. (2015). \emph{Adam: A Method for Stochastic Optimization}. abs/1412.6980.
+#'
+#' Johnson, R., & Zhang, T. (2013). \emph{Accelerating stochastic gradient descent using predictive variance reduction}. In Advances in neural information processing systems.
+#'
 #' @export
 mdgc_fit <- function(ptr, vcov, lr = 1e-3, rel_eps = 1e-3,
                      maxit = 10L, batch_size = NULL,
@@ -473,11 +521,20 @@ svrg <- function(par_fn, nobs, val, batch_size, maxit = 10L, seed = 1L, lr,
 }
 
 #' Impute Missing Values Given Correlation Matrix
+#'
+#' @description
+#' Imputes missing values given a correlation matrix using a similar
+#' quasi-random numbers method as \code{\link{mdgc_fit}}.
+#'
 #' @param object returned object from \code{\link{get_mdgc}}.
 #' @param vcov correlation matrix to condition on in the imputation.
 #' @inheritParams mdgc_fit
 #' @inheritParams mdgc_log_ml
 #' @export
+#'
+#' @return
+#' A list with imputed values for the continuous and a vector with
+#' probabilities for each categorical.
 mdgc_impute <- function(object, vcov, rel_eps = 1e-3, maxit = 10000L,
                         abs_eps = -1, n_threads = 1L, do_reorder = TRUE,
                         minvls = 1000L){
@@ -527,6 +584,19 @@ mdgc_impute <- function(object, vcov, rel_eps = 1e-3, maxit = 10000L,
 }
 
 #' Perform Model Estimation and Imputation
+#'
+#' @description
+#' A convenience function to perform model estimation and imputation in one
+#' call. The learning rate is likely model specific and should be altered.
+#' See \code{\link{mdgc_fit}}.
+#'
+#' See the README at \url{https://github.com/boennecd/mdgc} for examples.
+#'
+#' @seealso
+#' \code{\link{get_mdgc}}, \code{\link{mdgc_start_value}},
+#' \code{\link{get_mdgc_log_ml}}, \code{\link{mdgc_fit}},
+#' \code{\link{mdgc_impute}}
+#'
 #' @inheritParams mdgc_fit
 #' @inheritParams get_mdgc
 #' @param irel_eps relative error for each term in the imputation.
@@ -536,10 +606,41 @@ mdgc_impute <- function(object, vcov, rel_eps = 1e-3, maxit = 10000L,
 #' @param start_val starting value for the correlation matrix. Use \code{NULL} if unspecified.
 #' @export
 #'
-#' @seealso
-#' \code{\link{get_mdgc}}, \code{\link{get_mdgc_log_ml}},
-#' \code{\link{mdgc_start_value}}, \code{\link{mdgc_fit}},
-#' \code{\link{mdgc_impute}}
+#' @examples
+#' if(require(catdata)){
+#'   data(retinopathy)
+#'
+#'   # prepare data and save true data set
+#'   retinopathy$RET <- as.ordered(retinopathy$RET)
+#'   retinopathy$SM <- as.logical(retinopathy$SM)
+#'
+#'   # randomly mask data
+#'   set.seed(28325145)
+#'   truth <- retinopathy
+#'   for(i in seq_along(retinopathy))
+#'     retinopathy[[i]][runif(NROW(retinopathy)) < .3] <- NA
+#'
+#'   cat("\nMasked data:\n")
+#'   print(head(retinopathy, 10))
+#'   cat("\n")
+#'
+#'   # impute data
+#'   impu <- mdgc(retinopathy, lr = 1e-3, maxit = 25L, batch_size = 25L,
+#'                rel_eps = 1e-3, maxpts = 5000L, verbose = TRUE,
+#'                n_threads = 1L)
+#'
+#'   # show correlation matrix
+#'   cat("\nEstimated correlation matrix\n")
+#'   print(impu$vcov)
+#'
+#'   # compare imputed and true values
+#'   cat("\nObserved;\n")
+#'   print(head(retinopathy, 10))
+#'   cat("\nImputed values:\n")
+#'   print(head(impu$ximp, 10))
+#'   cat("\nTruth:\n")
+#'   print(head(truth, 10))
+#' }
 mdgc <- function(dat, lr = 1e-3, maxit = 10L, batch_size = NULL,
                  rel_eps = 1e-3,
                  method = c("svrg", "adam"), seed = 1L, epsilon = 1e-8,
@@ -565,6 +666,8 @@ mdgc <- function(dat, lr = 1e-3, maxit = 10L, batch_size = NULL,
     n_threads = n_threads, do_reorder = do_reorder, abs_eps = abs_eps,
     maxpts = maxpts, minvls = minvls, verbose = verbose, decay = decay,
     conv_crit = conv_crit)
+  vcov <- fit$result
+  colnames(vcov) <- rownames(vcov) <- colnames(dat)
 
   if(verbose)
     cat("Performing imputation...\n")
@@ -573,7 +676,7 @@ mdgc <- function(dat, lr = 1e-3, maxit = 10L, batch_size = NULL,
                       n_threads = n_threads, do_reorder = do_reorder,
                       minvls = iminvls)
   out <- list(ximp = .threshold(dat, impu), imputed = impu,
-              vcov = fit$result)
+              vcov = vcov)
   if(!is.null(fit$fun_vals))
     out$logLik <- fit$fun_vals
   out

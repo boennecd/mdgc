@@ -28,10 +28,16 @@ mdgc_impute(
 
 \item{n_threads}{number of threads to use.}
 
-\item{do_reorder}{logical for whether to use heuristic variable reordering.}
+\item{do_reorder}{logical for whether to use heuristic variable
+reordering. \code{TRUE} is likely the best option.}
 
 \item{minvls}{minimum number of samples.}
 }
+\value{
+A list with imputed values for the continuous and a vector with
+probabilities for each categorical.
+}
 \description{
-Impute Missing Values Given Correlation Matrix
+Imputes missing values given a correlation matrix using a similar
+quasi-random numbers method as \code{\link{mdgc_fit}}.
 }

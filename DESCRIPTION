@@ -1,6 +1,6 @@
 Package: mdgc
 Type: Package
-Title: What the Package Does (Title Case)
+Title: Missing Data imputation using Gaussian Copulas
 Version: 0.1.0
 Authors@R: c(
   person("Benjamin", "Christoffersen", 
@@ -16,8 +16,12 @@ Authors@R: c(
          role = c("cph")),
   person("R-core", email = "R-core@R-project.org",
          role = "cph"))
-Description: More about what it does (maybe more than one line)
-    Use four spaces when indenting paragraphs within the Description.
+Description: Provides functions to impute missing values using Gaussian 
+    copulas for mixed data types. The method is related to 
+    Hoff (2007) <doi:10.1214/07-AOAS107> and Zhao and Udell (2019) 
+    <arXiv:1910.12845> but differs by making a direct 
+    approximation of the log marginal likelihood using an extended version 
+    of the Fortran code created by <doi:10.1198/106186002394>.
 License: GPL-2
 Encoding: UTF-8
 LazyData: true
@@ -31,5 +35,6 @@ LinkingTo:
 Imports: 
     Rcpp
 Suggests: 
-    testthat
+    testthat,
+    catdata
 SystemRequirements: C++14

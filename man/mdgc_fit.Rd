@@ -21,7 +21,9 @@ mdgc_fit(
   abs_eps = -1,
   maxpts = 10000L,
   minvls = 100L,
-  verbose = FALSE
+  verbose = FALSE,
+  decay = 0.98,
+  conv_crit = 1e-06
 )
 }
 \arguments{
@@ -46,7 +48,8 @@ fixed.}
 
 \item{n_threads}{number of threads to use.}
 
-\item{do_reorder}{logical for whether to use heuristic variable reordering.}
+\item{do_reorder}{logical for whether to use heuristic variable
+reordering. \code{TRUE} is likely the best option.}
 
 \item{abs_eps}{absolute convergence threshold for each term.}
 
@@ -55,7 +58,24 @@ fixed.}
 \item{minvls}{minimum number of samples.}
 
 \item{verbose}{logical for whether to print output during the estimation.}
+
+\item{decay}{the learning rate used by SVRG is given by \code{lr * decay^iteration_number}.}
+
+\item{conv_crit}{relative convergence threshold.}
 }
 \description{
-Estimate the Correlation Matrix
+Estimates the correlation matrix. The \code{lr} parameter is data
+and \code{batch_size} dependent. Convergence should be monitored e.g.
+using \code{verbose = TRUE} with \code{method = "svrg"}.
+
+See the README at \url{https://github.com/boennecd/mdgc} for examples.
+}
+\references{
+Kingma, D.P., & Ba, J. (2015). \emph{Adam: A Method for Stochastic Optimization}. abs/1412.6980.
+
+Johnson, R., & Zhang, T. (2013). \emph{Accelerating stochastic gradient descent using predictive variance reduction}. In Advances in neural information processing systems.
+}
+\seealso{
+\code{\link{mdgc_log_ml}}, \code{\link{mdgc_start_value}},
+\code{\link{mdgc_impute}}.
 }

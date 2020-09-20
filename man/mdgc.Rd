@@ -25,7 +25,9 @@ mdgc(
   imaxit = maxpts,
   iabs_eps = abs_eps,
   iminvls = 1000L,
-  start_val = NULL
+  start_val = NULL,
+  decay = 0.98,
+  conv_crit = 1e-05
 )
 }
 \arguments{
@@ -53,7 +55,8 @@ fixed.}
 
 \item{n_threads}{number of threads to use.}
 
-\item{do_reorder}{logical for whether to use heuristic variable reordering.}
+\item{do_reorder}{logical for whether to use heuristic variable
+reordering. \code{TRUE} is likely the best option.}
 
 \item{abs_eps}{absolute convergence threshold for each term.}
 
@@ -72,12 +75,56 @@ fixed.}
 \item{iminvls}{minimum number of samples in the imputation.}
 
 \item{start_val}{starting value for the correlation matrix. Use \code{NULL} if unspecified.}
+
+\item{decay}{the learning rate used by SVRG is given by \code{lr * decay^iteration_number}.}
+
+\item{conv_crit}{relative convergence threshold.}
 }
 \description{
-Perform Model Estimation and Imputation
+A convenience function to perform model estimation and imputation in one
+call. The learning rate is likely model specific and should be altered.
+See \code{\link{mdgc_fit}}.
+
+See the README at \url{https://github.com/boennecd/mdgc} for examples.
+}
+\examples{
+if(require(catdata)){
+  data(retinopathy)
+
+  # prepare data and save true data set
+  retinopathy$RET <- as.ordered(retinopathy$RET)
+  retinopathy$SM <- as.logical(retinopathy$SM)
+
+  # randomly mask data
+  set.seed(28325145)
+  truth <- retinopathy
+  for(i in seq_along(retinopathy))
+    retinopathy[[i]][runif(NROW(retinopathy)) < .3] <- NA
+
+  cat("\nMasked data:\n")
+  print(head(retinopathy, 10))
+  cat("\n")
+
+  # impute data
+  impu <- mdgc(retinopathy, lr = 1e-3, maxit = 25L, batch_size = 25L,
+               rel_eps = 1e-3, maxpts = 5000L, verbose = TRUE,
+               n_threads = 1L)
+
+  # show correlation matrix
+  cat("\nEstimated correlation matrix\n")
+  print(impu$vcov)
+
+  # compare imputed and true values
+  cat("\nObserved;\n")
+  print(head(retinopathy, 10))
+  cat("\nImputed values:\n")
+  print(head(impu$ximp, 10))
+  cat("\nTruth:\n")
+  print(head(truth, 10))
+}
 }
 \seealso{
-\code{\link{get_mdgc}}, \code{\link{get_mdgc_log_ml}},
-\code{\link{mdgc_start_value}}, \code{\link{mdgc_fit}},
+\code{\link{get_mdgc}}, \code{\link{mdgc_start_value}},
+\code{\link{get_mdgc_log_ml}}, \code{\link{mdgc_fit}},
 \code{\link{mdgc_impute}}
 }
