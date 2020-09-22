@@ -108,6 +108,7 @@ Rcpp::NumericVector eval_log_lm_terms(
     int const maxpts, double const abs_eps, double const rel_eps,
     size_t const n_threads, bool const comp_derivs, unsigned const minvls,
     bool const do_reorder = true){
+
   Rcpp::XPtr<ml_terms> obj(ptr);
   std::vector<log_ml_term> const &terms = obj->terms;
 
@@ -346,7 +347,7 @@ inline SEXP impute_set_val_R
   if(code != 1L)
     out[0L] = truth;
   else {
-    out[0L] = pnorm(v_use, 0., 1., 1L, 0L);
+    out[0L] = pnorm_std(v_use, 1L, 0L);
     out = Rcpp::NumericVector(marg(out));
     out.attr("names") = R_NilValue;
   }

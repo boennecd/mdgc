@@ -3,37 +3,9 @@
 #ifdef _OPENMP
 #include <omp.h>
 #endif
+#include "new-mvt.h"
 
 using std::invalid_argument;
-
-static restrictcdf::mvkbrv_ptr current_mvkbrv_ptr = nullptr;
-#ifdef _OPENMP
-#pragma omp threadprivate(current_mvkbrv_ptr)
-#endif
-
-void restrictcdf::set_mvkbrv_ptr(mvkbrv_ptr new_ptr){
-  current_mvkbrv_ptr = new_ptr;
-}
-
-extern "C"
-{
-  void F77_NAME(mvkbrveval)(
-      int const* /* NDIM */, int const* /* MAXVLS */, int const* /* NF */,
-      double const* /* ABSEPS */, double const* /* RELEPS */,
-      double* /* ABSERR */, double* /* FINEST */, int* /* INFORM */,
-      int* /* MINVLS */ );
-
-  void F77_SUB(mvkbrvintegrand)
-    (int const *m, double *unifs, int const *mf, double *out){
-#ifdef DO_CHECKS
-    if(!current_mvkbrv_ptr)
-      throw invalid_argument("mvkbrvintegrand: 'current_mvkbrv_ptr' not set");
-    if(!out)
-      throw invalid_argument("mvkbrvintegrand: 'out' not set");
-#endif
-    (*current_mvkbrv_ptr)(m, unifs, mf, out);
-  }
-}
 
 namespace restrictcdf {
 static size_t wk_mem_per_thread  = 0L,
@@ -111,21 +83,6 @@ void cdf<funcs>::set_working_memory
 
     }
   }
-}
-
-output approximate_integral(
-    int const ndim, int const n_integrands, int const maxvls,
-    double const abs_eps, double const rel_eps, int const minvls){
-  output out;
-  out.finest.resize(n_integrands);
-  out.minvls = minvls;
-
-  F77_CALL(mvkbrveval)(
-      &ndim, &maxvls, &n_integrands, &abs_eps, &rel_eps,
-      &out.abserr, out.finest.memptr(), &out.inform,
-      &out.minvls);
-
-  return out;
 }
 
 int deriv::get_n_integrands

@@ -1164,7 +1164,7 @@
 *         DO I = MIN( NDIM, 10 ), PLIM
          DO I = 1, PLIM
             NP = I
-            IF ( MINVLS .LT. 2*SAMPLS*P(I) ) GO TO 10
+            IF ( MINVLS .LE. 2*SAMPLS*P(I) ) GO TO 10
          END DO
          SAMPLS = MAX( MINSMP, MINVLS/( 2*P(NP) ) )
       ENDIF

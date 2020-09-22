@@ -11,6 +11,7 @@
 #include "mvtnorm-wrapper.h"
 #include "config.h"
 #include <algorithm>
+#include "new-mvt.h"
 
 namespace restrictcdf {
 extern "C"
@@ -140,13 +141,6 @@ struct output {
   arma::vec finest;
 };
 
-typedef void (*mvkbrv_ptr)(int const*, double*, int const*, double*);
-
-/**
- * Sets the function to be approximated.
- */
-void set_mvkbrv_ptr(mvkbrv_ptr);
-
 /**
  * copies the upper upper triangular matrix.
  *
@@ -168,19 +162,6 @@ inline void copy_lower_tri
     for(unsigned r = c; r < p; r++, x++)
       *x = X.at(r, c);
 }
-
-/**
- * Approximates the function set by mvkbrv_ptr.
- *
- * @param ndim Dimension of the integral.
- * @param n_integrands Dimension of the integrand.
- * @param maxvls Maximum number of integrand evaluations.
- * @param abs_eps Absolute convergence threshold.
- * @param rel_eps Relative convergence threshold.
- */
-output approximate_integral(
-    int const ndim, int const n_integrands, int const maxvls,
-    double const abs_eps, double const rel_eps, int const minvls);
 
 /**
  * Approximates the integrals of the multivariate normal cdf over a
@@ -247,16 +228,12 @@ class cdf {
       { }
   };
 
-  static int ndim, n_integrands;
-  static double * wk_mem;
-  static int *iwk_mem;
-  static bool is_permutated;
-  static constexpr bool const needs_last_unif =
-    funcs::needs_last_unif();
-
-#ifdef _OPENMP
-#pragma omp threadprivate(ndim, n_integrands, wk_mem, iwk_mem, is_permutated)
-#endif
+  int ndim         = 0L,
+      n_integrands = 0L;
+  double * wk_mem = nullptr;
+  int * iwk_mem = nullptr;
+  bool is_permutated = false;
+  static constexpr bool const needs_last_unif = funcs::needs_last_unif();
 
   static double * get_working_memory() noexcept;
   static int    * get_iworking_memory() noexcept;
@@ -280,20 +257,17 @@ public:
    * @param n_integrands_in Passed dimension of the integrand.
    * @param integrand_val Passed integrand approximation to be updated.
    */
-  static void eval_integrand(
-      int const *ndim_in, double *unifs, int const *n_integrands_in,
+  void operator()(
+      int const *ndim_in, double const * unifs, int const *n_integrands_in,
       double * __restrict__ integrand_val) MDGC_NOEXCEPT {
-    size_t const udim = ndim,
-                 u_integrands = n_integrands;
-
 #ifdef DO_CHECKS
-    if(*ndim_in         != static_cast<int>(udim))
+    if(*ndim_in         != ndim)
       throw std::invalid_argument("cdf::eval_integrand: invalid 'ndim_in'");
     if(*n_integrands_in != n_integrands)
       throw std::invalid_argument("cdf::eval_integrand: invalid 'n_integrands_in'");
 #endif
 
-    ptr_to_dat map_obj(wk_mem, udim, iwk_mem);
+    ptr_to_dat map_obj(wk_mem, ndim, iwk_mem);
     double * const __restrict__ out = integrand_val,
            * const __restrict__ draw = map_obj.draw;
 
@@ -305,21 +279,21 @@ public:
     int const *infin = map_obj.infin;
     /* loop over variables and transform them to truncated normal
      * variables */
-    for(size_t j = 0; j < udim; ++j, ++sc, ++lw, ++up, ++infin, ++unif){
+    for(int j = 0; j < ndim; ++j, ++sc, ++lw, ++up, ++infin, ++unif){
       auto const draw_n_p = ([&](){
-        bool const needs_q = needs_last_unif or j + 1 < udim;
+        bool const needs_q = needs_last_unif or j + 1 < ndim;
         double const *d = draw;
 
         if(*infin == 0L){
           double b(*up);
-          for(size_t i = 0; i < j; ++i)
+          for(int i = 0; i < j; ++i)
             b -= *sc++ * *d++;
 
           return draw_trunc_mean<0L>(0, b, *unif, needs_q);
 
         } else if(*infin == 1L){
           double a(*lw);
-          for(size_t i = 0; i < j; ++i)
+          for(int i = 0; i < j; ++i)
             a -= *sc++ * *d++;
 
           return draw_trunc_mean<1L>(a, 0, *unif, needs_q);
@@ -328,7 +302,7 @@ public:
           double a(*lw),
                  b(*up),
                 su(0.);
-          for(size_t i = 0; i < j; ++i, sc++, d++)
+          for(int i = 0; i < j; ++i, sc++, d++)
             su += *sc * *d;
           a -= su;
           b -= su;
@@ -353,10 +327,10 @@ public:
     }
 
     /* evaluate the integrand and weigth the result. */
-    funcs::integrand(draw, udim, out, map_obj.child_mem);
+    funcs::integrand(draw, ndim, out, map_obj.child_mem);
 
     double * o = out;
-    for(size_t i = 0; i < u_integrands; ++i, ++o)
+    for(int i = 0; i < n_integrands; ++i, ++o)
       *o *= w;
   }
 
@@ -542,7 +516,7 @@ public:
    * containing an upper diagonal matrix with derivatives with respect to
    * the covariance matrix. Notice that the latter are not scaled by 2.
    */
-  static output approximate
+  output approximate
   (int const maxvls, double const abs_eps, double const rel_eps,
    int const minvls = 0L){
 #ifdef DO_CHECKS
@@ -574,11 +548,17 @@ public:
 
     }
 
-    /* set pointer to this class' member function */
-    set_mvkbrv_ptr(&cdf<funcs>::eval_integrand);
-    output out =
-      approximate_integral(ndim, n_integrands, maxvls, abs_eps, rel_eps,
-                           minvls);
+    /* perform the approximation */
+    output out;
+    out.finest.resize(n_integrands);
+    auto sampler = parallelrng::get_unif_drawer();
+
+    auto res = rand_Korobov(
+      *this, ndim, minvls, maxvls, n_integrands, abs_eps, rel_eps,
+      out.finest.memptr(), sampler);
+    out.minvls = res.minvls;
+    out.inform = res.inform;
+    out.abserr = res.abserr;
 
     funcs::post_process(out.finest, ndim, map_obj.child_mem);
     if(is_permutated){
@@ -953,17 +933,6 @@ public:
   }
 };
 
-/* initialize static members */
-template<class funcs>
-int cdf<funcs>::ndim = 0L;
-template<class funcs>
-int cdf<funcs>::n_integrands = 0L;
-template<class funcs>
-double * cdf<funcs>::wk_mem = nullptr;
-template<class funcs>
-int * cdf<funcs>::iwk_mem = nullptr;
-template<class funcs>
-bool cdf<funcs>::is_permutated = false;
 }
 
 #endif

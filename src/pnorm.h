@@ -15,7 +15,7 @@ using std::isnan;
  * evaluates the standard normal CDF after avoiding some checks in the
  * R function.
  */
-inline double pnorm_std(double const x, int lower, int is_log) {
+static inline double pnorm_std(double const x, int lower, int is_log) {
   if(isinf(x) || isnan(x))
     return NAN;
 
@@ -28,8 +28,8 @@ inline double pnorm_std(double const x, int lower, int is_log) {
 /**
  * evaluates the normal CDF after avoiding some checks in the R function.
  */
-inline double pnorm(double const x, double const mu, double const sigma,
-                    int lower, int is_log) {
+static inline double pnorm_w(double const x, double const mu, double const sigma,
+                             int lower, int is_log) {
   return pnorm_std((x - mu) / sigma, lower, is_log);
 }
 
@@ -68,7 +68,7 @@ inline double pnorm(double const x, double const mu, double const sigma,
 /**
  * Cheap and crude approximation of the log of the normal CDF.
  */
-inline double pnorm_std_aprx(double const x) {
+static inline double pnorm_std_aprx(double const x) {
   static double const xup = 0,
                     inter = -0.693147180559945;
   if(x > -8 && x < 8){

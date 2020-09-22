@@ -40,7 +40,7 @@ context("restrictcdf unit tests") {
 
     double const abs_eps = std::pow(std::numeric_limits<double>::epsilon(),
                                    .33);
-    double constexpr E_prop(0.0181507102495727);
+    double constexpr const E_prop(0.0181507102495727);
     {
       auto res = restrictcdf::cdf<restrictcdf::likelihood>(
         mean, sigma, false).approximate(1000000L, abs_eps, -1);

@@ -13,9 +13,9 @@
 #include <boost/random/gamma_distribution.hpp>
 #include <boost/random/uniform_real.hpp>
 
-namespace {
-using rng_type = boost::mt19937;
+using parallelrng::rng_type;
 
+namespace {
 static std::unique_ptr<rng_type[]> generators;
 
 rng_type& get_generator(){
@@ -57,6 +57,20 @@ void set_rng_seeds(unsigned const n_threads){
     seeds.emplace_back(static_cast<unsigned>(unif_rand() * max + .5));
 
   set_rng_seeds(seeds);
+}
+
+double unif_drawer::operator()(){
+  typedef boost::uniform_real<> unif_generic;
+
+  unif_generic unifD(0., 1.);
+  boost::variate_generator<rng_type&, unif_generic>
+    rng_unif(gen, unifD);
+
+  return rng_unif();
+}
+
+unif_drawer get_unif_drawer(){
+  return unif_drawer(get_generator());
 }
 }
 
