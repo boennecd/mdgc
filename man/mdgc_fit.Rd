@@ -23,7 +23,8 @@ mdgc_fit(
   minvls = 100L,
   verbose = FALSE,
   decay = 0.98,
-  conv_crit = 1e-06
+  conv_crit = 1e-06,
+  use_aprx = FALSE
 )
 }
 \arguments{
@@ -62,6 +63,9 @@ reordering. \code{TRUE} is likely the best option.}
 \item{decay}{the learning rate used by SVRG is given by \code{lr * decay^iteration_number}.}
 
 \item{conv_crit}{relative convergence threshold.}
+
+\item{use_aprx}{logical for whether to use an approximation of
+\code{\link{pnorm}}.}
 }
 \description{
 Estimates the correlation matrix. The \code{lr} parameter is data

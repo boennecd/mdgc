@@ -182,7 +182,7 @@ mark(`Setup time` = {
 #> # A tibble: 1 x 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Setup time   17.4ms   17.8ms      54.9    8.86MB     12.5
+#> 1 Setup time   16.4ms     17ms      56.9    8.86MB     12.4
 
 # fit the model using two different methods
 set.seed(60941821)
@@ -192,107 +192,232 @@ system.time(
     lr = 1e-3, maxit = 25L, batch_size = 100L, method = "adam", 
      rel_eps = 1e-3, maxpts = 5000L))
 #>    user  system elapsed 
-#>   36.61    0.00    9.17
+#>   36.67    0.00    9.17
+set.seed(fit_seed <- 19570958L)
 system.time(
   fit_svrg <- mdgc_fit(
     ptr = log_ml_ptr, vcov = start_val, n_threads = 4L, 
     lr = 1e-3, maxit = 25L, batch_size = 100L, method = "svrg", 
     verbose = TRUE, rel_eps = 1e-3, maxpts = 5000L))
 #> End if iteration    1 with learning rate 0.00100000
-#> Log marginal likelihood approximation is    -23442.14
-#> Previous approximate gradient norm was        3403.90
+#> Log marginal likelihood approximation is    -23440.91
+#> Previous approximate gradient norm was        3399.64
 #> 
 #> End if iteration    2 with learning rate 0.00098000
-#> Log marginal likelihood approximation is    -23390.36
-#> Previous approximate gradient norm was        1696.47
+#> Log marginal likelihood approximation is    -23389.86
+#> Previous approximate gradient norm was        1701.56
 #> 
 #> End if iteration    3 with learning rate 0.00096040
-#> Log marginal likelihood approximation is    -23367.82
-#> Previous approximate gradient norm was        1128.62
+#> Log marginal likelihood approximation is    -23367.41
+#> Previous approximate gradient norm was        1146.69
 #> 
 #> End if iteration    4 with learning rate 0.00094119
-#> Log marginal likelihood approximation is    -23355.85
-#> Previous approximate gradient norm was         836.57
+#> Log marginal likelihood approximation is    -23355.64
+#> Previous approximate gradient norm was         844.93
 #> 
 #> End if iteration    5 with learning rate 0.00092237
-#> Log marginal likelihood approximation is    -23348.83
-#> Previous approximate gradient norm was         658.16
+#> Log marginal likelihood approximation is    -23348.67
+#> Previous approximate gradient norm was         667.57
 #> 
 #> End if iteration    6 with learning rate 0.00090392
-#> Log marginal likelihood approximation is    -23344.31
-#> Previous approximate gradient norm was         545.26
+#> Log marginal likelihood approximation is    -23344.30
+#> Previous approximate gradient norm was         554.26
 #> 
 #> End if iteration    7 with learning rate 0.00088584
-#> Log marginal likelihood approximation is    -23341.31
-#> Previous approximate gradient norm was         468.93
+#> Log marginal likelihood approximation is    -23341.28
+#> Previous approximate gradient norm was         474.18
 #> 
 #> End if iteration    8 with learning rate 0.00086813
-#> Log marginal likelihood approximation is    -23339.18
-#> Previous approximate gradient norm was         415.23
+#> Log marginal likelihood approximation is    -23339.24
+#> Previous approximate gradient norm was         419.90
 #> 
 #> End if iteration    9 with learning rate 0.00085076
-#> Log marginal likelihood approximation is    -23337.62
-#> Previous approximate gradient norm was         376.39
+#> Log marginal likelihood approximation is    -23337.69
+#> Previous approximate gradient norm was         377.09
 #> 
 #> End if iteration   10 with learning rate 0.00083375
-#> Log marginal likelihood approximation is    -23336.46
-#> Previous approximate gradient norm was         349.80
+#> Log marginal likelihood approximation is    -23336.49
+#> Previous approximate gradient norm was         343.38
 #> 
 #> End if iteration   11 with learning rate 0.00081707
-#> Log marginal likelihood approximation is    -23335.57
-#> Previous approximate gradient norm was         324.83
+#> Log marginal likelihood approximation is    -23335.62
+#> Previous approximate gradient norm was         320.76
 #> 
 #> End if iteration   12 with learning rate 0.00080073
-#> Log marginal likelihood approximation is    -23334.86
-#> Previous approximate gradient norm was         306.25
+#> Log marginal likelihood approximation is    -23334.89
+#> Previous approximate gradient norm was         302.69
 #> 
 #> End if iteration   13 with learning rate 0.00078472
-#> Log marginal likelihood approximation is    -23334.26
-#> Previous approximate gradient norm was         293.76
+#> Log marginal likelihood approximation is    -23334.32
+#> Previous approximate gradient norm was         288.15
 #> 
 #> End if iteration   14 with learning rate 0.00076902
-#> Log marginal likelihood approximation is    -23333.80
-#> Previous approximate gradient norm was         279.99
+#> Log marginal likelihood approximation is    -23333.86
+#> Previous approximate gradient norm was         276.06
 #> 
 #> End if iteration   15 with learning rate 0.00075364
-#> Log marginal likelihood approximation is    -23333.42
-#> Previous approximate gradient norm was         269.73
+#> Log marginal likelihood approximation is    -23333.45
+#> Previous approximate gradient norm was         263.95
 #> 
 #> End if iteration   16 with learning rate 0.00073857
-#> Log marginal likelihood approximation is    -23333.10
-#> Previous approximate gradient norm was         261.00
+#> Log marginal likelihood approximation is    -23333.13
+#> Previous approximate gradient norm was         253.99
 #> 
 #> End if iteration   17 with learning rate 0.00072380
-#> Log marginal likelihood approximation is    -23332.80
-#> Previous approximate gradient norm was         266.39
+#> Log marginal likelihood approximation is    -23332.87
+#> Previous approximate gradient norm was         272.55
 #> 
 #> End if iteration   18 with learning rate 0.00070932
-#> Log marginal likelihood approximation is    -23332.57
-#> Previous approximate gradient norm was         248.10
+#> Log marginal likelihood approximation is    -23332.66
+#> Previous approximate gradient norm was         248.81
 #> 
 #> End if iteration   19 with learning rate 0.00069514
-#> Log marginal likelihood approximation is    -23332.37
-#> Previous approximate gradient norm was         242.45
+#> Log marginal likelihood approximation is    -23332.46
+#> Previous approximate gradient norm was         242.78
 #> 
 #> End if iteration   20 with learning rate 0.00068123
-#> Log marginal likelihood approximation is    -23332.20
-#> Previous approximate gradient norm was         238.88
+#> Log marginal likelihood approximation is    -23332.29
+#> Previous approximate gradient norm was         238.61
 #> 
 #> End if iteration   21 with learning rate 0.00066761
-#> Log marginal likelihood approximation is    -23332.01
-#> Previous approximate gradient norm was         242.71
+#> Log marginal likelihood approximation is    -23332.28
+#> Previous approximate gradient norm was         243.06
 #> 
 #> End if iteration   22 with learning rate 0.00065426
-#> Log marginal likelihood approximation is    -23331.87
-#> Previous approximate gradient norm was         235.04
+#> Log marginal likelihood approximation is    -23332.10
+#> Previous approximate gradient norm was         232.73
+#> 
+#> End if iteration   23 with learning rate 0.00064117
+#> Log marginal likelihood approximation is    -23331.98
+#> Previous approximate gradient norm was         228.22
+#> 
+#> End if iteration   24 with learning rate 0.00062835
+#> Log marginal likelihood approximation is    -23331.73
+#> Previous approximate gradient norm was         239.21
+#> 
+#> End if iteration   25 with learning rate 0.00061578
+#> Log marginal likelihood approximation is    -23331.65
+#> Previous approximate gradient norm was         230.12
 #>    user  system elapsed 
-#>  49.993   0.004  12.501
+#>    79.9     0.0    20.0
 
 # compare the log marginal likelihood 
 mdgc_log_ml(vcov = fit_adam$result, ptr = log_ml_ptr, rel_eps = 1e-3)
 #> [1] -23351
 mdgc_log_ml(vcov = fit_svrg$result, ptr = log_ml_ptr, rel_eps = 1e-3)
 #> [1] -23332
+
+# we can use an approximation in the method
+set.seed(fit_seed)
+system.time(
+  fit_svrg_aprx <- mdgc_fit(
+    ptr = log_ml_ptr, vcov = start_val, n_threads = 4L, 
+    lr = 1e-3, maxit = 25L, batch_size = 100L, method = "svrg", 
+    verbose = TRUE, rel_eps = 1e-3, maxpts = 5000L, 
+    use_aprx = TRUE))
+#> End if iteration    1 with learning rate 0.00100000
+#> Log marginal likelihood approximation is    -23440.91
+#> Previous approximate gradient norm was        3399.64
+#> 
+#> End if iteration    2 with learning rate 0.00098000
+#> Log marginal likelihood approximation is    -23389.86
+#> Previous approximate gradient norm was        1701.56
+#> 
+#> End if iteration    3 with learning rate 0.00096040
+#> Log marginal likelihood approximation is    -23367.41
+#> Previous approximate gradient norm was        1146.69
+#> 
+#> End if iteration    4 with learning rate 0.00094119
+#> Log marginal likelihood approximation is    -23355.64
+#> Previous approximate gradient norm was         844.93
+#> 
+#> End if iteration    5 with learning rate 0.00092237
+#> Log marginal likelihood approximation is    -23348.67
+#> Previous approximate gradient norm was         667.57
+#> 
+#> End if iteration    6 with learning rate 0.00090392
+#> Log marginal likelihood approximation is    -23344.30
+#> Previous approximate gradient norm was         554.26
+#> 
+#> End if iteration    7 with learning rate 0.00088584
+#> Log marginal likelihood approximation is    -23341.28
+#> Previous approximate gradient norm was         474.18
+#> 
+#> End if iteration    8 with learning rate 0.00086813
+#> Log marginal likelihood approximation is    -23339.24
+#> Previous approximate gradient norm was         419.90
+#> 
+#> End if iteration    9 with learning rate 0.00085076
+#> Log marginal likelihood approximation is    -23337.69
+#> Previous approximate gradient norm was         377.09
+#> 
+#> End if iteration   10 with learning rate 0.00083375
+#> Log marginal likelihood approximation is    -23336.49
+#> Previous approximate gradient norm was         343.38
+#> 
+#> End if iteration   11 with learning rate 0.00081707
+#> Log marginal likelihood approximation is    -23335.62
+#> Previous approximate gradient norm was         320.76
+#> 
+#> End if iteration   12 with learning rate 0.00080073
+#> Log marginal likelihood approximation is    -23334.89
+#> Previous approximate gradient norm was         302.69
+#> 
+#> End if iteration   13 with learning rate 0.00078472
+#> Log marginal likelihood approximation is    -23334.32
+#> Previous approximate gradient norm was         288.15
+#> 
+#> End if iteration   14 with learning rate 0.00076902
+#> Log marginal likelihood approximation is    -23333.86
+#> Previous approximate gradient norm was         276.06
+#> 
+#> End if iteration   15 with learning rate 0.00075364
+#> Log marginal likelihood approximation is    -23333.45
+#> Previous approximate gradient norm was         263.95
+#> 
+#> End if iteration   16 with learning rate 0.00073857
+#> Log marginal likelihood approximation is    -23333.13
+#> Previous approximate gradient norm was         253.99
+#> 
+#> End if iteration   17 with learning rate 0.00072380
+#> Log marginal likelihood approximation is    -23332.87
+#> Previous approximate gradient norm was         272.55
+#> 
+#> End if iteration   18 with learning rate 0.00070932
+#> Log marginal likelihood approximation is    -23332.66
+#> Previous approximate gradient norm was         248.81
+#> 
+#> End if iteration   19 with learning rate 0.00069514
+#> Log marginal likelihood approximation is    -23332.46
+#> Previous approximate gradient norm was         242.78
+#> 
+#> End if iteration   20 with learning rate 0.00068123
+#> Log marginal likelihood approximation is    -23332.29
+#> Previous approximate gradient norm was         238.61
+#> 
+#> End if iteration   21 with learning rate 0.00066761
+#> Log marginal likelihood approximation is    -23332.28
+#> Previous approximate gradient norm was         243.06
+#> 
+#> End if iteration   22 with learning rate 0.00065426
+#> Log marginal likelihood approximation is    -23332.10
+#> Previous approximate gradient norm was         232.73
+#> 
+#> End if iteration   23 with learning rate 0.00064117
+#> Log marginal likelihood approximation is    -23331.98
+#> Previous approximate gradient norm was         228.22
+#> 
+#> End if iteration   24 with learning rate 0.00062835
+#> Log marginal likelihood approximation is    -23331.73
+#> Previous approximate gradient norm was         239.21
+#> 
+#> End if iteration   25 with learning rate 0.00061578
+#> Log marginal likelihood approximation is    -23331.65
+#> Previous approximate gradient norm was         230.12
+#>    user  system elapsed 
+#>  66.703   0.012  16.691
+norm(fit_svrg_aprx$result - fit_svrg$result, "F") # essentially the same
+#> [1] 1.87e-08
 
 # compare the estimated correlation matrix with the true value
 do_plot <- function(est, truth, main){
@@ -325,7 +450,7 @@ system.time(
   imp_res <- mdgc_impute(mdgc_obj, fit_svrg$result, rel_eps = 1e-3,
                          maxit = 10000L, n_threads = 4L))
 #>    user  system elapsed 
-#>  10.477   0.008   3.084
+#>  11.565   0.008   3.414
 
 # look at the result for one of the observations
 imp_res[2L]
@@ -334,10 +459,10 @@ imp_res[2L]
 #> [1] 0.142
 #> 
 #> [[1]]$X2
-#> [1] 2.08
+#> [1] 2.09
 #> 
 #> [[1]]$X3
-#> [1] 0.25
+#> [1] 0.249
 #> 
 #> [[1]]$X4
 #> [1] 0.0927
@@ -351,7 +476,7 @@ imp_res[2L]
 #> 
 #> [[1]]$X7
 #> FALSE  TRUE 
-#>   0.2   0.8 
+#> 0.196 0.804 
 #> 
 #> [[1]]$X8
 #> FALSE  TRUE 
@@ -359,11 +484,11 @@ imp_res[2L]
 #> 
 #> [[1]]$X9
 #> FALSE  TRUE 
-#> 0.807 0.193 
+#> 0.811 0.189 
 #> 
 #> [[1]]$X10
 #> FALSE  TRUE 
-#> 0.247 0.753 
+#>  0.25  0.75 
 #> 
 #> [[1]]$X11
 #> A B C D E 
@@ -437,12 +562,12 @@ thresh_dat <- threshold(dat$seen_obs, imp_res)
 # compare thresholded data with observed and true data
 head(thresh_dat)
 #>      X1    X2    X3     X4       X5    X6    X7    X8    X9   X10 X11 X12 X13
-#> 1 0.237 0.693 0.798 0.0666 1.207440 FALSE FALSE FALSE FALSE  TRUE   E   C   B
-#> 2 0.142 2.084 0.250 0.0927 0.000152 FALSE  TRUE  TRUE FALSE  TRUE   E   B   A
-#> 3 1.301 0.748 0.629 0.4280 0.571903 FALSE  TRUE  TRUE  TRUE  TRUE   E   A   E
-#> 4 2.702 0.779 1.137 2.1776 1.700870 FALSE  TRUE  TRUE  TRUE  TRUE   A   B   D
+#> 1 0.237 0.693 0.798 0.0666 1.210228 FALSE FALSE FALSE FALSE  TRUE   E   C   B
+#> 2 0.142 2.085 0.249 0.0927 0.000152 FALSE  TRUE  TRUE FALSE  TRUE   E   B   A
+#> 3 1.301 0.748 0.629 0.4280 0.572526 FALSE  TRUE  TRUE  TRUE  TRUE   E   A   E
+#> 4 2.702 0.780 1.136 2.1776 1.700870 FALSE  TRUE  TRUE  TRUE  TRUE   A   B   D
 #> 5 0.925 0.913 0.205 0.6046 0.171311  TRUE  TRUE FALSE FALSE FALSE   E   B   D
-#> 6 0.115 1.069 1.341 0.2374 0.232649 FALSE  TRUE  TRUE FALSE  TRUE   E   A   A
+#> 6 0.115 1.067 1.341 0.2369 0.233466 FALSE  TRUE  TRUE FALSE  TRUE   E   A   A
 #>   X14 X15
 #> 1   B   D
 #> 2   A   C
@@ -492,7 +617,7 @@ get_classif_error <- function(impu_dat, truth = dat$truth_obs,
 }
 get_classif_error(thresh_dat)
 #>    X6    X7    X8    X9   X10   X11   X12   X13   X14   X15 
-#> 0.274 0.290 0.225 0.318 0.286 0.566 0.650 0.616 0.617 0.538
+#> 0.276 0.294 0.225 0.318 0.286 0.574 0.638 0.616 0.592 0.550
 
 # compute RMSE
 get_rmse <- function(impu_dat, truth = dat$truth_obs,
@@ -522,7 +647,7 @@ system.time(miss_res <- missForest(miss_forest_arg))
 #>   missForest iteration 8 in progress...done!
 #>   missForest iteration 9 in progress...done!
 #>    user  system elapsed 
-#>   44.75    0.04   44.79
+#>  49.032   0.032  49.064
 
 # turn binary variables back to logicals
 miss_res$ximp[, is_log] <- lapply(
@@ -530,9 +655,9 @@ miss_res$ximp[, is_log] <- lapply(
 
 rbind(mdgc       = get_classif_error(thresh_dat),
       missForest = get_classif_error(miss_res$ximp))
-#>               X6   X7    X8    X9   X10   X11   X12   X13   X14   X15
-#> mdgc       0.274 0.29 0.225 0.318 0.286 0.566 0.650 0.616 0.617 0.538
-#> missForest 0.315 0.34 0.304 0.371 0.319 0.651 0.726 0.680 0.673 0.612
+#>               X6    X7    X8    X9   X10   X11   X12   X13   X14   X15
+#> mdgc       0.276 0.294 0.225 0.318 0.286 0.574 0.638 0.616 0.592 0.550
+#> missForest 0.315 0.340 0.304 0.371 0.319 0.651 0.726 0.680 0.673 0.612
 rbind(mdgc       = get_rmse(thresh_dat),
       missForest = get_rmse(miss_res$ximp))
 #>               X1    X2    X3    X4    X5
@@ -562,66 +687,59 @@ head(dat$seen_obs)
 #> 4    D   B <NA>
 #> 5 <NA>   D <NA>
 #> 6    A   B <NA>
-
+  
 # perform the estimation and imputation
+set.seed(1)
 system.time(res <- mdgc(dat$seen_obs, verbose = TRUE, maxpts = 5000L, 
-                        n_threads = 4L, maxit = 25L))
+                        n_threads = 4L, maxit = 25L, use_aprx = TRUE))
 #> Estimating the model...
 #> End if iteration    1 with learning rate 0.00100000
-#> Log marginal likelihood approximation is    -23441.88
-#> Previous approximate gradient norm was        3394.90
+#> Log marginal likelihood approximation is    -23442.63
+#> Previous approximate gradient norm was        3393.96
 #> 
 #> End if iteration    2 with learning rate 0.00098000
-#> Log marginal likelihood approximation is    -23390.22
-#> Previous approximate gradient norm was        1664.48
+#> Log marginal likelihood approximation is    -23390.91
+#> Previous approximate gradient norm was        1694.62
 #> 
 #> End if iteration    3 with learning rate 0.00096040
-#> Log marginal likelihood approximation is    -23367.69
-#> Previous approximate gradient norm was        1134.99
+#> Log marginal likelihood approximation is    -23368.15
+#> Previous approximate gradient norm was        1138.76
 #> 
 #> End if iteration    4 with learning rate 0.00094119
-#> Log marginal likelihood approximation is    -23355.75
-#> Previous approximate gradient norm was         840.95
+#> Log marginal likelihood approximation is    -23356.07
+#> Previous approximate gradient norm was         841.78
 #> 
 #> End if iteration    5 with learning rate 0.00092237
-#> Log marginal likelihood approximation is    -23348.77
-#> Previous approximate gradient norm was         663.02
+#> Log marginal likelihood approximation is    -23348.94
+#> Previous approximate gradient norm was         658.80
 #> 
 #> End if iteration    6 with learning rate 0.00090392
-#> Log marginal likelihood approximation is    -23344.31
-#> Previous approximate gradient norm was         548.45
+#> Log marginal likelihood approximation is    -23344.40
+#> Previous approximate gradient norm was         543.07
 #> 
 #> End if iteration    7 with learning rate 0.00088584
-#> Log marginal likelihood approximation is    -23341.32
-#> Previous approximate gradient norm was         473.59
+#> Log marginal likelihood approximation is    -23341.44
+#> Previous approximate gradient norm was         466.07
 #> 
 #> End if iteration    8 with learning rate 0.00086813
-#> Log marginal likelihood approximation is    -23339.24
-#> Previous approximate gradient norm was         414.21
+#> Log marginal likelihood approximation is    -23339.27
+#> Previous approximate gradient norm was         411.44
 #> 
 #> End if iteration    9 with learning rate 0.00085076
-#> Log marginal likelihood approximation is    -23337.69
-#> Previous approximate gradient norm was         376.26
+#> Log marginal likelihood approximation is    -23337.75
+#> Previous approximate gradient norm was         370.94
 #> 
 #> End if iteration   10 with learning rate 0.00083375
-#> Log marginal likelihood approximation is    -23336.51
-#> Previous approximate gradient norm was         346.12
+#> Log marginal likelihood approximation is    -23336.53
+#> Previous approximate gradient norm was         338.69
 #> 
 #> End if iteration   11 with learning rate 0.00081707
-#> Log marginal likelihood approximation is    -23335.58
-#> Previous approximate gradient norm was         323.58
-#> 
-#> End if iteration   12 with learning rate 0.00080073
-#> Log marginal likelihood approximation is    -23334.87
-#> Previous approximate gradient norm was         305.36
-#> 
-#> End if iteration   13 with learning rate 0.00078472
-#> Log marginal likelihood approximation is    -23334.30
-#> Previous approximate gradient norm was         288.79
+#> Log marginal likelihood approximation is    -23335.66
+#> Previous approximate gradient norm was         316.54
 #> 
 #> Performing imputation...
 #>    user  system elapsed 
-#>   23.24    0.00    6.26
+#>   18.08    0.00    5.01
 
 # compare the estimated correlation matrix with the truth
 norm(dat$Sigma - res$vcov, "F") / norm(dat$Sigma, "F")
@@ -630,10 +748,10 @@ norm(dat$Sigma - res$vcov, "F") / norm(dat$Sigma, "F")
 # compute the classifcation error and RMSE
 get_classif_error(res$ximp)
 #>    X6    X7    X8    X9   X10   X11   X12   X13   X14   X15 
-#> 0.276 0.290 0.226 0.318 0.283 0.576 0.638 0.611 0.597 0.545
+#> 0.274 0.290 0.225 0.316 0.286 0.566 0.642 0.616 0.599 0.541
 get_rmse(res$ximp)
 #>    X1    X2    X3    X4    X5 
-#> 0.644 0.784 0.651 0.796 0.747
+#> 0.644 0.783 0.652 0.796 0.747
 ```
 
 We can compare this with the `mixedgcImp` which uses the method
@@ -647,7 +765,7 @@ dat_pass[, is_cat] <- lapply(dat_pass[, is_cat], as.integer)
 
 system.time(imp_apr_em <- impute_mixedgc(dat_pass, eps = 1e-4))
 #>    user  system elapsed 
-#>  19.299   0.003  19.306
+#>    20.1     0.0    20.1
 
 # compare the estimated correlation matrix with the truth
 get_rel_err <- function(est, keep = seq_len(NROW(truth)), truth = dat$Sigma)
@@ -663,7 +781,7 @@ c(mdgc               = get_rel_err(res$vcov),
 #>             mdgc       mixedgcImp mdgc bin/ordered mdgc bin/ordered 
 #>           0.0956           0.1243           0.0742           0.1083 
 #>  mdgc continuous  mdgc continuous 
-#>           0.0242           0.0257
+#>           0.0241           0.0257
 
 # compare the classifcation error and RMSE
 imp_apr_res <- as.data.frame(imp_apr_em$Ximp)
@@ -677,12 +795,12 @@ imp_apr_res[, is_ord] <- mapply(function(x, idx)
 rbind(mdgc       = get_classif_error(res$ximp),
       mixedgcImp = get_classif_error(imp_apr_res))
 #>               X6    X7    X8    X9   X10   X11   X12   X13   X14   X15
-#> mdgc       0.276 0.290 0.226 0.318 0.283 0.576 0.638 0.611 0.597 0.545
+#> mdgc       0.274 0.290 0.225 0.316 0.286 0.566 0.642 0.616 0.599 0.541
 #> mixedgcImp 0.281 0.328 0.232 0.320 0.288 0.626 0.694 0.688 0.609 0.556
 rbind(mdgc       = get_rmse(res$ximp),
       mixedgcImp = get_rmse(imp_apr_res))
 #>               X1    X2    X3    X4    X5
-#> mdgc       0.644 0.784 0.651 0.796 0.747
+#> mdgc       0.644 0.783 0.652 0.796 0.747
 #> mixedgcImp 0.645 0.789 0.655 0.810 0.755
 ```
 
@@ -713,7 +831,7 @@ res <- lapply(seeds, function(s){
     # fit models and impute
     mdgc_time <- system.time(
       mdgc_res <- mdgc(dat$seen_obs, verbose = FALSE, maxpts = 5000L, 
-                        n_threads = 4L, maxit = 25L))
+                        n_threads = 4L, maxit = 25L, use_aprx = TRUE))
     
     dat_pass <- dat$seen_obs
     is_cat <- sapply(dat_pass, function(x) is.logical(x) | is.ordered(x))
@@ -880,14 +998,14 @@ show_sim_stats <- function(v1, v2, v3, what, sub_ele = NULL){
 show_sim_stats(1L, 2L, 3L, "times", "elapsed")
 #> Means and standard errors:
 #>             mean    SE
-#> mdgc        7.27 0.159
-#> mixedgc    20.93 0.145
-#> missForest 44.53 0.595
+#> mdgc        6.21 0.127
+#> mixedgc    20.98 0.151
+#> missForest 44.95 0.607
 #> 
 #> Difference:
 #>             mean    SE
-#> mixedgc    -13.7 0.205
-#> missForest -37.3 0.593
+#> mixedgc    -14.8 0.189
+#> missForest -38.7 0.606
 ```
 
 The summary stats for the relative Frobenius norm between the estimated
@@ -914,27 +1032,27 @@ binary and ordinal outcomes and the root mean square error:
 show_sim_stats("mdgc_bin", "mixedgc_bin", "missForest_bin", "err")
 #> Means and standard errors:
 #>                 mean      SE
-#> mdgc_bin       0.244 0.00187
+#> mdgc_bin       0.245 0.00187
 #> mixedgc_bin    0.252 0.00186
 #> missForest_bin 0.294 0.00188
 #> 
 #> Difference:
 #>                    mean      SE
-#> mixedgc_bin    -0.00731 0.00255
-#> missForest_bin -0.04992 0.00255
+#> mixedgc_bin    -0.00712 0.00255
+#> missForest_bin -0.04974 0.00255
 
 # the ordinal variables
 show_sim_stats("mdgc_class", "mixedgc_class", "missForest_class", "err")
 #> Means and standard errors:
 #>                   mean      SE
-#> mdgc_class       0.590 0.00213
+#> mdgc_class       0.590 0.00212
 #> mixedgc_class    0.623 0.00245
 #> missForest_class 0.658 0.00173
 #> 
 #> Difference:
 #>                     mean      SE
-#> mixedgc_class    -0.0331 0.00316
-#> missForest_class -0.0679 0.00271
+#> mixedgc_class    -0.0332 0.00314
+#> missForest_class -0.0680 0.00269
 
 # the continous variables
 show_sim_stats("mdgc_rmse", "mixedgc_rmse", "missForest_rmse", "err")
@@ -969,43 +1087,45 @@ log_ml <- function(...)
 set.seed(1)
 print(log_ml(dat$Sigma, n_threads = 1L), digits = 7)
 #> [1] -23382.54
-
-# check standard error
-sd(replicate(20, log_ml(dat$Sigma, n_threads = 4L)))
-#> [1] 0.0796
-
-# without reordering
-print(log_ml(dat$Sigma, n_threads = 4L, do_reorder = FALSE), digits = 7)
+print(log_ml(dat$Sigma, n_threads = 1L, use_aprx = TRUE), digits = 7)
 #> [1] -23382.69
 
 # check standard error
+sd(replicate(20, log_ml(dat$Sigma, n_threads = 4L)))
+#> [1] 0.099
+sd(replicate(20, log_ml(dat$Sigma, n_threads = 4L, use_aprx = TRUE)))
+#> [1] 0.0964
+
+# without reordering
+print(log_ml(dat$Sigma, n_threads = 4L, do_reorder = FALSE), digits = 7)
+#> [1] -23382.73
+
+# check standard error
 sd(replicate(20, log_ml(dat$Sigma, n_threads = 4L, do_reorder = FALSE)))
-#> [1] 0.914
+#> [1] 0.613
 
 # check computation time
 mark(
-  `1 thread                 ` = 
+  `1 thread                  ` = 
     log_ml(dat$Sigma                    , n_threads = 1L), 
-  `1 thread  (w/o rordering)` = 
-    log_ml(dat$Sigma, do_reorder = FALSE, n_threads = 1L), 
-  `2 threads                ` = 
+  `2 threads                 ` = 
     log_ml(dat$Sigma                    , n_threads = 2L),
-  `2 threads (w/o rordering)` = 
-    log_ml(dat$Sigma, do_reorder = FALSE, n_threads = 2L),
-  `4 threads                ` = 
+  `4 threads                 ` = 
     log_ml(dat$Sigma                    , n_threads = 4L), 
-  `4 threads (w/o rordering)` = 
+  `4 threads (w/ approx)     ` = 
+    log_ml(dat$Sigma                    , n_threads = 4L, 
+           use_aprx = TRUE),
+  `4 threads (w/o reordering)` = 
     log_ml(dat$Sigma, do_reorder = FALSE, n_threads = 4L), 
   min_iterations = 5, check = FALSE)
-#> # A tibble: 6 x 6
-#>   expression                     min   median `itr/sec` mem_alloc `gc/sec`
-#>   <bch:expr>                <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 1 thread                  856.87ms 901.96ms    1.12      33.9KB        0
-#> 2 1 thread  (w/o rordering)   12.58s   12.72s    0.0785    33.9KB        0
-#> 3 2 threads                  469.5ms    476ms    2.11      33.9KB        0
-#> 4 2 threads (w/o rordering)    6.97s    7.07s    0.140     33.9KB        0
-#> 5 4 threads                 232.96ms 240.29ms    4.12      33.9KB        0
-#> 6 4 threads (w/o rordering)    3.88s    4.02s    0.250     33.9KB        0
+#> # A tibble: 5 x 6
+#>   expression                      min   median `itr/sec` mem_alloc `gc/sec`
+#>   <bch:expr>                 <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
+#> 1 1 thread                   880.94ms    885ms     1.13     33.9KB        0
+#> 2 2 threads                  482.34ms  491.4ms     2.03     33.9KB        0
+#> 3 4 threads                  257.03ms  264.6ms     3.78     33.9KB        0
+#> 4 4 threads (w/ approx)      183.12ms  194.1ms     5.18     33.9KB        0
+#> 5 4 threads (w/o reordering)    4.16s     4.3s     0.234    33.9KB        0
 
 #####
 # we can also get an approximation of the gradient
@@ -1015,28 +1135,26 @@ all.equal(t1, t2, tolerance = 1e-2)
 #> [1] TRUE
   
 mark(
-  `1 thread                 ` = 
+  `1 thread                  ` = 
     log_ml(dat$Sigma, comp_derivs = TRUE                    , n_threads = 1L), 
-  `1 thread  (w/o rordering)` = 
-    log_ml(dat$Sigma, comp_derivs = TRUE, do_reorder = FALSE, n_threads = 1L), 
-  `2 threads                ` = 
+  `2 threads                 ` = 
     log_ml(dat$Sigma, comp_derivs = TRUE                    , n_threads = 2L),
-  `2 threads (w/o rordering)` = 
-    log_ml(dat$Sigma, comp_derivs = TRUE, do_reorder = FALSE, n_threads = 2L),
-  `4 threads                ` = 
+  `4 threads                 ` = 
     log_ml(dat$Sigma, comp_derivs = TRUE                    , n_threads = 4L), 
-  `4 threads (w/o rordering)` = 
+  `4 threads (w/ approx)     ` = 
+    log_ml(dat$Sigma, comp_derivs = TRUE                    , n_threads = 4L, 
+           use_aprx = TRUE), 
+  `4 threads (w/o reordering)` = 
     log_ml(dat$Sigma, comp_derivs = TRUE, do_reorder = FALSE, n_threads = 4L), 
   min_iterations = 5, check = FALSE)
-#> # A tibble: 6 x 6
-#>   expression                     min   median `itr/sec` mem_alloc `gc/sec`
-#>   <bch:expr>                <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 1 thread                     8.12s    8.28s    0.121     35.7KB        0
-#> 2 1 thread  (w/o rordering)   32.59s   32.83s    0.0304    35.7KB        0
-#> 3 2 threads                    4.29s    4.43s    0.224     35.7KB        0
-#> 4 2 threads (w/o rordering)   17.49s   17.79s    0.0563    35.7KB        0
-#> 5 4 threads                    2.38s    2.44s    0.412     35.7KB        0
-#> 6 4 threads (w/o rordering)   10.28s   10.46s    0.0954    35.7KB        0
+#> # A tibble: 5 x 6
+#>   expression                      min   median `itr/sec` mem_alloc `gc/sec`
+#>   <bch:expr>                 <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
+#> 1 1 thread                      8.91s    9.09s    0.109     35.7KB        0
+#> 2 2 threads                     4.63s    4.69s    0.213     35.7KB        0
+#> 3 4 threads                     2.55s     2.6s    0.383     35.7KB        0
+#> 4 4 threads (w/ approx)         1.98s    2.03s    0.493     35.7KB        0
+#> 5 4 threads (w/o reordering)   10.61s   10.79s    0.0918    35.7KB        0
 
 #####
 # the main code in the packages provides an approximation to the CDF similar 
@@ -1057,8 +1175,8 @@ use_mvtnorm <- function()
     algorithm = GenzBretz(maxpts = 100000L, abseps = -1, releps = 1e-5))
 use_this_pkg <- function(derivs = FALSE)
   mdgc:::pmvnorm(lower = lower_ex, upper = upper_ex, mu = m_ex, 
-                 Sigma = S_ex, maxvls = 100000L, abs_eps = -1, rel_eps = 1e-5, 
-                 derivs = derivs)
+                 Sigma = S_ex, maxvls = 100000L, abs_eps = -1, 
+                 rel_eps = 1e-5, derivs = derivs)
 use_mvtnorm()
 #> [1] 0.00136
 #> attr(,"error")
@@ -1081,13 +1199,13 @@ mark(mvtnorm = use_mvtnorm(), mdgc = use_this_pkg(),
 #> # A tibble: 2 x 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 mvtnorm      1.13ms   2.64ms      256.    4.43KB        0
-#> 2 mdgc         2.94ms   7.46ms      151.    2.49KB        0
+#> 1 mvtnorm      1.13ms   3.71ms      245.    4.43KB     2.01
+#> 2 mdgc         3.14ms   7.87ms      133.    2.49KB     0
 
 sd(replicate(25, use_mvtnorm()))
-#> [1] 4.65e-09
+#> [1] 2.99e-09
 sd(replicate(25, use_this_pkg()))
-#> [1] 3.61e-09
+#> [1] 2.86e-09
 
 # the latter function can also provide gradients with respect to the mean 
 # and covariance matrix
@@ -1246,7 +1364,7 @@ start_val <- numeric(p * (p + 1) / 2)
 system.time(res <- naiv_gradient_descent(val = start_val, step_start = .001, 
                                          maxit = 25L, eps = 1e-2))
 #>    user  system elapsed 
-#> 219.262   0.008  56.884
+#> 225.182   0.008  58.373
 
 # compare estimates with truth
 norm(res$result - dat$Sigma)
@@ -1390,7 +1508,7 @@ set.seed(1)
 system.time(res_adam  <- adam(
   val = start_val, alpha = 1e-2, maxit = 25L, batch_size = 100L))
 #>    user  system elapsed 
-#>   183.2     0.0    53.9
+#> 189.403   0.012  55.755
 
 # compare estimates with the truth
 norm(res_adam$result - dat$Sigma)
@@ -1545,7 +1663,7 @@ set.seed(1)
 system.time(res_svrg  <- svrg(
   val = start_val, lr = 1e-3, maxit = 25L, batch_size = 100L))
 #>    user  system elapsed 
-#> 333.258   0.004  99.244
+#> 346.206   0.052 103.437
 
 # compare estimates with the truth
 norm(res_svrg$result - dat$Sigma)
@@ -1668,13 +1786,13 @@ mark(
 #> # A tibble: 2 x 6
 #>   expression       min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr>  <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 R version     69.5ms   74.7ms      12.6    1020KB     22.6
-#> 2 C++ verison  189.7µs  278.7µs    3294.      234KB     12.0
+#> 1 R version     78.4ms   93.5ms      10.5    1020KB     20.0
+#> 2 C++ verison  211.6µs    305µs    3127.      234KB     14.0
 
 # then we can compute an approximation of the covariance matrix as follows
 system.time(chat <- cov2cor(cov(t(tmp), use = "pairwise.complete.obs")))
 #>    user  system elapsed 
-#>   0.002   0.000   0.003
+#>   0.003   0.000   0.002
 
 # the starting value is already quite close
 norm(chat - dat$Sigma)
@@ -1692,7 +1810,7 @@ set.seed(1)
 system.time(res_adam  <- adam(
   val = start_val, alpha = 1e-2, maxit = 25L, batch_size = 100L))
 #>    user  system elapsed 
-#>   206.6     0.0    61.9
+#> 229.366   0.064  69.076
 
 # for comparisons, we also run the code using one thread
 set.seed(1)
@@ -1700,7 +1818,7 @@ system.time(res_adam_ser  <- adam(
   val = start_val, alpha = 1e-2, maxit = 25L, batch_size = 100L, 
   n_threads = 1L))
 #>    user  system elapsed 
-#> 168.871   0.008 168.889
+#>     181       0     181
 
 # we get (roughly) the same
 norm(res_adam$result - res_adam_ser$result)
@@ -1735,7 +1853,7 @@ set.seed(1)
 system.time(res_svrg  <- svrg(
   val = start_val, lr = 1e-3, maxit = 25L, batch_size = 100L))
 #>    user  system elapsed 
-#> 362.443   0.012 109.108
+#> 369.558   0.039 111.402
 
 # compare estimates with the truth
 norm(res_svrg$result - dat$Sigma)

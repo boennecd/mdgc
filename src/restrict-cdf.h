@@ -12,6 +12,7 @@
 #include "config.h"
 #include <algorithm>
 #include "new-mvt.h"
+#include "norm-cdf-approx.h"
 
 namespace restrictcdf {
 extern "C"
@@ -62,63 +63,6 @@ inline double safe_qnorm(double const x) noexcept {
     return qnorm_w(eps_2, 0, 1, 1L, 0L);
 
   return qnorm_w  (x    , 0, 1, 1L, 0L);
-}
-
-/**
- * draws from a truncated normal distribution.
- *
- * @tparam i Code for finite upper bound. -1: unbounded, 0: -Inf lower
- * bound, 1: Inf upper bound, and 2: both are unbounded.
- * @param a The lower truncation point.
- * @param b The upper truncation point.
- * @param u Random uniform draw on (0, 1).
- * @param comp_quantile Boolean for whether to compute the CDF.
- */
-template<int i>
-std::array<double, 2> draw_trunc_mean
-(double const a, double const b, double const u,
- bool const comp_quantile) MDGC_NOEXCEPT {
-  return { std::numeric_limits<double>::quiet_NaN(),
-           std::numeric_limits<double>::quiet_NaN() };
-}
-
-template<> inline std::array<double, 2> draw_trunc_mean<-1L>
-(double const a, double const b, double const u,
- bool const comp_quantile) MDGC_NOEXCEPT {
-   if(comp_quantile)
-     return { 1., safe_qnorm(u) };
-   return { 1., std::numeric_limits<double>::quiet_NaN() };
-}
-
-template<> inline std::array<double, 2> draw_trunc_mean<0L>
-(double const a, double const b, double const u,
- bool const comp_quantile) MDGC_NOEXCEPT {
-  double const qb = pnorm_std(b, 1L, 0L);
-  if(comp_quantile)
-    return { qb, safe_qnorm(qb * u) };
-  return { qb, std::numeric_limits<double>::quiet_NaN() };
-}
-
-template<> inline std::array<double, 2> draw_trunc_mean<1L>
-(double const a, double const b, double const u,
- bool const comp_quantile) MDGC_NOEXCEPT {
-  double const qa = pnorm_std(a, 1L, 0L);
-  if(comp_quantile)
-    return { 1 - qa, safe_qnorm(qa + u * (1 - qa)) };
-  return { 1 - qa, std::numeric_limits<double>::quiet_NaN() };
-}
-
-template<> inline std::array<double, 2> draw_trunc_mean<2L>
-(double const a, double const b, double const u,
- bool const comp_quantile) MDGC_NOEXCEPT {
-  if(b <= a)
-    return { 0., 0. };
-
-  double const qa = pnorm_std(a, 1L, 0L),
-               qb = pnorm_std(b, 1L, 0L);
-  if(comp_quantile)
-    return { qb - qa, safe_qnorm(qa + u * (qb - qa)) };
-  return { qb - qa, std::numeric_limits<double>::quiet_NaN() };
 }
 
 /**
@@ -195,24 +139,24 @@ template<class funcs>
 class cdf {
   /** maps working memory to vectors */
   class ptr_to_dat {
-    double * const wk_mem;
-    int const ndim;
+    double * wk_mem;
+    int ndim;
 
   public:
     /// objects for the parent clas
-    double * const lower,
-           * const upper,
-           * const draw,
-           * const tmp_vec,
-           * const sigma_chol,
-           * const tmp_mat,
+    double * lower,
+           * upper,
+           * draw,
+           * tmp_vec,
+           * sigma_chol,
+           * tmp_mat,
     /// objects for the child class
-           * const child_mem;
+           * child_mem;
 
-    int * const infin,
-        * const idx;
+    int * infin,
+        * idx;
 
-    ptr_to_dat(double * const wk_mem, int const ndim,
+    ptr_to_dat(double * const wk_mem , int const ndim,
                int * const iwk_mem) noexcept:
       wk_mem(wk_mem), ndim(ndim),
       lower     (wk_mem            ),
@@ -232,8 +176,10 @@ class cdf {
       n_integrands = 0L;
   double * wk_mem = nullptr;
   int * iwk_mem = nullptr;
-  bool is_permutated = false;
+  bool is_permutated = false,
+       use_aprx;
   static constexpr bool const needs_last_unif = funcs::needs_last_unif();
+  ptr_to_dat map_obj;
 
   static double * get_working_memory() noexcept;
   static int    * get_iworking_memory() noexcept;
@@ -267,7 +213,6 @@ public:
       throw std::invalid_argument("cdf::eval_integrand: invalid 'n_integrands_in'");
 #endif
 
-    ptr_to_dat map_obj(wk_mem, ndim, iwk_mem);
     double * const __restrict__ out = integrand_val,
            * const __restrict__ draw = map_obj.draw;
 
@@ -280,50 +225,37 @@ public:
     /* loop over variables and transform them to truncated normal
      * variables */
     for(int j = 0; j < ndim; ++j, ++sc, ++lw, ++up, ++infin, ++unif){
-      auto const draw_n_p = ([&](){
-        bool const needs_q = needs_last_unif or j + 1 < ndim;
-        double const *d = draw;
+      double su(0.);
+      double const *d = draw;
+      for(int i = 0; i < j; ++i, sc++, d++)
+        su += *sc * *d;
 
-        if(*infin == 0L){
-          double b(*up);
-          for(int i = 0; i < j; ++i)
-            b -= *sc++ * *d++;
+      auto pnorm_use = [&](double const x){
+        return use_aprx ? pnorm_approx(x) : pnorm_std(x, 1L, 0L);
+      };
+      double lim_l(0.),
+             lim_u(1.);
+      if(*infin == 0L)
+        lim_u = pnorm_use(*up - su);
+      else if(*infin == 1L)
+        lim_l = pnorm_use(*lw - su);
+      else if(*infin == 2L){
+        lim_l = pnorm_use(*lw - su);
+        lim_u = pnorm_use(*up - su);
 
-          return draw_trunc_mean<0L>(0, b, *unif, needs_q);
+      }
 
-        } else if(*infin == 1L){
-          double a(*lw);
-          for(int i = 0; i < j; ++i)
-            a -= *sc++ * *d++;
+      if(lim_l < lim_u){
+        w *= lim_u - lim_l;
+        if(needs_last_unif or j + 1 < ndim)
+          *(draw + j) = safe_qnorm(lim_l + *unif * (lim_u - lim_l));
 
-          return draw_trunc_mean<1L>(a, 0, *unif, needs_q);
+      } else {
+        w = 0.;
+        std::fill(draw + j, draw + ndim, 0.);
+        break;
 
-        } else if(*infin == 2L){
-          double a(*lw),
-                 b(*up),
-                su(0.);
-          for(int i = 0; i < j; ++i, sc++, d++)
-            su += *sc * *d;
-          a -= su;
-          b -= su;
-
-          return draw_trunc_mean<2L>(a, b, *unif, needs_q);
-        }
-        else if(*infin == -1L){
-          sc += j;
-          return draw_trunc_mean<-1L>(0, 1, *unif, needs_q);
-
-        }
-
-#ifdef DO_CHECKS
-        throw std::runtime_error("draw_trunc_mean: not implemented");
-#endif
-        sc += j;
-        return draw_trunc_mean<-2L>(0, 0, *unif, needs_q);
-      })();
-
-      w           *= draw_n_p[0];
-      *(draw + j)  = draw_n_p[1];
+      }
     }
 
     /* evaluate the integrand and weigth the result. */
@@ -340,10 +272,14 @@ public:
    * @param mu_in Mean vector.
    * @param sigma_in Covariance matrix.
    * @param do_reorder true if the order of integrations may be reordered.
+   * @param use_aprx true if an approximation of the normal CDF should
+   * be used.
    */
   cdf(arma::vec const &lower_in, arma::vec const &upper_in,
       arma::vec const &mu_in, arma::mat const &sigma_in,
-      bool const do_reorder){
+      bool const do_reorder, bool const use_aprx):
+    use_aprx(use_aprx),
+    map_obj(get_working_memory(), mu_in.n_elem, get_iworking_memory()){
     ndim = mu_in.n_elem;
     n_integrands = funcs::get_n_integrands(mu_in, sigma_in);
 
@@ -361,9 +297,6 @@ public:
 #endif
 
     size_t const udim = ndim;
-    wk_mem  = get_working_memory();
-    iwk_mem = get_iworking_memory();
-    ptr_to_dat map_obj(wk_mem, udim, iwk_mem);
 
     int * const infin = map_obj.infin;
     {
@@ -500,7 +433,7 @@ public:
       out.fill(-std::numeric_limits<double>::infinity());
       return out;
     })(), arma::vec(mu_in.n_elem, arma::fill::zeros), mu_in, sigma_in,
-    do_reorder) { }
+    do_reorder, false) { }
 
   /**
    * Performs the approximation.
@@ -528,7 +461,7 @@ public:
 
     wk_mem  = get_working_memory();
     iwk_mem = get_iworking_memory();
-    ptr_to_dat map_obj(wk_mem, ndim, iwk_mem);
+    map_obj = ptr_to_dat(wk_mem, ndim, iwk_mem);
     if(ndim == 1L){
       /* handle the one-dimensional case as a special case */
       double const lw = *map_obj.lower,

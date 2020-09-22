@@ -14,7 +14,8 @@ mdgc_log_ml(
   do_reorder = TRUE,
   maxpts = 100000L,
   abs_eps = -1,
-  minvls = 100L
+  minvls = 100L,
+  use_aprx = FALSE
 )
 }
 \arguments{
@@ -39,6 +40,9 @@ reordering. \code{TRUE} is likely the best option.}
 \item{abs_eps}{absolute convergence threshold for each term.}
 
 \item{minvls}{minimum number of samples.}
+
+\item{use_aprx}{logical for whether to use an approximation of
+\code{\link{pnorm}}.}
 }
 \description{
 Approximates the log marginal likelihood and the derivatives using

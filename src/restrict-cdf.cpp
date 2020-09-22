@@ -3,7 +3,6 @@
 #ifdef _OPENMP
 #include <omp.h>
 #endif
-#include "new-mvt.h"
 
 using std::invalid_argument;
 

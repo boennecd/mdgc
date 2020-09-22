@@ -107,7 +107,7 @@ Rcpp::NumericVector eval_log_lm_terms(
     SEXP ptr, arma::ivec const &indices, arma::mat const &vcov,
     int const maxpts, double const abs_eps, double const rel_eps,
     size_t const n_threads, bool const comp_derivs, unsigned const minvls,
-    bool const do_reorder = true){
+    bool const do_reorder = true, bool const use_aprx = false){
 
   Rcpp::XPtr<ml_terms> obj(ptr);
   std::vector<log_ml_term> const &terms = obj->terms;
@@ -146,7 +146,7 @@ Rcpp::NumericVector eval_log_lm_terms(
         continue;
       out += terms[indices[i]].approximate(
         vcov, my_derivs, maxpts, abs_eps, rel_eps, comp_derivs,
-        do_reorder, minvls);
+        do_reorder, minvls, use_aprx);
     }
 
     if(comp_derivs)
@@ -206,7 +206,8 @@ Rcpp::NumericMatrix get_z_hat
 Rcpp::NumericVector pmvnorm_to_R
   (arma::vec const &lower, arma::vec const &upper, arma::vec const &mu,
    arma::mat const &Sigma, int const maxvls, double const abs_eps,
-   double const rel_eps, bool const derivs, bool const do_reorder = true){
+   double const rel_eps, bool const derivs, bool const do_reorder = true,
+   bool const use_aprx = false){
   parallelrng::set_rng_seeds(1L);
   restrictcdf::cdf<restrictcdf::deriv>::set_working_memory(
     lower.n_elem, 1L);
@@ -214,11 +215,11 @@ Rcpp::NumericVector pmvnorm_to_R
   auto res = ([&](){
     if(derivs)
       return restrictcdf::cdf<restrictcdf::deriv>
-      (lower, upper, mu, Sigma, do_reorder).approximate(
+      (lower, upper, mu, Sigma, do_reorder, use_aprx).approximate(
           maxvls, abs_eps, rel_eps);
 
     return restrictcdf::cdf<restrictcdf::likelihood>
-      (lower, upper, mu, Sigma, do_reorder).approximate(
+      (lower, upper, mu, Sigma, do_reorder, use_aprx).approximate(
           maxvls, abs_eps, rel_eps);
   })();
 
@@ -433,7 +434,8 @@ Rcpp::List impute
    arma::mat const &Sigma, arma::mat const &truth, Rcpp::List margs,
    double const rel_eps, double const abs_eps, unsigned const maxit,
    Rcpp::List passed_names, Rcpp::CharacterVector outer_names,
-   int const n_threads, bool const do_reorder, int const minvls){
+   int const n_threads, bool const do_reorder, int const minvls,
+   bool const use_aprx = false){
   // setup vector to pass to QMC method
   std::vector<std::unique_ptr<impute_base> > const type_list = ([&](){
     std::vector<std::unique_ptr<impute_base> > out;
@@ -583,7 +585,8 @@ Rcpp::List impute
     restrictcdf::imputation::set_current_list(type_i_cp);
 
     auto res = restrictcdf::cdf<restrictcdf::imputation>
-      (a_lower, a_upper, mu_use, Sigma_use, do_reorder).approximate(
+      (a_lower, a_upper, mu_use, Sigma_use, do_reorder,
+       use_aprx).approximate(
         maxit, abs_eps, rel_eps, minvls);
 
     res.finest /= res.finest[0L];

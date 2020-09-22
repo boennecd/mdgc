@@ -57,6 +57,13 @@ test_that("mdgc_impute gives the same as before and with and withour reordering"
   expect_equal(imp_no_reorder, imp_reorder, tolerance = 1e-2)
   expect_equal(imp_reorder_two, imp_reorder, tolerance = 1e-2)
 
+  set.seed(1)
+  imp_no_reorder_arpx <- mdgc_impute(
+    object = mdgc_obj, vcov = Sig, rel_eps = 1e-5, maxit = 1000000L,
+    do_reorder = FALSE, n_threads = 1L, minvls = 100000L,
+    use_aprx = TRUE)
+  expect_equal(imp_no_reorder, imp_no_reorder_arpx, tolerance = 1e-6)
+
   # observed values match
   expect_true({
     thresh <- threshold(dat, imp_reorder)

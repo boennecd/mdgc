@@ -52,6 +52,8 @@ public:
    * @param comp_deriv true if the derivative should be computed.
    * @param do_reorder true if the order of integrations may be reordered.
    * @param minvls Minimum number of samples.
+   * @param use_aprx logical for whether to use an approximation of
+   * the normal CDF.
    *
    * @return the log marginal likelihood approximation.
    *
@@ -59,7 +61,8 @@ public:
   double approximate(arma::mat const &vcov, arma::mat &derivs,
                      int const maxpts, double const abs_eps,
                      double const rel_eps, bool const comp_deriv,
-                     bool const do_reorder, size_t const minvls) const;
+                     bool const do_reorder, size_t const minvls,
+                     bool const use_aprx) const;
 
   /**
    * sets the working memory. Must be called prior to calling approximate.

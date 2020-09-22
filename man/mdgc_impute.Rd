@@ -12,7 +12,8 @@ mdgc_impute(
   abs_eps = -1,
   n_threads = 1L,
   do_reorder = TRUE,
-  minvls = 1000L
+  minvls = 1000L,
+  use_aprx = FALSE
 )
 }
 \arguments{
@@ -32,6 +33,9 @@ mdgc_impute(
 reordering. \code{TRUE} is likely the best option.}
 
 \item{minvls}{minimum number of samples.}
+
+\item{use_aprx}{logical for whether to use an approximation of
+\code{\link{pnorm}}.}
 }
 \value{
 A list with imputed values for the continuous and a vector with

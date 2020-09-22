@@ -27,7 +27,8 @@ mdgc(
   iminvls = 1000L,
   start_val = NULL,
   decay = 0.98,
-  conv_crit = 1e-05
+  conv_crit = 1e-05,
+  use_aprx = FALSE
 )
 }
 \arguments{
@@ -79,6 +80,9 @@ reordering. \code{TRUE} is likely the best option.}
 \item{decay}{the learning rate used by SVRG is given by \code{lr * decay^iteration_number}.}
 
 \item{conv_crit}{relative convergence threshold.}
+
+\item{use_aprx}{logical for whether to use an approximation of
+\code{\link{pnorm}}.}
 }
 \description{
 A convenience function to perform model estimation and imputation in one

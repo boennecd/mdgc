@@ -53,6 +53,9 @@ rand_Korobov_output rand_Korobov
 
   // workign objects. TODO: these may be allocated once.
   std::unique_ptr<int[]> pr(new int[ndim]);
+  for(int i = 0; i < ndim; ++i)
+    *(pr.get() + i) = i;
+
   std::unique_ptr<double[]> wk_mem(new double[5 * nf + 3 * ndim]);
   double * const __restrict__ finval = wk_mem.get(),
          * const __restrict__ varsqr = finval + nf,
@@ -138,7 +141,7 @@ rand_Korobov_output rand_Korobov
             int const * prj = pr;
             for(int j = 0; j < ndim; ++j, ++rj, ++xj, ++prj){
               *rj += *(vk + *prj);
-              if(*rj >= 1.)
+              if(*rj > 1.)
                 *rj -= 1.;
               *xj = std::abs(2 * *rj - 1);
             }

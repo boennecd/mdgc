@@ -156,11 +156,14 @@ get_mdgc_log_ml.default <- function(object, lower, upper, code, ...){
 #' @param maxpts maximum number of samples to draw.
 #' @param abs_eps absolute convergence threshold for each term.
 #' @param minvls minimum number of samples.
+#' @param use_aprx logical for whether to use an approximation of
+#' \code{\link{pnorm}}.
 #' @export
 mdgc_log_ml <- function(ptr, vcov, rel_eps = 1e-2, n_threads = 1L,
                         comp_derivs = FALSE, indices = NULL,
                         do_reorder = TRUE, maxpts = 100000L,
-                        abs_eps = -1., minvls = 100L){
+                        abs_eps = -1., minvls = 100L,
+                        use_aprx = FALSE){
   nvars <- attr(ptr, "nvars")
   nobs <- attr(ptr, "nobs")
   stopifnot(!is.null(nvars), !is.null(nobs))
@@ -177,21 +180,25 @@ mdgc_log_ml <- function(ptr, vcov, rel_eps = 1e-2, n_threads = 1L,
     is.integer(maxpts), length(maxpts) == 1L, maxpts > 0L,
     is.numeric(abs_eps), length(abs_eps) == 1L, is.finite(abs_eps),
     is.integer(minvls), length(minvls) == 1L, minvls <= maxpts,
-    minvls >= 0L)
+    minvls >= 0L,
+    is.logical(use_aprx), length(use_aprx) == 1L,
+    is.finite(use_aprx))
 
   .mdgc_log_ml(
     ptr = ptr, vcov = vcov, indices = indices, maxpts = maxpts,
     abs_eps = abs_eps, rel_eps = rel_eps, n_threads = n_threads,
-    comp_derivs = comp_derivs, do_reorder = do_reorder, minvls = minvls)
+    comp_derivs = comp_derivs, do_reorder = do_reorder, minvls = minvls,
+    use_aprx = use_aprx)
 }
 
 .mdgc_log_ml <- function(
   ptr, vcov, rel_eps, n_threads, comp_derivs, indices, do_reorder,
-  maxpts, abs_eps, minvls)
+  maxpts, abs_eps, minvls, use_aprx)
   eval_log_lm_terms(
     ptr = ptr, vcov = vcov, indices = indices, maxpts = maxpts,
     abs_eps = abs_eps, rel_eps = rel_eps, n_threads = n_threads,
-    comp_derivs = comp_derivs, do_reorder = do_reorder, minvls = minvls)
+    comp_derivs = comp_derivs, do_reorder = do_reorder, minvls = minvls,
+    use_aprx = use_aprx)
 
 #' Get Starting Value for the Correlation Matrix Using a Heuristic
 #'
@@ -269,7 +276,7 @@ mdgc_fit <- function(ptr, vcov, lr = 1e-3, rel_eps = 1e-3,
                      beta_1 = .9, beta_2 = .999, n_threads = 1L,
                      do_reorder = TRUE, abs_eps = -1., maxpts = 10000L,
                      minvls = 100L, verbose = FALSE, decay = .98,
-                     conv_crit = 1e-6){
+                     conv_crit = 1e-6, use_aprx = FALSE){
   #####
   # checks
   nvars <- attr(ptr, "nvars")
@@ -300,7 +307,9 @@ mdgc_fit <- function(ptr, vcov, lr = 1e-3, rel_eps = 1e-3,
     minvls >= 0L,
     is.logical(verbose), length(verbose) == 1L, !is.na(verbose),
     is.numeric(decay), length(decay) == 1L, decay > 0,
-    is.numeric(conv_crit), length(conv_crit) == 1L, is.finite(conv_crit))
+    is.numeric(conv_crit), length(conv_crit) == 1L, is.finite(conv_crit),
+    is.logical(use_aprx), length(use_aprx) == 1L,
+    is.finite(use_aprx))
 
   #####
   # assign functions to use
@@ -323,7 +332,8 @@ mdgc_fit <- function(ptr, vcov, lr = 1e-3, rel_eps = 1e-3,
     res <- .mdgc_log_ml(
       ptr = ptr, Arg, comp_derivs = comp_derivs, indices = indices,
       n_threads = n_threads, rel_eps = rel_eps, do_reorder = do_reorder,
-      abs_eps = abs_eps, maxpts = maxpts, minvls = minvls)
+      abs_eps = abs_eps, maxpts = maxpts, minvls = minvls,
+      use_aprx = use_aprx)
     log_ml <- c(res)
     if(comp_derivs){
       gr <- attr(res, "grad")
@@ -537,7 +547,7 @@ svrg <- function(par_fn, nobs, val, batch_size, maxit = 10L, seed = 1L, lr,
 #' probabilities for each categorical.
 mdgc_impute <- function(object, vcov, rel_eps = 1e-3, maxit = 10000L,
                         abs_eps = -1, n_threads = 1L, do_reorder = TRUE,
-                        minvls = 1000L){
+                        minvls = 1000L, use_aprx = FALSE){
   #####
   # checks
   margs <- object$margs
@@ -552,7 +562,9 @@ mdgc_impute <- function(object, vcov, rel_eps = 1e-3, maxit = 10000L,
     is.integer(n_threads), length(n_threads) == 1L, n_threads > 0L,
     is.logical(do_reorder), length(do_reorder) == 1L, !is.na(do_reorder),
     is.integer(minvls), length(minvls) == 1L, minvls <= maxit,
-    minvls >= 0L)
+    minvls >= 0L,
+    is.logical(use_aprx), length(use_aprx) == 1L,
+    is.finite(use_aprx))
 
   #####
   # perform the imputation
@@ -580,7 +592,8 @@ mdgc_impute <- function(object, vcov, rel_eps = 1e-3, maxit = 10000L,
          margs = margs_pass, rel_eps = rel_eps, abs_eps = abs_eps,
          maxit = maxit, passed_names = passed_names,
          outer_names = rownames(object$lower), n_threads = n_threads,
-         do_reorder = do_reorder, minvls = minvls)
+         do_reorder = do_reorder, minvls = minvls,
+         use_aprx = use_aprx)
 }
 
 #' Perform Model Estimation and Imputation
@@ -648,7 +661,8 @@ mdgc <- function(dat, lr = 1e-3, maxit = 10L, batch_size = NULL,
                  do_reorder = TRUE, abs_eps = -1, maxpts = 10000L,
                  minvls = 100L, verbose = FALSE, irel_eps = rel_eps,
                  imaxit = maxpts, iabs_eps = abs_eps, iminvls = 1000L,
-                 start_val = NULL, decay = .98, conv_crit = 1e-5){
+                 start_val = NULL, decay = .98, conv_crit = 1e-5,
+                 use_aprx = FALSE){
   mdgc_obj <- get_mdgc(dat)
   p <- NCOL(dat)
   log_ml_ptr <- get_mdgc_log_ml(mdgc_obj)
@@ -665,7 +679,7 @@ mdgc <- function(dat, lr = 1e-3, maxit = 10L, batch_size = NULL,
     epsilon = epsilon, beta_1 = beta_1, beta_2 = beta_2,
     n_threads = n_threads, do_reorder = do_reorder, abs_eps = abs_eps,
     maxpts = maxpts, minvls = minvls, verbose = verbose, decay = decay,
-    conv_crit = conv_crit)
+    conv_crit = conv_crit, use_aprx = use_aprx)
   vcov <- fit$result
   colnames(vcov) <- rownames(vcov) <- colnames(dat)
 
@@ -674,7 +688,7 @@ mdgc <- function(dat, lr = 1e-3, maxit = 10L, batch_size = NULL,
   impu <- mdgc_impute(mdgc_obj, fit$result, rel_eps = irel_eps,
                       maxit = imaxit, abs_eps = iabs_eps,
                       n_threads = n_threads, do_reorder = do_reorder,
-                      minvls = iminvls)
+                      minvls = iminvls, use_aprx = use_aprx)
   out <- list(ximp = .threshold(dat, impu), imputed = impu,
               vcov = vcov)
   if(!is.null(fit$fun_vals))

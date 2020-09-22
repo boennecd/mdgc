@@ -181,6 +181,7 @@ system.time(
     ptr = log_ml_ptr, vcov = start_val, n_threads = 4L, 
     lr = 1e-3, maxit = 25L, batch_size = 100L, method = "adam", 
      rel_eps = 1e-3, maxpts = 5000L))
+set.seed(fit_seed <- 19570958L)
 system.time(
   fit_svrg <- mdgc_fit(
     ptr = log_ml_ptr, vcov = start_val, n_threads = 4L, 
@@ -190,6 +191,16 @@ system.time(
 # compare the log marginal likelihood 
 mdgc_log_ml(vcov = fit_adam$result, ptr = log_ml_ptr, rel_eps = 1e-3)
 mdgc_log_ml(vcov = fit_svrg$result, ptr = log_ml_ptr, rel_eps = 1e-3)
+
+# we can use an approximation in the method
+set.seed(fit_seed)
+system.time(
+  fit_svrg_aprx <- mdgc_fit(
+    ptr = log_ml_ptr, vcov = start_val, n_threads = 4L, 
+    lr = 1e-3, maxit = 25L, batch_size = 100L, method = "svrg", 
+    verbose = TRUE, rel_eps = 1e-3, maxpts = 5000L, 
+    use_aprx = TRUE))
+norm(fit_svrg_aprx$result - fit_svrg$result, "F") # essentially the same
 
 # compare the estimated correlation matrix with the true value
 do_plot <- function(est, truth, main){
@@ -309,10 +320,11 @@ estimation and the imputation:
 ```{r very_quick_example, cache = 1, eval = TRUE}
 # have a data set with missing continous, binary, and ordinal variables
 head(dat$seen_obs)
-
+  
 # perform the estimation and imputation
+set.seed(1)
 system.time(res <- mdgc(dat$seen_obs, verbose = TRUE, maxpts = 5000L, 
-                        n_threads = 4L, maxit = 25L))
+                        n_threads = 4L, maxit = 25L, use_aprx = TRUE))
 
 # compare the estimated correlation matrix with the truth
 norm(dat$Sigma - res$vcov, "F") / norm(dat$Sigma, "F")
@@ -393,7 +405,7 @@ res <- lapply(seeds, function(s){
     # fit models and impute
     mdgc_time <- system.time(
       mdgc_res <- mdgc(dat$seen_obs, verbose = FALSE, maxpts = 5000L, 
-                        n_threads = 4L, maxit = 25L))
+                        n_threads = 4L, maxit = 25L, use_aprx = TRUE))
     
     dat_pass <- dat$seen_obs
     is_cat <- sapply(dat_pass, function(x) is.logical(x) | is.ordered(x))
@@ -600,9 +612,11 @@ log_ml <- function(...)
 # print the approximate log marginal likelihood at the true parameters
 set.seed(1)
 print(log_ml(dat$Sigma, n_threads = 1L), digits = 7)
+print(log_ml(dat$Sigma, n_threads = 1L, use_aprx = TRUE), digits = 7)
 
 # check standard error
 sd(replicate(20, log_ml(dat$Sigma, n_threads = 4L)))
+sd(replicate(20, log_ml(dat$Sigma, n_threads = 4L, use_aprx = TRUE)))
 
 # without reordering
 print(log_ml(dat$Sigma, n_threads = 4L, do_reorder = FALSE), digits = 7)
@@ -612,17 +626,16 @@ sd(replicate(20, log_ml(dat$Sigma, n_threads = 4L, do_reorder = FALSE)))
 
 # check computation time
 mark(
-  `1 thread                 ` = 
+  `1 thread                  ` = 
     log_ml(dat$Sigma                    , n_threads = 1L), 
-  `1 thread  (w/o rordering)` = 
-    log_ml(dat$Sigma, do_reorder = FALSE, n_threads = 1L), 
-  `2 threads                ` = 
+  `2 threads                 ` = 
     log_ml(dat$Sigma                    , n_threads = 2L),
-  `2 threads (w/o rordering)` = 
-    log_ml(dat$Sigma, do_reorder = FALSE, n_threads = 2L),
-  `4 threads                ` = 
+  `4 threads                 ` = 
     log_ml(dat$Sigma                    , n_threads = 4L), 
-  `4 threads (w/o rordering)` = 
+  `4 threads (w/ approx)     ` = 
+    log_ml(dat$Sigma                    , n_threads = 4L, 
+           use_aprx = TRUE),
+  `4 threads (w/o reordering)` = 
     log_ml(dat$Sigma, do_reorder = FALSE, n_threads = 4L), 
   min_iterations = 5, check = FALSE)
 
@@ -633,17 +646,16 @@ t2 <- log_ml(dat$Sigma, comp_derivs = TRUE, n_threads = 4L, rel_eps = 1e-3)
 all.equal(t1, t2, tolerance = 1e-2)
   
 mark(
-  `1 thread                 ` = 
+  `1 thread                  ` = 
     log_ml(dat$Sigma, comp_derivs = TRUE                    , n_threads = 1L), 
-  `1 thread  (w/o rordering)` = 
-    log_ml(dat$Sigma, comp_derivs = TRUE, do_reorder = FALSE, n_threads = 1L), 
-  `2 threads                ` = 
+  `2 threads                 ` = 
     log_ml(dat$Sigma, comp_derivs = TRUE                    , n_threads = 2L),
-  `2 threads (w/o rordering)` = 
-    log_ml(dat$Sigma, comp_derivs = TRUE, do_reorder = FALSE, n_threads = 2L),
-  `4 threads                ` = 
+  `4 threads                 ` = 
     log_ml(dat$Sigma, comp_derivs = TRUE                    , n_threads = 4L), 
-  `4 threads (w/o rordering)` = 
+  `4 threads (w/ approx)     ` = 
+    log_ml(dat$Sigma, comp_derivs = TRUE                    , n_threads = 4L, 
+           use_aprx = TRUE), 
+  `4 threads (w/o reordering)` = 
     log_ml(dat$Sigma, comp_derivs = TRUE, do_reorder = FALSE, n_threads = 4L), 
   min_iterations = 5, check = FALSE)
 
@@ -666,8 +678,8 @@ use_mvtnorm <- function()
     algorithm = GenzBretz(maxpts = 100000L, abseps = -1, releps = 1e-5))
 use_this_pkg <- function(derivs = FALSE)
   mdgc:::pmvnorm(lower = lower_ex, upper = upper_ex, mu = m_ex, 
-                 Sigma = S_ex, maxvls = 100000L, abs_eps = -1, rel_eps = 1e-5, 
-                 derivs = derivs)
+                 Sigma = S_ex, maxvls = 100000L, abs_eps = -1, 
+                 rel_eps = 1e-5, derivs = derivs)
 use_mvtnorm()
 use_this_pkg()
 all.equal(c(use_mvtnorm()), c(use_this_pkg()), tolerance = 1e-5)
