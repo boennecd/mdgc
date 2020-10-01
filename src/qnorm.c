@@ -57,9 +57,7 @@ double qnorm_w(double const p, double const mu, double const sigma,
 	     return p + mu + sigma;
 
     if (log_p) {
-      if(-INFINITY < p && p < 0){
-      }
-      else if(p > 0)
+      if(p > 0)
         return NAN;
       else if(p == 0) /* upper bound*/
         return lower_tail ?  INFINITY : -INFINITY;
@@ -67,9 +65,7 @@ double qnorm_w(double const p, double const mu, double const sigma,
         return lower_tail ? -INFINITY :  INFINITY;
     }
     else { /* !log_p */
-      if(0 < p && p < 1){
-      }
-      else if(p < 0 || p > 1)
+      if(p < 0 || p > 1)
         return NAN;
       else if(p == 0)
         return lower_tail ? -INFINITY :  INFINITY;

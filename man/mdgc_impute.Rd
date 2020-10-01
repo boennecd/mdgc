@@ -35,7 +35,7 @@ reordering. \code{TRUE} is likely the best option.}
 \item{minvls}{minimum number of samples.}
 
 \item{use_aprx}{logical for whether to use an approximation of
-\code{\link{pnorm}}.}
+\code{\link{pnorm}} and \code{\link{qnorm}}.}
 }
 \value{
 A list with imputed values for the continuous and a vector with

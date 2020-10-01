@@ -86,7 +86,7 @@ remotes::install_github("boennecd/mdgc")
 ### Quick Example
 
 We first simulate a data set and provide an example which shows how to use 
-the package. The [An Even Shorter Example](an-even-shorter-example) section 
+the package. The [An Even Shorter Example](#an-even-shorter-example) section 
 shows a shorter example then what is shown here. You may want to see this 
 first if you just want to perform some quick imputation.
 

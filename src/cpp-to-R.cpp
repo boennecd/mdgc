@@ -108,7 +108,6 @@ Rcpp::NumericVector eval_log_lm_terms(
     int const maxpts, double const abs_eps, double const rel_eps,
     size_t const n_threads, bool const comp_derivs, unsigned const minvls,
     bool const do_reorder = true, bool const use_aprx = false){
-
   Rcpp::XPtr<ml_terms> obj(ptr);
   std::vector<log_ml_term> const &terms = obj->terms;
 

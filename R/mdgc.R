@@ -157,7 +157,7 @@ get_mdgc_log_ml.default <- function(object, lower, upper, code, ...){
 #' @param abs_eps absolute convergence threshold for each term.
 #' @param minvls minimum number of samples.
 #' @param use_aprx logical for whether to use an approximation of
-#' \code{\link{pnorm}}.
+#' \code{\link{pnorm}} and \code{\link{qnorm}}.
 #' @export
 mdgc_log_ml <- function(ptr, vcov, rel_eps = 1e-2, n_threads = 1L,
                         comp_derivs = FALSE, indices = NULL,

@@ -42,7 +42,7 @@ reordering. \code{TRUE} is likely the best option.}
 \item{minvls}{minimum number of samples.}
 
 \item{use_aprx}{logical for whether to use an approximation of
-\code{\link{pnorm}}.}
+\code{\link{pnorm}} and \code{\link{qnorm}}.}
 }
 \description{
 Approximates the log marginal likelihood and the derivatives using

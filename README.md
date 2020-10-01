@@ -76,7 +76,7 @@ remotes::install_github("boennecd/mdgc")
 ### Quick Example
 
 We first simulate a data set and provide an example which shows how to
-use the package. The [An Even Shorter Example](an-even-shorter-example)
+use the package. The [An Even Shorter Example](#an-even-shorter-example)
 section shows a shorter example then what is shown here. You may want to
 see this first if you just want to perform some quick imputation.
 
@@ -182,7 +182,7 @@ mark(`Setup time` = {
 #> # A tibble: 1 x 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Setup time   16.4ms     17ms      56.9    8.86MB     12.4
+#> 1 Setup time   16.5ms   17.1ms      56.8    8.86MB     12.3
 
 # fit the model using two different methods
 set.seed(60941821)
@@ -192,7 +192,7 @@ system.time(
     lr = 1e-3, maxit = 25L, batch_size = 100L, method = "adam", 
      rel_eps = 1e-3, maxpts = 5000L))
 #>    user  system elapsed 
-#>   36.67    0.00    9.17
+#>   37.82    0.00    9.46
 set.seed(fit_seed <- 19570958L)
 system.time(
   fit_svrg <- mdgc_fit(
@@ -299,7 +299,7 @@ system.time(
 #> Log marginal likelihood approximation is    -23331.65
 #> Previous approximate gradient norm was         230.12
 #>    user  system elapsed 
-#>    79.9     0.0    20.0
+#>    78.3     0.0    19.6
 
 # compare the log marginal likelihood 
 mdgc_log_ml(vcov = fit_adam$result, ptr = log_ml_ptr, rel_eps = 1e-3)
@@ -415,9 +415,9 @@ system.time(
 #> Log marginal likelihood approximation is    -23331.65
 #> Previous approximate gradient norm was         230.12
 #>    user  system elapsed 
-#>  66.703   0.012  16.691
+#>    55.3     0.0    13.8
 norm(fit_svrg_aprx$result - fit_svrg$result, "F") # essentially the same
-#> [1] 1.87e-08
+#> [1] 4.45e-08
 
 # compare the estimated correlation matrix with the true value
 do_plot <- function(est, truth, main){
@@ -450,7 +450,7 @@ system.time(
   imp_res <- mdgc_impute(mdgc_obj, fit_svrg$result, rel_eps = 1e-3,
                          maxit = 10000L, n_threads = 4L))
 #>    user  system elapsed 
-#>  11.565   0.008   3.414
+#>  10.837   0.004   3.174
 
 # look at the result for one of the observations
 imp_res[2L]
@@ -647,7 +647,7 @@ system.time(miss_res <- missForest(miss_forest_arg))
 #>   missForest iteration 8 in progress...done!
 #>   missForest iteration 9 in progress...done!
 #>    user  system elapsed 
-#>  49.032   0.032  49.064
+#>  46.205   0.051  46.258
 
 # turn binary variables back to logicals
 miss_res$ximp[, is_log] <- lapply(
@@ -739,7 +739,7 @@ system.time(res <- mdgc(dat$seen_obs, verbose = TRUE, maxpts = 5000L,
 #> 
 #> Performing imputation...
 #>    user  system elapsed 
-#>   18.08    0.00    5.01
+#>   14.76    0.00    4.14
 
 # compare the estimated correlation matrix with the truth
 norm(dat$Sigma - res$vcov, "F") / norm(dat$Sigma, "F")
@@ -765,7 +765,7 @@ dat_pass[, is_cat] <- lapply(dat_pass[, is_cat], as.integer)
 
 system.time(imp_apr_em <- impute_mixedgc(dat_pass, eps = 1e-4))
 #>    user  system elapsed 
-#>    20.1     0.0    20.1
+#>  19.412   0.012  19.425
 
 # compare the estimated correlation matrix with the truth
 get_rel_err <- function(est, keep = seq_len(NROW(truth)), truth = dat$Sigma)
@@ -998,14 +998,14 @@ show_sim_stats <- function(v1, v2, v3, what, sub_ele = NULL){
 show_sim_stats(1L, 2L, 3L, "times", "elapsed")
 #> Means and standard errors:
 #>             mean    SE
-#> mdgc        6.21 0.127
-#> mixedgc    20.98 0.151
-#> missForest 44.95 0.607
+#> mdgc        5.39 0.110
+#> mixedgc    20.87 0.150
+#> missForest 44.85 0.604
 #> 
 #> Difference:
 #>             mean    SE
-#> mixedgc    -14.8 0.189
-#> missForest -38.7 0.606
+#> mixedgc    -15.5 0.174
+#> missForest -39.5 0.596
 ```
 
 The summary stats for the relative Frobenius norm between the estimated

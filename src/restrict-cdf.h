@@ -13,6 +13,7 @@
 #include <algorithm>
 #include "new-mvt.h"
 #include "norm-cdf-approx.h"
+#include<cmath>
 
 namespace restrictcdf {
 extern "C"
@@ -54,7 +55,8 @@ extern "C"
       int* /* idx */, int const* /* doscale */);
 }
 
-inline double safe_qnorm(double const x) noexcept {
+
+inline double safe_qnorm_w(double const x) noexcept {
   constexpr double const eps_1 = std::numeric_limits<double>::epsilon(),
                          eps_2 = 1. - eps_1;
   if(x <= 0)
@@ -64,6 +66,18 @@ inline double safe_qnorm(double const x) noexcept {
 
   return qnorm_w  (x    , 0, 1, 1L, 0L);
 }
+
+inline double safe_qnorm_aprx(double const x) noexcept {
+  constexpr double const eps_1 = std::numeric_limits<double>::epsilon(),
+                         eps_2 = 1. - eps_1;
+  if(x <= 0)
+    return qnorm_aprx(eps_1);
+  else if(x >= 1.)
+    return qnorm_aprx(eps_2);
+
+  return qnorm_aprx  (x);
+}
+
 
 /**
  * Holds output of the integral approximation.
@@ -247,8 +261,13 @@ public:
 
       if(lim_l < lim_u){
         w *= lim_u - lim_l;
-        if(needs_last_unif or j + 1 < ndim)
-          *(draw + j) = safe_qnorm(lim_l + *unif * (lim_u - lim_l));
+        if(needs_last_unif or j + 1 < ndim){
+          double const quant_val = lim_l + *unif * (lim_u - lim_l);
+          *(draw + j) =
+            use_aprx ?
+            safe_qnorm_aprx(quant_val) :
+            safe_qnorm_w   (quant_val);
+        }
 
       } else {
         w = 0.;

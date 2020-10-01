@@ -82,7 +82,7 @@ reordering. \code{TRUE} is likely the best option.}
 \item{conv_crit}{relative convergence threshold.}
 
 \item{use_aprx}{logical for whether to use an approximation of
-\code{\link{pnorm}}.}
+\code{\link{pnorm}} and \code{\link{qnorm}}.}
 }
 \description{
 A convenience function to perform model estimation and imputation in one
