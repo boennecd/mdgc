@@ -29,17 +29,18 @@ mdgc_impute(
 
 \item{n_threads}{number of threads to use.}
 
-\item{do_reorder}{logical for whether to use heuristic variable
+\item{do_reorder}{logical for whether to use a heuristic variable
 reordering. \code{TRUE} is likely the best option.}
 
 \item{minvls}{minimum number of samples.}
 
 \item{use_aprx}{logical for whether to use an approximation of
-\code{\link{pnorm}} and \code{\link{qnorm}}.}
+\code{\link{pnorm}} and \code{\link{qnorm}}. This may yield a
+noticeable reduction in the computation time.}
 }
 \value{
-A list with imputed values for the continuous and a vector with
-probabilities for each categorical.
+A list with imputed values for the continuous variables and a vector with
+probabilities for each level for the ordinal variables.
 }
 \description{
 Imputes missing values given a correlation matrix using a similar

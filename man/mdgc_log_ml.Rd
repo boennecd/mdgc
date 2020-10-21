@@ -32,7 +32,7 @@ mdgc_log_ml(
 \item{indices}{integer vector with which terms (observations) to include.
 Must be zero indexed. \code{NULL} yields all observations.}
 
-\item{do_reorder}{logical for whether to use heuristic variable
+\item{do_reorder}{logical for whether to use a heuristic variable
 reordering. \code{TRUE} is likely the best option.}
 
 \item{maxpts}{maximum number of samples to draw.}
@@ -42,11 +42,22 @@ reordering. \code{TRUE} is likely the best option.}
 \item{minvls}{minimum number of samples.}
 
 \item{use_aprx}{logical for whether to use an approximation of
-\code{\link{pnorm}} and \code{\link{qnorm}}.}
+\code{\link{pnorm}} and \code{\link{qnorm}}. This may yield a
+noticeable reduction in the computation time.}
 }
 \description{
 Approximates the log marginal likelihood and the derivatives using
-quasi-random numbers.
+quasi-random numbers. The method uses a generalization of the Fortran
+code by Genz and Bretz (2002).
+}
+\references{
+Genz, A., & Bretz, F. (2002). \emph{Comparison of Methods for the
+Computation of Multivariate t Probabilities}.
+Journal of Computational and Graphical Statistics.
+
+Genz, A., & Bretz, F. (2008).
+\emph{Computation of Multivariate Normal and t Probabilities}.
+Springer-Verlag, Heidelberg.
 }
 \seealso{
 \code{\link{mdgc_fit}}

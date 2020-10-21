@@ -56,7 +56,7 @@ fixed.}
 
 \item{n_threads}{number of threads to use.}
 
-\item{do_reorder}{logical for whether to use heuristic variable
+\item{do_reorder}{logical for whether to use a heuristic variable
 reordering. \code{TRUE} is likely the best option.}
 
 \item{abs_eps}{absolute convergence threshold for each term.}
@@ -82,7 +82,8 @@ reordering. \code{TRUE} is likely the best option.}
 \item{conv_crit}{relative convergence threshold.}
 
 \item{use_aprx}{logical for whether to use an approximation of
-\code{\link{pnorm}} and \code{\link{qnorm}}.}
+\code{\link{pnorm}} and \code{\link{qnorm}}. This may yield a
+noticeable reduction in the computation time.}
 }
 \description{
 A convenience function to perform model estimation and imputation in one
@@ -126,6 +127,11 @@ if(require(catdata)){
   cat("\nTruth:\n")
   print(head(truth, 10))
 }
+}
+\references{
+Kingma, D.P., & Ba, J. (2015). \emph{Adam: A Method for Stochastic Optimization}. abs/1412.6980.
+
+Johnson, R., & Zhang, T. (2013). \emph{Accelerating stochastic gradient descent using predictive variance reduction}. In Advances in neural information processing systems.
 }
 \seealso{
 \code{\link{get_mdgc}}, \code{\link{mdgc_start_value}},

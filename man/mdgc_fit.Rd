@@ -49,7 +49,7 @@ fixed.}
 
 \item{n_threads}{number of threads to use.}
 
-\item{do_reorder}{logical for whether to use heuristic variable
+\item{do_reorder}{logical for whether to use a heuristic variable
 reordering. \code{TRUE} is likely the best option.}
 
 \item{abs_eps}{absolute convergence threshold for each term.}
@@ -65,12 +65,14 @@ reordering. \code{TRUE} is likely the best option.}
 \item{conv_crit}{relative convergence threshold.}
 
 \item{use_aprx}{logical for whether to use an approximation of
-\code{\link{pnorm}} and \code{\link{qnorm}}.}
+\code{\link{pnorm}} and \code{\link{qnorm}}. This may yield a
+noticeable reduction in the computation time.}
 }
 \description{
-Estimates the correlation matrix. The \code{lr} parameter is data
-and \code{batch_size} dependent. Convergence should be monitored e.g.
-using \code{verbose = TRUE} with \code{method = "svrg"}.
+Estimates the correlation matrix. The \code{lr} parameter
+and the \code{batch_size} parameter is likely data dependent.
+Convergence should be monitored e.g. by using \code{verbose = TRUE}
+with \code{method = "svrg"}.
 
 See the README at \url{https://github.com/boennecd/mdgc} for examples.
 }

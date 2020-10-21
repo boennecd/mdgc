@@ -139,7 +139,8 @@ get_mdgc_log_ml.default <- function(object, lower, upper, code, ...){
 #'
 #' @description
 #' Approximates the log marginal likelihood and the derivatives using
-#' quasi-random numbers.
+#' quasi-random numbers. The method uses a generalization of the Fortran
+#' code by Genz and Bretz (2002).
 #'
 #' @seealso
 #' \code{\link{mdgc_fit}}
@@ -151,13 +152,24 @@ get_mdgc_log_ml.default <- function(object, lower, upper, code, ...){
 #' @param comp_derivs logical for whether to approximate the gradient.
 #' @param indices integer vector with which terms (observations) to include.
 #' Must be zero indexed. \code{NULL} yields all observations.
-#' @param do_reorder logical for whether to use heuristic variable
+#' @param do_reorder logical for whether to use a heuristic variable
 #' reordering. \code{TRUE} is likely the best option.
 #' @param maxpts maximum number of samples to draw.
 #' @param abs_eps absolute convergence threshold for each term.
 #' @param minvls minimum number of samples.
 #' @param use_aprx logical for whether to use an approximation of
-#' \code{\link{pnorm}} and \code{\link{qnorm}}.
+#' \code{\link{pnorm}} and \code{\link{qnorm}}. This may yield a
+#' noticeable reduction in the computation time.
+#'
+#' @references
+#' Genz, A., & Bretz, F. (2002). \emph{Comparison of Methods for the
+#' Computation of Multivariate t Probabilities}.
+#' Journal of Computational and Graphical Statistics.
+#'
+#' Genz, A., & Bretz, F. (2008).
+#' \emph{Computation of Multivariate Normal and t Probabilities}.
+#' Springer-Verlag, Heidelberg.
+#'
 #' @export
 mdgc_log_ml <- function(ptr, vcov, rel_eps = 1e-2, n_threads = 1L,
                         comp_derivs = FALSE, indices = NULL,
@@ -240,9 +252,10 @@ mdgc_start_value.default <- function(object, lower, upper, code,
 #' Estimate the Correlation Matrix
 #'
 #' @description
-#' Estimates the correlation matrix. The \code{lr} parameter is data
-#' and \code{batch_size} dependent. Convergence should be monitored e.g.
-#' using \code{verbose = TRUE} with \code{method = "svrg"}.
+#' Estimates the correlation matrix. The \code{lr} parameter
+#' and the \code{batch_size} parameter is likely data dependent.
+#' Convergence should be monitored e.g. by using \code{verbose = TRUE}
+#' with \code{method = "svrg"}.
 #'
 #' See the README at \url{https://github.com/boennecd/mdgc} for examples.
 #'
@@ -543,8 +556,8 @@ svrg <- function(par_fn, nobs, val, batch_size, maxit = 10L, seed = 1L, lr,
 #' @export
 #'
 #' @return
-#' A list with imputed values for the continuous and a vector with
-#' probabilities for each categorical.
+#' A list with imputed values for the continuous variables and a vector with
+#' probabilities for each level for the ordinal variables.
 mdgc_impute <- function(object, vcov, rel_eps = 1e-3, maxit = 10000L,
                         abs_eps = -1, n_threads = 1L, do_reorder = TRUE,
                         minvls = 1000L, use_aprx = FALSE){
@@ -618,6 +631,11 @@ mdgc_impute <- function(object, vcov, rel_eps = 1e-3, maxit = 10000L,
 #' @param iminvls minimum number of samples in the imputation.
 #' @param start_val starting value for the correlation matrix. Use \code{NULL} if unspecified.
 #' @export
+#'
+#' @references
+#' Kingma, D.P., & Ba, J. (2015). \emph{Adam: A Method for Stochastic Optimization}. abs/1412.6980.
+#'
+#' Johnson, R., & Zhang, T. (2013). \emph{Accelerating stochastic gradient descent using predictive variance reduction}. In Advances in neural information processing systems.
 #'
 #' @examples
 #' if(require(catdata)){
