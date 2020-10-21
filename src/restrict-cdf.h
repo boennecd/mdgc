@@ -55,29 +55,27 @@ extern "C"
       int* /* idx */, int const* /* doscale */);
 }
 
-
 inline double safe_qnorm_w(double const x) noexcept {
-  constexpr double const eps_1 = std::numeric_limits<double>::epsilon(),
-                         eps_2 = 1. - eps_1;
+  constexpr double const eps =
+    std::pow(std::numeric_limits<double>::epsilon(), 3);
   if(x <= 0)
-    return qnorm_w(eps_1, 0, 1, 1L, 0L);
+    return  qnorm_w(eps, 0, 1, 1L, 0L);
   else if(x >= 1.)
-    return qnorm_w(eps_2, 0, 1, 1L, 0L);
+    return -qnorm_w(eps, 0, 1, 1L, 0L);
 
-  return qnorm_w  (x    , 0, 1, 1L, 0L);
+  return qnorm_w   (x  , 0, 1, 1L, 0L);
 }
 
 inline double safe_qnorm_aprx(double const x) noexcept {
-  constexpr double const eps_1 = std::numeric_limits<double>::epsilon(),
-                         eps_2 = 1. - eps_1;
+  constexpr double const eps =
+    std::pow(std::numeric_limits<double>::epsilon(), 3);
   if(x <= 0)
-    return qnorm_aprx(eps_1);
+    return  qnorm_aprx(eps);
   else if(x >= 1.)
-    return qnorm_aprx(eps_2);
+    return -qnorm_aprx(eps);
 
-  return qnorm_aprx  (x);
+  return qnorm_aprx   (x);
 }
-
 
 /**
  * Holds output of the integral approximation.

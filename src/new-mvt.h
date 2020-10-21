@@ -20,8 +20,8 @@ rand_Korobov_output rand_Korobov
                       klim(100L),
                     minsmp(8L);
   constexpr int const p[plim] = { 31L, 47L, 73L, 113L, 173L, 263L, 397L, 593L, 907L, 1361L, 2053L, 3079L, 4621L, 6947L, 10427L, 15641L, 23473L, 35221L, 52837L, 79259L, 118891L, 178349L, 267523L, 401287L, 601943L, 902933L, 1354471L, 2031713L };
-  constexpr double const C[plim][klim - 1L] = {
-    { 12L, 9L, 9L, 13L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 3L, 3L, 3L, 12L, 7L, 7L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 3L, 3L, 3L, 12L, 7L, 7L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 3L, 3L, 3L, 12L, 7L, 7L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 3L, 3L, 3L, 12L, 7L, 7L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 7L, 3L, 3L, 3L, 7L, 7L, 7L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3 },
+  constexpr int const C[plim][klim - 1L] = {
+    { 12L, 9L, 9L, 13L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 3L, 3L, 3L, 12L, 7L, 7L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 3L, 3L, 3L, 12L, 7L, 7L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 3L, 3L, 3L, 12L, 7L, 7L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 3L, 3L, 3L, 12L, 7L, 7L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 7L, 3L, 3L, 3L, 7L, 7L, 7L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L },
     { 13L, 11L, 17L, 10L, 15L, 15L, 15L, 15L, 15L, 15L, 22L, 15L, 15L, 6L, 6L, 6L, 15L, 15L, 9L, 13L, 2L, 2L, 2L, 13L, 11L, 11L, 10L, 15L, 15L, 15L, 15L, 15L, 15L, 15L, 15L, 15L, 6L, 6L, 6L, 15L, 15L, 9L, 13L, 2L, 2L, 2L, 13L, 11L, 11L, 10L, 15L, 15L, 15L, 15L, 15L, 15L, 15L, 15L, 15L, 6L, 6L, 6L, 15L, 15L, 9L, 13L, 2L, 2L, 2L, 13L, 11L, 11L, 10L, 10L, 15L, 15L, 15L, 15L, 15L, 15L, 15L, 15L, 6L, 2L, 3L, 2L, 3L, 2L, 2L, 2L, 2L, 2L, 2L, 2L, 2L, 2L, 2L, 2L, 2L },
     { 27L, 28L, 10L, 11L, 11L, 20L, 11L, 11L, 28L, 13L, 13L, 28L, 13L, 13L, 13L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 31L, 31L, 5L, 5L, 5L, 31L, 13L, 11L, 11L, 11L, 11L, 11L, 11L, 13L, 13L, 13L, 13L, 13L, 13L, 13L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 31L, 31L, 5L, 5L, 5L, 11L, 13L, 11L, 11L, 11L, 11L, 11L, 11L, 11L, 13L, 13L, 11L, 13L, 5L, 5L, 5L, 5L, 14L, 13L, 5L, 5L, 5L, 5L, 5L, 5L, 5L, 5L },
     { 35L, 27L, 27L, 36L, 22L, 29L, 29L, 20L, 45L, 5L, 5L, 5L, 21L, 21L, 21L, 21L, 21L, 21L, 21L, 21L, 21L, 21L, 21L, 21L, 21L, 21L, 21L, 21L, 29L, 17L, 17L, 17L, 17L, 17L, 17L, 17L, 17L, 17L, 17L, 23L, 23L, 23L, 23L, 23L, 23L, 23L, 23L, 23L, 23L, 23L, 23L, 21L, 27L, 3L, 3L, 3L, 24L, 27L, 27L, 17L, 29L, 29L, 29L, 17L, 5L, 5L, 5L, 5L, 21L, 21L, 21L, 21L, 21L, 21L, 21L, 21L, 21L, 21L, 21L, 21L, 21L, 21L, 21L, 21L, 17L, 17L, 17L, 6L, 17L, 17L, 6L, 3L, 6L, 6L, 3L, 3L, 3L, 3L, 3L },
@@ -53,8 +53,7 @@ rand_Korobov_output rand_Korobov
 
   // workign objects. TODO: these may be allocated once.
   std::unique_ptr<int[]> pr(new int[ndim]);
-  for(int i = 0; i < ndim; ++i)
-    *(pr.get() + i) = i;
+  std::fill(pr.get(), pr.get() + ndim, 0L); // not needed?
 
   std::unique_ptr<double[]> wk_mem(new double[5 * nf + 3 * ndim]);
   double * const __restrict__ finval = wk_mem.get(),
@@ -95,13 +94,13 @@ rand_Korobov_output rand_Korobov
         k = fmod(
           C[np][std::min(ndim, klim) - 2L] *
             static_cast<double>(k), static_cast<double>(p[np]));
-        *(vk + i) = k * *vk;
+        vk[i] = k * vk[0];
 
       } else {
-        *(vk + i) = static_cast<int>(
+        vk[i] = static_cast<int>(
           p[np] * std::pow(2., static_cast<double>(i + 1 - klim) /
           static_cast<double>(ndim - klim + 1)));
-        *(vk + i) = fmod(*(vk + i) / p[np], 1.);
+        vk[i] = fmod(vk[i] / p[np], 1.);
 
       }
     }
@@ -121,15 +120,16 @@ rand_Korobov_output rand_Korobov
         // random shift
         {
           double * rj = r;
-          for(int j = 0; j < ndim; ++j, ++rj){
+          int * prj = pr;
+          for(int j = 0; j < ndim; ++j, ++rj, ++prj){
             *rj = sampler();
             if(j < klim - 1L){
               int const jp = (j + 1) * *rj;
               if(jp < j)
-                *(pr + j) = *(pr + jp);
-              *(pr + jp) = j;
+                *prj = pr[jp];
+              pr[jp] = j;
             } else
-              *(pr + j) = j;
+              *prj = j;
           }
         }
 
@@ -140,7 +140,7 @@ rand_Korobov_output rand_Korobov
                    * xj = x;
             int const * prj = pr;
             for(int j = 0; j < ndim; ++j, ++rj, ++xj, ++prj){
-              *rj += *(vk + *prj);
+              *rj += vk[*prj];
               if(*rj > 1.)
                 *rj -= 1.;
               *xj = std::abs(2 * *rj - 1);
@@ -149,13 +149,16 @@ rand_Korobov_output rand_Korobov
 
           f(&ndim, x, &nf, fs);
           auto update_val = [&](double const denom){
-            for(int j = 0; j < nf; ++j)
-              *(values + j) += (*(fs + j) - *(values + j)) / denom;
+            double *vj = values,
+                  *fsj = fs;
+            for(int j = 0; j < nf; ++j, ++vj, ++fsj)
+              *vj += (*fsj - *vj) / denom;
           };
           update_val(static_cast<double>(2 * (k + 1) - 1));
 
-          for(int j = 0; j < ndim; ++j)
-            *(x + j) = 1. - *(x + j);
+          double *xj = x;
+          for(int j = 0; j < ndim; ++j, ++xj)
+            *xj = 1. - *xj;
           f(&ndim, x, &nf, fs);
           update_val(static_cast<double>(2 * (k + 1)));
         }
@@ -164,33 +167,27 @@ rand_Korobov_output rand_Korobov
     for(int i = 0; i < sampls; ++i){
       mvkrsv(values, p[np], vk, x, r, pr.get(), fs);
       for(int k = 0; k < nf; ++k){
-        double const difint = (*(values + k) - *(finval + k)) / (i + 1);
-        *(finval + k) +=  difint;
+        double const difint = (values[k] - finval[k]) / (i + 1);
+        finval[k] +=  difint;
         // TODO: Welford's online algorithm (numerically unstable version!)
-        *(varsqr + k) = (i - 1) * *(varsqr + k) / (i + 1) + difint * difint;
+        varsqr[k] = (i - 1) * varsqr[k] / (i + 1) + difint * difint;
       }
     }
 
     intvls += 2 * sampls * p[np];
     int idx_max = 0L;
-    double * varest_k = varest,
-           * varsqr_k = varsqr,
-           * finest_k = finest,
-           * finval_k = finval;
-
     double varprd(0);
-    for(int k = 0; k < nf; ++k, ++varest_k, ++varsqr_k, ++finest_k,
-        ++finval_k){
-      varprd = *varest_k * *varsqr_k;
-      *finest_k += (*finval_k - *finest_k) / (1 + varprd);
-      if(*varsqr_k > 0.)
-        *varest_k = (1 + varprd) / *varsqr_k;
-      if(std::abs(*finest_k) > std::abs(*(finest + idx_max)))
+    for(int k = 0; k < nf; ++k){
+      varprd = varest[k] * varsqr[k];
+      finest[k] += (finval[k] - finest[k]) / (1 + varprd);
+      if(varsqr[k] > 0.)
+        varest[k] = (1 + varprd) / varsqr[k];
+      if(std::abs(finest[k]) > std::abs(finest[idx_max]))
         idx_max = k;
     }
 
-    abserr = 7 / 2 * std::sqrt(*(varsqr + idx_max) / (1 + varprd));
-    if(abserr > std::max(abseps, std::abs(*(finest + idx_max)) * releps)){
+    abserr = 7 / 2 * std::sqrt(varsqr[idx_max] / (1 + varprd));
+    if(abserr > std::max(abseps, std::abs(finest[idx_max]) * releps)){
       if(np < plim - 1)
         ++np;
       else {

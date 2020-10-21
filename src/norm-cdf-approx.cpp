@@ -51,7 +51,6 @@ double pnorm_approx(double const x) noexcept {
 //   return out;
 // }
 
-
 /*** R
 test_vals <- exp(seq(log(.Machine$double.eps), log(1 - .Machine$double.eps),
                      length.out = 10000))
