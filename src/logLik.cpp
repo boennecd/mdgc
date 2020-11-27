@@ -51,7 +51,7 @@ void set_working_memory_log_ml(size_t const n_int, size_t const n_obs,
 
   }
 }
-} //
+} // namespace
 
 namespace mdgc {
 using namespace restrictcdf;

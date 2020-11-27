@@ -350,12 +350,12 @@ get_rel_err <- function(est, keep = seq_len(NROW(truth)), truth = dat$Sigma)
   norm(truth[keep, keep] - est[keep, keep], "F") / 
   norm(truth, "F")
 
-c(mdgc               = get_rel_err(res$vcov), 
-  mixedgcImp         = get_rel_err(imp_apr_em$R), 
-  `mdgc bin/ordered` = get_rel_err(res$vcov    , is_cat),
-  `mdgc bin/ordered` = get_rel_err(imp_apr_em$R, is_cat),
-  `mdgc continuous`  = get_rel_err(res$vcov    , !is_cat),
-  `mdgc continuous`  = get_rel_err(imp_apr_em$R, !is_cat))
+c(mdgc                     = get_rel_err(res$vcov), 
+  mixedgcImp               = get_rel_err(imp_apr_em$R), 
+  `mdgc bin/ordered`       = get_rel_err(res$vcov    , is_cat),
+  `mixedgcImp bin/ordered` = get_rel_err(imp_apr_em$R, is_cat),
+  `mdgc continuous`        = get_rel_err(res$vcov    , !is_cat),
+  `mixedgcImp continuous`  = get_rel_err(imp_apr_em$R, !is_cat))
 
 # compare the classifcation error and RMSE
 imp_apr_res <- as.data.frame(imp_apr_em$Ximp)
@@ -498,6 +498,7 @@ res <- lapply(seeds, function(s){
   }
   
   # print summary stat to the console while knitting
+  out <- readRDS(file_name)
   . <- function(x)
     message(paste(sprintf("%8.3f", x), collapse = " "))
   with(out, {
@@ -519,25 +520,16 @@ res <- lapply(seeds, function(s){
       "Binary classifcation errors are %.2f %.2f %.2f (%.2f)", 
       mean(err$mdgc_bin), mean(err$mixedgc_bin), 
       mean(err$missForest_bin), mean(err$mixed_bin)))
-    # .(err$mdgc_bin)
-    # .(err$mixedgc_bin)
-    # .(err$mixed_bin)
     
     message(sprintf(
       "Ordinal classifcation errors are %.2f %.2f %.2f (%.2f)", 
       mean(err$mdgc_class), mean(err$mixedgc_class), 
       mean(err$missForest_class), mean(err$mixed_class)))
-    # .(err$mdgc_class)
-    # .(err$mixedgc_class)
-    # .(err$mixed_class)
     
     message(sprintf(
       "Mean RMSEs are %.2f %.2f %.2f (%.2f)",
       mean(err$mdgc_rmse), mean(err$mixedgc_rmse), 
       mean(err$missForest_rmse), mean(err$mixed_rmse)))
-    # .(err$mdgc_rmse)
-    # .(err$mixedgc_rmse)
-    # .(err$mixed_rmse)
     message("")
   })
   

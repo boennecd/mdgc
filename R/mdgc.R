@@ -543,7 +543,7 @@ svrg <- function(par_fn, nobs, val, batch_size, maxit = 10L, seed = 1L, lr,
   lSig[lower.tri(lSig, TRUE)]
 }
 
-#' Impute Missing Values Given Correlation Matrix
+#' Impute Missing Values Given a Correlation Matrix
 #'
 #' @description
 #' Imputes missing values given a correlation matrix using a similar

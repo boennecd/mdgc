@@ -2,7 +2,7 @@
 % Please edit documentation in R/mdgc.R
 \name{mdgc_impute}
 \alias{mdgc_impute}
-\title{Impute Missing Values Given Correlation Matrix}
+\title{Impute Missing Values Given a Correlation Matrix}
 \usage{
 mdgc_impute(
   object,

@@ -295,7 +295,7 @@ context("restrictcdf unit tests") {
       std::numeric_limits<double>::epsilon(), .4);
     {
       auto res = restrictcdf::cdf<restrictcdf::deriv>(
-        mean, sigma, false).approximate(1000000L, abs_eps, -1);
+        mean, sigma, false).approximate(10000000L, abs_eps, -1);
 
       expect_true(res.inform == 0L);
       expect_true(res.finest.n_elem == expect.n_elem);
@@ -305,7 +305,7 @@ context("restrictcdf unit tests") {
     }
     {
       auto res = restrictcdf::cdf<restrictcdf::deriv>(
-        mean, sigma, true).approximate(1000000L, abs_eps, -1);
+        mean, sigma, true).approximate(10000000L, abs_eps, -1);
 
       expect_true(res.inform == 0L);
       expect_true(res.finest.n_elem == expect.n_elem);
@@ -377,7 +377,8 @@ context("restrictcdf unit tests") {
       std::numeric_limits<double>::epsilon(), .4);
     {
         auto res = restrictcdf::cdf<restrictcdf::deriv>(
-          lower, upper, mean, sigma, false, false).approximate(1000000L, abs_eps, -1);
+          lower, upper, mean, sigma, false, false).approximate(
+              10000000L, abs_eps, -1);
 
         expect_true(res.inform == 0L);
         expect_true(res.finest.n_elem == expect.n_elem);
@@ -387,7 +388,8 @@ context("restrictcdf unit tests") {
     }
     {
       auto res = restrictcdf::cdf<restrictcdf::deriv>(
-        lower, upper, mean, sigma, true, false).approximate(1000000L, abs_eps, -1);
+        lower, upper, mean, sigma, true, false).approximate(
+            10000000L, abs_eps, -1);
 
       expect_true(res.inform == 0L);
       expect_true(res.finest.n_elem == expect.n_elem);
