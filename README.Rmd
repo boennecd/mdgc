@@ -598,8 +598,8 @@ can be used in a user defined optimization function.
 
 ```{r detailed, cache = 1, fig.height = 3, fig.width = 7}
 # assign function to evalute the log marginal likelihood
-log_ml <- function(...)
-  mdgc_log_ml(ptr = log_ml_ptr, ...)
+log_ml <- function(..., maxpts = 10000L)
+  mdgc_log_ml(ptr = log_ml_ptr, ..., maxpts = maxpts)
 
 # print the approximate log marginal likelihood at the true parameters
 set.seed(1)
