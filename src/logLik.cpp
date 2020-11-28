@@ -183,23 +183,18 @@ double log_ml_term::approximate
       /* handle the terms from the mean */
       if(n_obs > 0){
         {
-          arma::mat inc(
-              get_temp_mem(n_obs_sq, true), n_obs, n_obs, false, true);
-          x_kron_X_dot_y(obs_scaled, S_oo_inv_S_oi, d_mu,
-                         inc.memptr(), get_temp_mem(n_obs * n_int, false));
+          // TODO: memory allocation
+          arma::mat inc = S_oo_inv_S_oi * d_mu * obs_scaled.t();
           inc /= 2.;
           derivs(idx_obs, idx_obs) -= inc;
           derivs(idx_obs, idx_obs) -= inc.t();
         }
 
         {
-          arma::mat dum(obs_scaled.memptr(), obs_scaled.n_elem, 1L,
-                        false, true);
-          arma::mat inc(get_temp_mem(n_int * n_obs, true),
-                        n_int, n_obs, false, true);
-          X_kron_I_dot_x(dum, n_int, d_mu, inc.memptr(), true);
+          // TODO: memory allocation
+          arma::mat inc = d_mu * obs_scaled.t();
 
-          inc /= 2.;
+          inc /= 2.; // TODO: why?
           inc.reshape(n_int, n_obs);
           derivs(idx_int, idx_obs) += inc;
           derivs(idx_obs, idx_int) += inc.t();
@@ -207,31 +202,22 @@ double log_ml_term::approximate
       }
 
       /* handle the terms from the covariance matrix */
-      {
-        arma::mat dum(d_V_full.memptr(), n_int, n_int, false, true);
-        derivs(idx_int, idx_int) += dum;
-      }
+      arma::mat mat_V_full(d_V_full.memptr(), n_int, n_int, false, true);
+      derivs(idx_int, idx_int) += mat_V_full;
 
       if(n_obs > 0){
         {
-          arma::mat inc(get_temp_mem(n_obs_sq, true), n_obs, n_obs,
-                        false, true);
-          X_kron_X_dot_x(S_oo_inv_S_oi, d_V_full, inc.memptr(),
-                         get_temp_mem(n_obs * n_int, false));
+          // TODO: memory allocation
+          arma::mat const inc =
+            S_oo_inv_S_oi * mat_V_full * S_oo_inv_S_oi.t();
           derivs(idx_obs, idx_obs) += inc;
         }
 
         {
-          arma::mat inc(get_temp_mem(n_obs * n_int, true),
-                        n_int * n_obs, 1L, false, true);
-          I_kron_X_dot_x(S_oo_inv_S_oi, n_int, d_V_full, inc.memptr());
-          commutation_dot(n_int, n_obs, inc.memptr(), true,
-                          get_temp_mem(n_obs * n_int, false));
-          X_kron_I_dot_x(S_oo_inv_S_oi, n_int, d_V_full, inc.memptr(),
-                         false);
+          // TODO: memory allocation
+          arma::mat inc = 2 * mat_V_full * S_oo_inv_S_oi.t();
 
-          inc.reshape(n_int, n_obs);
-          inc /= 2.;
+          inc /= 2.; // TODO: why?
           derivs(idx_int, idx_obs) -= inc;
           derivs(idx_obs, idx_int) -= inc.t();
         }
