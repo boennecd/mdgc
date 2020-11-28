@@ -202,20 +202,20 @@ double log_ml_term::approximate
       }
 
       /* handle the terms from the covariance matrix */
-      arma::mat mat_V_full(d_V_full.memptr(), n_int, n_int, false, true);
-      derivs(idx_int, idx_int) += mat_V_full;
+      arma::mat dmat_V_full(d_V_full.memptr(), n_int, n_int, false, true);
+      derivs(idx_int, idx_int) += dmat_V_full;
 
       if(n_obs > 0){
         {
           // TODO: memory allocation
           arma::mat const inc =
-            S_oo_inv_S_oi * mat_V_full * S_oo_inv_S_oi.t();
+            S_oo_inv_S_oi * dmat_V_full * S_oo_inv_S_oi.t();
           derivs(idx_obs, idx_obs) += inc;
         }
 
         {
           // TODO: memory allocation
-          arma::mat inc = 2 * mat_V_full * S_oo_inv_S_oi.t();
+          arma::mat inc = 2 * dmat_V_full * S_oo_inv_S_oi.t();
 
           inc /= 2.; // TODO: why?
           derivs(idx_int, idx_obs) -= inc;
