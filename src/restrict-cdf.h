@@ -13,7 +13,9 @@
 #include <algorithm>
 #include "new-mvt.h"
 #include "norm-cdf-approx.h"
-#include<cmath>
+#include <cmath>
+#include <stdexcept>
+#include "mdgc-mem.h"
 
 namespace restrictcdf {
 extern "C"
@@ -57,7 +59,9 @@ extern "C"
 
 inline double safe_qnorm_w(double const x) noexcept {
   constexpr double const eps =
-    std::pow(std::numeric_limits<double>::epsilon(), 3);
+    std::numeric_limits<double>::epsilon() *
+    std::numeric_limits<double>::epsilon() *
+    std::numeric_limits<double>::epsilon();
   if(x <= 0)
     return  qnorm_w(eps, 0, 1, 1L, 0L);
   else if(x >= 1.)
@@ -68,7 +72,9 @@ inline double safe_qnorm_w(double const x) noexcept {
 
 inline double safe_qnorm_aprx(double const x) noexcept {
   constexpr double const eps =
-    std::pow(std::numeric_limits<double>::epsilon(), 3);
+    std::numeric_limits<double>::epsilon() *
+    std::numeric_limits<double>::epsilon() *
+    std::numeric_limits<double>::epsilon();
   if(x <= 0)
     return  qnorm_aprx(eps);
   else if(x >= 1.)
@@ -78,26 +84,6 @@ inline double safe_qnorm_aprx(double const x) noexcept {
 }
 
 /**
- * Holds output of the integral approximation.
- */
-struct output {
-  /**
-   * minvls Actual number of function evaluations used.
-   * inform INFORM = 0 for normal exit, when
-   *             ABSERR <= MAX(ABSEPS, RELEPS*||finest||)
-   *          and
-   *             INTVLS <= MAXCLS.
-   *        INFORM = 1 If MAXVLS was too small to obtain the required
-   *        accuracy. In this case a value finest is returned with
-   *        estimated absolute accuracy ABSERR. */
-  int minvls, inform;
-  /// Maximum norm of estimated absolute accuracy of finest
-  double abserr;
-  /// Estimated NF-vector of values of the integrals.
-  arma::vec finest;
-};
-
-/**
  * copies the upper upper triangular matrix.
  *
  * @param X Matrix top copy.
@@ -105,107 +91,210 @@ struct output {
  */
 inline void copy_upper_tri
   (arma::mat const &X, double * __restrict__ x) noexcept {
-  size_t const p = X.n_cols;
-  for(unsigned c = 0; c < p; c++)
-    for(unsigned r = 0; r <= c; r++, x++)
+  int const p = X.n_cols;
+  for(int c = 0; c < p; c++)
+    for(int r = 0; r <= c; r++, x++)
       *x = X.at(r, c);
 }
 
 inline void copy_lower_tri
   (arma::mat const &X, double * __restrict__ x) noexcept {
-  size_t const p = X.n_cols;
-  for(unsigned c = 0; c < p; c++)
-    for(unsigned r = c; r < p; r++, x++)
+  int const p = X.n_cols;
+  for(int c = 0; c < p; c++)
+    for(int r = c; r < p; r++, x++)
       *x = X.at(r, c);
 }
 
 /**
- * Approximates the integrals of the multivariate normal cdf over a
- * rectangle where the density is multiplied by some function in the
- * integrand.
- *
- * First, call this constructor. Then call the member functions to perform
- * the approximation.
- *
- * @tparam funcs Class with static member functions which determines the
- * type of integral which is approximated.
- *
- * It also needs the following static member functions.
- *
- * set_child_wk_mem should setup needed intermediaries.
- *
- * get_n_integrands should return the dimension of the integral.
- *
- * integrand should evaluate the integrand given a sample of truncated
- * normal variables.
- *
- * post_process should post process the result from the mvkbrv subroutine.
- * This may reduce the computation time.
- *
- * needs_last_unif returns a boolean for whether the last truncated normal
- * variable is needed.
- *
- * univariate handles the univariate case.
+ * TODO: describe what this class does.
  */
-template<class funcs>
+template<class T_Functor, class out_type = typename T_Functor::out_type>
 class cdf {
-  /** maps working memory to vectors */
-  class ptr_to_dat {
-    double * wk_mem;
-    int ndim;
-
-  public:
-    /// objects for the parent clas
-    double * lower,
-           * upper,
-           * draw,
-           * tmp_vec,
-           * sigma_chol,
-           * tmp_mat,
-    /// objects for the child class
-           * child_mem;
-
-    int * infin,
-        * idx;
-
-    ptr_to_dat(double * const wk_mem , int const ndim,
-               int * const iwk_mem) noexcept:
-      wk_mem(wk_mem), ndim(ndim),
-      lower     (wk_mem            ),
-      upper     (wk_mem + ndim     ),
-      draw      (wk_mem + 2L * ndim),
-      tmp_vec   (wk_mem + 3L * ndim),
-      sigma_chol(wk_mem + 4L * ndim),
-      tmp_mat   (wk_mem + 4L * ndim + (ndim * (ndim + 1L)) / 2L),
-      child_mem (
-          wk_mem + 4L * ndim + ndim * ndim + (ndim * (ndim + 1L)) / 2L),
-      infin(iwk_mem),
-      idx  (iwk_mem + ndim)
-      { }
-  };
-
-  int ndim         = 0L,
-      n_integrands = 0L;
+  T_Functor &functor;
+  int const ndim, n_integrands;
   double * wk_mem = nullptr;
   int * iwk_mem = nullptr;
   bool is_permutated = false,
        use_aprx;
-  static constexpr bool const needs_last_unif = funcs::needs_last_unif();
-  ptr_to_dat map_obj;
+  constexpr bool needs_last_unif() const {
+    return T_Functor::needs_last_unif();
+  }
 
-  static double * get_working_memory() noexcept;
-  static int    * get_iworking_memory() noexcept;
+  // cached memory to use
+  static cache_mem<int   > imem;
+  static cache_mem<double> dmem;
+
+  arma::ivec infin;
+  arma::ivec indices;
+
+  arma::vec lower = arma::vec(dmem.get_mem() , ndim, false),
+            upper = arma::vec(lower.end()    , ndim, false),
+       sigma_chol = arma::vec(upper.end()    , (ndim * (ndim + 1L)) / 2L,
+                           false),
+                           draw = arma::vec(sigma_chol.end(), ndim, false);
+  // memory that can be used
+  int * const itmp_mem = indices.end();
+  double * const dtmp_mem = draw.end();
 
 public:
   /**
-   * Sets the working memory. Must be called prior to calling the other
-   * member functions.
-   *
-   * @param max_dim Maximum number of variables to integrate out.
-   * @param n_threads Maximum number of threads.
+   * must be called perior to calling the constructor or any member
+   * functions.
    */
-  static void set_working_memory
-  (size_t const max_dim, size_t const n_threads);
+  static void alloc_mem(int const max_ndim, int const max_threads) {
+    int const n_up_tri = (max_ndim * (max_ndim + 1)) / 2;
+    imem.set_n_mem(3 * max_ndim                                 ,
+                   max_threads);
+    dmem.set_n_mem(7 * max_ndim + n_up_tri + max_ndim * max_ndim,
+                   max_threads);
+  }
+
+  /**
+   * @functor T_Functor class to use.
+   * @param lower_in Lower bounds in the CDF.
+   * @param upper_in Upper bounds in the CDF.
+   * @param mu_in Mean vector.
+   * @param sigma_in Covariance matrix.
+   * @param do_reorder true if the order of integrations may be reordered.
+   * @param use_aprx true if an approximation of the normal CDF should
+   * be used.
+   */
+  cdf(T_Functor &functor, arma::vec const &lower_in,
+      arma::vec const &upper_in, arma::vec const &mu_in,
+      arma::mat const &sigma_in, bool const do_reorder,
+      bool const use_aprx):
+  functor(functor),
+  ndim(mu_in.n_elem),
+  n_integrands(functor.get_n_integrands()),
+  use_aprx(use_aprx),
+  infin(([&](){
+    arma::ivec out(imem.get_mem(), ndim, false);
+    pmvnorm::get_infin(out, lower_in, upper_in);
+    return out;
+  })()),
+  indices(infin.end(), ndim, false) {
+    /* checks */
+    if(lower_in.n_elem > 1000 or lower_in.n_elem < 1)
+      throw std::invalid_argument("cdf<T_Functor, out_type>: Either dimension zero or dimension greater than 1000");
+
+#ifdef DO_CHECKS
+    if(sigma_in.n_cols != static_cast<size_t>(ndim) or
+         sigma_in.n_rows != static_cast<size_t>(ndim))
+      throw std::invalid_argument("cdf::cdf: invalid 'sigma_in'");
+    if(n_integrands <= 0L)
+      throw std::invalid_argument("cdf::cdf: invalid 'n_integrands'");
+    if(lower_in.n_elem !=  static_cast<size_t>(ndim))
+      throw std::invalid_argument("cdf::cdf: invalid 'lower_in'");
+    if(upper_in.n_elem !=  static_cast<size_t>(ndim))
+      throw std::invalid_argument("cdf::cdf: invalid 'upper_in'");
+#endif
+
+    /* re-scale */
+    double * cur_dtmp_mem = dtmp_mem;
+    auto get_dmem = [&](int const n_ele) -> double * {
+      double * out = cur_dtmp_mem;
+      cur_dtmp_mem += n_ele;
+      return out;
+    };
+
+    arma::vec sds(get_dmem(ndim), ndim, false),
+    mu (get_dmem(ndim), ndim, false);
+    for(int i = 0; i < ndim; ++i){
+      sds[i] = std::sqrt(sigma_in.at(i, i));
+      mu [i] = mu_in[i] / sds[i];
+    }
+
+    lower  = lower_in;
+    lower /= sds;
+    lower -= mu;
+
+    upper  = upper_in;
+    upper /= sds;
+    upper -= mu;
+
+    is_permutated = false;
+    {
+      int *idx = indices.begin();
+      for(int i = 0; i < ndim; ++i, ++idx)
+        *idx = i;
+    }
+
+    if(do_reorder and ndim > 1L){
+      double * const y     = draw.begin(),
+             * const A     = get_dmem(ndim),
+             * const B     = get_dmem(ndim),
+             * const DL    = sds.begin(),
+             * const delta = mu.begin();
+      sds.zeros();
+
+      auto const correl = pmvnorm::get_cor_vec(sigma_in);
+      int const pivot = 1L, doscale = 1L;
+      int F_inform = 0L,
+             nddim = ndim;
+      std::fill(delta, delta + ndim, 0.);
+      arma::ivec infi(itmp_mem, ndim, false);
+
+      F77_CALL(mvsort)(
+        &ndim, lower.memptr(), upper.memptr(), delta,
+        correl.cor_vec.memptr(), infin.begin(), y, &pivot, &nddim, A, B,
+        DL, sigma_chol.memptr(), infi.memptr(), &F_inform, indices.begin(),
+        &doscale);
+
+      if(F_inform != 0)
+        throw std::runtime_error("cdf::cdf: error in mvsort");
+
+      for(int i = 0; i < ndim; ++i){
+        if(indices[i] != i){
+          is_permutated = true;
+          break;
+        }
+      }
+
+      if(is_permutated){
+        for(int i = 0; i < ndim; ++i){
+          lower[i] = *(A + i);
+          upper[i] = *(B + i);
+          infin[i] = infi[i];
+        }
+
+        arma::mat sigma_permu(get_dmem(ndim * ndim), ndim, ndim, false);
+        for(int j = 0; j < ndim; ++j)
+          for(int i = 0; i < ndim; ++i)
+            sigma_permu.at(i, j) = sigma_in.at(indices[i], indices[j]);
+        functor.prep_permutated(sigma_permu, indices.begin());
+        return;
+
+      } else
+        for(int i = 0; i < ndim; ++i){
+          lower[i] = *(A + i);
+          upper[i] = *(B + i);
+        }
+
+    } else if(!do_reorder and ndim > 1L) {
+      arma::mat tmp(get_dmem(ndim * ndim), ndim, ndim, false);
+
+      tmp = sigma_in;
+      tmp.each_row() /= sds.t();
+      tmp.each_col() /= sds;
+      if(!arma::chol(tmp, tmp)) // TODO: memory allocation
+        sigma_chol.fill(std::numeric_limits<double>::infinity());
+      else
+        copy_upper_tri(tmp, sigma_chol.memptr());
+
+      if(ndim > 1L){
+        /* rescale such that choleksy decomposition has ones in the diagonal */
+        double * sc = sigma_chol.begin();
+        for(int i = 0; i < ndim; ++i){
+          double const scal = *(sc + i);
+          lower[i] /= scal;
+          upper[i] /= scal;
+          double * const sc_end = sc + i + 1L;
+          for(; sc != sc_end; ++sc)
+            *sc /= scal;
+        }
+      }
+    }
+  }
 
   /**
    * Function to be called from mvkbrv.
@@ -226,19 +315,19 @@ public:
 #endif
 
     double * const __restrict__ out = integrand_val,
-           * const __restrict__ draw = map_obj.draw;
+           * const __restrict__ dr  = draw.begin();
 
     double w(1.);
-    double const * __restrict__ sc   = map_obj.sigma_chol,
-                 * __restrict__ lw   = map_obj.lower,
-                 * __restrict__ up   = map_obj.upper,
+    double const * __restrict__ sc   = sigma_chol.begin(),
+                 * __restrict__ lw   = lower.begin(),
+                 * __restrict__ up   = upper.begin(),
                  * __restrict__ unif = unifs;
-    int const *infin = map_obj.infin;
+    int const *infin_j = infin.begin();
     /* loop over variables and transform them to truncated normal
      * variables */
-    for(int j = 0; j < ndim; ++j, ++sc, ++lw, ++up, ++infin, ++unif){
+    for(int j = 0; j < ndim; ++j, ++sc, ++lw, ++up, ++infin_j, ++unif){
       double su(0.);
-      double const *d = draw;
+      double const *d = dr;
       for(int i = 0; i < j; ++i, sc++, d++)
         su += *sc * *d;
 
@@ -247,11 +336,11 @@ public:
       };
       double lim_l(0.),
              lim_u(1.);
-      if(*infin == 0L)
+      if(*infin_j == 0L)
         lim_u = pnorm_use(*up - su);
-      else if(*infin == 1L)
+      else if(*infin_j == 1L)
         lim_l = pnorm_use(*lw - su);
-      else if(*infin == 2L){
+      else if(*infin_j == 2L){
         lim_l = pnorm_use(*lw - su);
         lim_u = pnorm_use(*up - su);
 
@@ -259,9 +348,9 @@ public:
 
       if(lim_l < lim_u){
         w *= lim_u - lim_l;
-        if(needs_last_unif or j + 1 < ndim){
+        if(needs_last_unif() or j + 1 < ndim){
           double const quant_val = lim_l + *unif * (lim_u - lim_l);
-          *(draw + j) =
+          *(dr + j) =
             use_aprx ?
             safe_qnorm_aprx(quant_val) :
             safe_qnorm_w   (quant_val);
@@ -269,14 +358,14 @@ public:
 
       } else {
         w = 0.;
-        std::fill(draw + j, draw + ndim, 0.);
+        std::fill(dr + j, dr + ndim, 0.);
         break;
 
       }
     }
 
     /* evaluate the integrand and weigth the result. */
-    funcs::integrand(draw, ndim, out, map_obj.child_mem);
+    functor(dr, out, indices.begin(), is_permutated);
 
     double * o = out;
     for(int i = 0; i < n_integrands; ++i, ++o)
@@ -284,167 +373,17 @@ public:
   }
 
   /**
-   * @param lower_in Lower bounds in the CDF.
-   * @param upper_in Upper bounds in the CDF.
-   * @param mu_in Mean vector.
-   * @param sigma_in Covariance matrix.
-   * @param do_reorder true if the order of integrations may be reordered.
-   * @param use_aprx true if an approximation of the normal CDF should
-   * be used.
-   */
-  cdf(arma::vec const &lower_in, arma::vec const &upper_in,
-      arma::vec const &mu_in, arma::mat const &sigma_in,
-      bool const do_reorder, bool const use_aprx):
-    use_aprx(use_aprx),
-    map_obj(get_working_memory(), mu_in.n_elem, get_iworking_memory()){
-    ndim = mu_in.n_elem;
-    n_integrands = funcs::get_n_integrands(mu_in, sigma_in);
-
-    /* checks */
-#ifdef DO_CHECKS
-    if(sigma_in.n_cols != static_cast<size_t>(ndim) or
-         sigma_in.n_rows != static_cast<size_t>(ndim))
-      throw std::invalid_argument("cdf::cdf: invalid 'sigma_in'");
-    if(n_integrands <= 0L)
-      throw std::invalid_argument("cdf::cdf: invalid 'n_integrands'");
-    if(lower_in.n_elem !=  static_cast<size_t>(ndim))
-      throw std::invalid_argument("cdf::cdf: invalid 'lower_in'");
-    if(upper_in.n_elem !=  static_cast<size_t>(ndim))
-      throw std::invalid_argument("cdf::cdf: invalid 'upper_in'");
-#endif
-
-    size_t const udim = ndim;
-
-    int * const infin = map_obj.infin;
-    {
-      arma::ivec const tmp = pmvnorm::get_infin(lower_in, upper_in);
-      for(size_t i = 0; i < tmp.size(); ++i)
-        *(infin + i) = tmp[i];
-    }
-    arma::vec lower     (map_obj.lower     , udim, false, true),
-              upper     (map_obj.upper     , udim, false, true),
-              sigma_chol(map_obj.sigma_chol, (udim * (udim + 1L)) / 2L, false, true);
-
-    /* re-scale */
-    arma::vec sds = arma::sqrt(arma::diagvec(sigma_in)),
-               mu = mu_in / sds;
-
-    lower  = lower_in;
-    lower /= sds;
-    lower -= mu;
-
-    upper  = upper_in;
-    upper /= sds;
-    upper -= mu;
-
-    is_permutated = false;
-    {
-      int *idx = map_obj.idx;
-      for(size_t i = 0; i < udim; ++i, ++idx)
-        *idx = i;
-    }
-
-    if(do_reorder and udim > 1L){
-      double * const y     = map_obj.draw,
-             * const A     = map_obj.tmp_vec,
-             * const B     = map_obj.child_mem,
-             * const DL    = sds.memptr(),
-             * const delta = mu.begin();
-      sds.zeros();
-
-      auto const correl = pmvnorm::get_cor_vec(sigma_in);
-      int const pivot = 1L, doscale = 1L;
-      int F_inform = 0L, nddim = udim;
-      for(size_t i = 0; i < udim; ++i)
-        *(delta + i) = 0.;
-
-      arma::ivec infi(udim);
-
-      F77_CALL(mvsort)(
-        &ndim, lower.memptr(), upper.memptr(), delta,
-        correl.cor_vec.memptr(), infin, y, &pivot, &nddim, A, B,
-        DL, sigma_chol.memptr(), infi.memptr(), &F_inform, map_obj.idx,
-        &doscale);
-
-      if(F_inform != 0)
-        throw std::runtime_error("cdf::cdf: error in mvsort");
-
-      {
-        int const *prev = map_obj.idx;
-        for(size_t i = 0; i < udim; ++prev, ++i){
-          if(static_cast<size_t>(*prev) != i){
-            is_permutated = true;
-            break;
-          }
-        }
-      }
-
-      if(is_permutated){
-        for(size_t i = 0; i < udim; ++i){
-          lower[i] = *(A + i);
-          upper[i] = *(B + i);
-          *(infin + i) = infi[i];
-        }
-
-        arma::uvec uidx(udim);
-        arma::vec mu_permu(map_obj.tmp_vec, udim, false, true);
-        for(size_t i = 0; i < udim; ++i){
-          uidx[i]     = *(map_obj.idx + i);
-          mu_permu[i] = mu_in[uidx[i]];
-        }
-
-        arma::mat sigma_permu(map_obj.tmp_mat, udim, udim, false, true);
-        sigma_permu = sigma_in.submat(uidx, uidx);
-
-        funcs::set_child_wk_mem(mu_permu, sigma_permu, map_obj.child_mem,
-                                map_obj.idx);
-        return;
-
-      } else {
-        for(size_t i = 0; i < udim; ++i){
-          lower[i] = *(A + i);
-          upper[i] = *(B + i);
-        }
-
-      }
-
-    } else if(!do_reorder and udim > 1L) {
-      arma::mat tmp(map_obj.tmp_mat, udim, udim, false, true);
-      tmp = sigma_in;
-      tmp.each_row() /= sds.t();
-      tmp.each_col() /= sds;
-      if(!arma::chol(tmp, tmp))
-        sigma_chol.fill(std::numeric_limits<double>::infinity());
-      else
-        copy_upper_tri(tmp, sigma_chol.memptr());
-
-      if(udim > 1L){
-        /* rescale such that choleksy decomposition has ones in the diagonal */
-        double * sc = sigma_chol.begin();
-        for(size_t i = 0; i < udim; ++i){
-          double const scal = *(sc + i);
-          lower[i] /= scal;
-          upper[i] /= scal;
-          double * const sc_end = sc + i + 1L;
-          for(; sc != sc_end; ++sc)
-            *sc /= scal;
-        }
-      }
-    }
-
-    funcs::set_child_wk_mem(mu_in, sigma_in, map_obj.child_mem, nullptr);
-  }
-
-  /**
    * Integrates over (-Inf, 0)^[# of random effects]
    *
+   * @functor T_Functor class to use.
    * @param mu_in Mean vector.
    * @param sigma_in Covariance matrix.
    * @param do_reorder true if the order of integrations may be reordered.
    */
-  cdf(arma::vec const &mu_in, arma::mat const &sigma_in,
+  cdf(T_Functor &functor, arma::vec const &mu_in, arma::mat const &sigma_in,
       bool const do_reorder):
   cdf(
+    functor,
     ([&](){
       arma::vec out(mu_in.n_elem);
       out.fill(-std::numeric_limits<double>::infinity());
@@ -459,14 +398,8 @@ public:
    * @param abs_eps Required absolute accuracy.
    * @param rel_eps Required relative accuracy.
    * @param minvls Minimum number of samples.
-   *
-   * @return Either a one-dimension or a (1 + p + p(p + 1)/2)-dimensional
-   * vector. The latter contains the likelihood approximation, derivative
-   * with respect to the mean, and a (p(p + 1) /2)-dimensional vector
-   * containing an upper diagonal matrix with derivatives with respect to
-   * the covariance matrix. Notice that the latter are not scaled by 2.
    */
-  output approximate
+  out_type approximate
   (int const maxvls, double const abs_eps, double const rel_eps,
    int const minvls = 0L){
 #ifdef DO_CHECKS
@@ -476,174 +409,315 @@ public:
       throw std::invalid_argument("cdf::approximate: invalid 'maxvls'");
 #endif
 
-    wk_mem  = get_working_memory();
-    iwk_mem = get_iworking_memory();
-    map_obj = ptr_to_dat(wk_mem, ndim, iwk_mem);
-    if(ndim == 1L){
-      /* handle the one-dimensional case as a special case */
-      double const lw = *map_obj.lower,
-                   up = *map_obj.upper;
-      output out;
-      out.finest = funcs::univariate(lw, up, map_obj.child_mem);
-      out.inform = 0L;
-      out.abserr = 0;
-      return out;
+    // setup
+    // needs to have at least n_integrands memory to use. The functor class
+    // needs to provide this
+    double * const int_apprx = functor.get_wk_mem();
 
-    } else if(std::isinf(*map_obj.sigma_chol)){
-      output out;
-      out.finest.resize(n_integrands);
-      out.finest.fill(std::numeric_limits<double>::quiet_NaN());
-      out.inform = -1L;
-      return out;
-
-    }
-
-    /* perform the approximation */
-    output out;
-    out.finest.resize(n_integrands);
     auto sampler = parallelrng::get_unif_drawer();
 
-    auto res = rand_Korobov(
+    if(ndim == 1L){
+      /* handle the one-dimensional case as a special case */
+      functor.univariate(int_apprx, lower[0], upper[0]);
+      indices[0] = 0;
+
+      return functor.get_output(int_apprx, 0, 0, 0,
+                                indices.begin());
+
+    } else if(std::isinf(*sigma_chol.begin()))
+      throw std::runtime_error("std::isinf(*sigma_chol.begin())");
+
+    /* perform the approximation */
+    auto res = rand_Korobov<cdf<T_Functor> >::comp(
       *this, ndim, minvls, maxvls, n_integrands, abs_eps, rel_eps,
-      out.finest.memptr(), sampler);
-    out.minvls = res.minvls;
-    out.inform = res.inform;
-    out.abserr = res.abserr;
-
-    funcs::post_process(out.finest, ndim, map_obj.child_mem);
-    if(is_permutated){
-      arma::ivec vec_idx(map_obj.idx, ndim, false, true);
-      funcs::permutate(out.finest, ndim, vec_idx, wk_mem);
-    }
-
-    return out;
+      int_apprx, sampler);
+    return functor.get_output(int_apprx, res.minvls, res.inform,
+                              res.abserr, indices.begin());
   }
 };
+
+template<class T_Functor, class out_type>
+cache_mem<int   > cdf<T_Functor, out_type>::imem;
+template<class T_Functor, class out_type>
+cache_mem<double> cdf<T_Functor, out_type>::dmem;
 
 /**
  * func classes used as template argument for cdf used to approximate the
  * likelihood. */
 class likelihood {
-public:
-  static void set_child_wk_mem
-    (arma::vec const&, arma::mat const&, double const * const,
-     int const*) noexcept { }
+  static cache_mem<double> dmen;
 
-  constexpr static int get_n_integrands
-    (arma::vec const&, arma::mat const&) {
+public:
+  static void alloc_mem
+  (unsigned const max_dim, unsigned const max_threads){
+    rand_Korobov<cdf<likelihood> >::alloc_mem(
+        max_dim, get_n_integrands(), max_threads);
+    dmen.set_n_mem(1, max_threads);
+    cdf<likelihood>::alloc_mem(max_dim, max_threads);
+  }
+  double * get_wk_mem(){
+    return dmen.get_mem();
+  }
+  constexpr static int get_n_integrands() {
     return 1L;
   }
-  static void integrand
-    (double const * const __restrict__, int const,
-     double * const __restrict__ out, double const * const __restrict__)
-    MDGC_NOEXCEPT {
+
+  inline void operator()
+  (double const *, double * out, int const *, bool const)
+  MDGC_NOEXCEPT {
 #ifdef DO_CHECKS
     if(!out)
-      throw std::invalid_argument("likelihood::integrand: invalid out");
+      throw std::invalid_argument("likelihood::operator(): invalid out");
 #endif
     *out = 1;
   }
-  static void post_process
-    (arma::vec&, int const, double const * const) noexcept { }
+
   constexpr static bool needs_last_unif() {
     return false;
   }
 
-  static arma::vec univariate(double const lw, double const ub,
-                              double const * const wk_mem) {
-    arma::vec out(1L);
+  inline static void univariate(double * out,
+                                double const lw, double const ub) {
     double const p_ub = std::isinf(ub) ? 1 : pnorm_std(ub, 1L, 0L),
-                 p_lb = std::isinf(lw) ? 0 : pnorm_std(lw, 1L, 0L);
-    out[0] = p_ub - p_lb;
-    return out;
+      p_lb = std::isinf(lw) ? 0 : pnorm_std(lw, 1L, 0L);
+    *out = p_ub - p_lb;
   }
 
-  static void permutate
-    (arma::vec&, int const, arma::ivec const&, double * const) noexcept { }
+  struct out_type {
+    /**
+     * minvls Actual number of function evaluations used.
+     * inform INFORM = 0 for normal exit, when
+     *             ABSERR <= MAX(ABSEPS, RELEPS*||finest||)
+     *          and
+     *             INTVLS <= MAXCLS.
+     *        INFORM = 1 If MAXVLS was too small to obtain the required
+     *        accuracy. In this case a value finest is returned with
+     *        estimated absolute accuracy ABSERR. */
+    int minvls, inform;
+    /// maximum norm of estimated absolute accuracy of finest
+    double abserr;
+    /// likelihood approximation
+    double likelihood;
+  };
+  out_type get_output(double const * res, int const minvls,
+                      int const inform, double const abserr,
+                      int const *){
+    return out_type { minvls, inform, abserr, *res };
+  }
+  inline void prep_permutated(arma::mat const&, int const *) { }
 };
 
 /**
  * func classes used as template argument for cdf used to approximates both
- * the probability and the derivatives w.r.t. the mean and the
- * covariance matrix. */
+ * the probability and the derivatives w.r.t. the mean and the covariance
+ * matrix. */
 class deriv {
-public:
-  static void set_child_wk_mem
-  (arma::vec const &mu, arma::mat const &sigma,
-   double * const wk_mem, int const*){
-    size_t const p = mu.n_elem,
-           size_up = (p * (p + 1L)) / 2L;
+  /// working memory
+  static cache_mem<double> dmem;
 
-    arma::mat tmp_mat(wk_mem + 2L * size_up, p, p, false, true);
-    if(!arma::chol(tmp_mat, sigma))
-      throw std::runtime_error("deriv::set_child_wk_mem: chol failed");
-    if(!arma::inv(tmp_mat, tmp_mat))
-      throw std::runtime_error("deriv::set_child_wk_mem: inv failed");
-    copy_upper_tri(tmp_mat, wk_mem);
+  int const ndim;
+  /**
+   * points to the upper triangular part of the inverse of the Cholesky
+   * decomposition.
+   */
+  double * sigma_chol_inv;
+  /// points to the upper triangular part of the inverse.
+  double * sig_inv;
+  /// working memory to be used by cdf
+  double * cdf_mem;
 
-    if(!arma::inv_sympd(tmp_mat, sigma))
-      throw std::runtime_error("deriv::set_child_wk_mem: inv_sympd failed");
-    copy_upper_tri(tmp_mat, wk_mem + size_up);
+  inline void deriv_integrand_inner_loop
+    (double * __restrict__ o, double const * __restrict__ lhs,
+     unsigned const c) noexcept {
+    double const * const end = lhs + c + 1;
+    double const mult = *(lhs + c);
+    for(; lhs != end; ++o, ++lhs)
+      *o = mult * * lhs;
   }
 
-  static int get_n_integrands(arma::vec const&, arma::mat const&) noexcept;
-  static void integrand
-    (double const * const __restrict__, int const,
-     double * const __restrict__, double const * const __restrict__)
-    noexcept;
-  static void post_process
-    (arma::vec&, int const, double const * const) noexcept;
+public:
+  /**
+   * must be be called before calling other member functions to allocate
+   * working memory.
+   */
+  static void alloc_mem
+  (unsigned const max_dim, unsigned const max_threads){
+    rand_Korobov<cdf<deriv> >::alloc_mem(
+        max_dim, get_n_integrands(max_dim), max_threads);
+    dmem.set_n_mem(
+      2 * max_dim * max_dim + max_dim * (max_dim + 1) +
+        get_n_integrands(max_dim),
+      max_threads);
+    cdf<deriv>::alloc_mem(max_dim, max_threads);
+  }
+
+  /**
+   Note that alloc_mem must have been called before calling this method.
+   */
+  deriv(arma::vec const &mu, arma::mat const &sig):
+  ndim(mu.n_elem) {
+    // create the objects we need
+    arma::mat t1(dmem.get_mem(), ndim, ndim, false),
+              t2(t1.end()      , ndim, ndim, false);
+    if(!arma::chol(t1, sig))
+      throw std::runtime_error("deriv::deriv: chol failed");
+    if(!arma::inv(t2, t1))
+      throw std::runtime_error("deriv::deriv: inv failed");
+    sigma_chol_inv = t2.end();
+    copy_upper_tri(t2, sigma_chol_inv);
+
+    if(!arma::inv_sympd(t1, sig))
+      throw std::runtime_error("deriv::deriv: inv_sympd failed");
+    sig_inv = sigma_chol_inv + (ndim * (ndim + 1)) / 2;
+    copy_upper_tri(t1, sig_inv);
+
+    cdf_mem = sig_inv + (ndim * (ndim + 1)) / 2;
+  }
+
+  void prep_permutated(arma::mat const &sigma_permu, int const *) {
+    // need to re-compute the inverse of the Cholesky decomposition
+    arma::mat t1(dmem.get_mem(), ndim, ndim, false),
+              t2(t1.end()      , ndim, ndim, false);
+    if(!arma::chol(t1, sigma_permu))
+      throw std::runtime_error("deriv::prep_permutated: chol failed");
+    if(!arma::inv(t2, t1))
+      throw std::runtime_error("deriv::prep_permutated: inv failed");
+    copy_upper_tri(t2, sigma_chol_inv);
+
+    if(!arma::inv_sympd(t1, sigma_permu))
+      throw std::runtime_error("deriv::prep_permutated: inv_sympd failed");
+    copy_upper_tri(t1, sig_inv);
+  }
+
+  inline static int get_n_integrands(int const x) noexcept {
+    return 1 + x + (x * (x + 1)) / 2L;
+  }
+
+  inline int get_n_integrands() noexcept{
+    return get_n_integrands(ndim);
+  }
+
+  double * get_wk_mem(){
+    return cdf_mem;
+  }
+
   constexpr static bool needs_last_unif() {
     return true;
   }
 
-  static arma::vec univariate(double const lw, double const ub,
-                              double const * const wk_mem){
-    arma::vec out(3L);
-    static double const sqrt_2_pi = std::sqrt(2 * M_PI);
-    auto dnrm = [&](double const x){
-      return std::exp(-x * x / 2.) / sqrt_2_pi;
-    };
+  inline void operator()
+  (double const * __restrict__ draw, double * __restrict__ out,
+   int const *indices, bool const is_permutated) {
+    arma::uword const p = ndim;
 
+    int const n_elem = 1L + p + (p * (p + 1L)) / 2L;
+    *out = 1.;
+    std::fill(out + 1L, out + n_elem, 0.);
+
+
+    double * const mean_part_begin = out + 1L;
+    /* Multiplying by the inverse matrix is fast but not smart
+     * numerically. */
+    double const * sigma_chol_inv_ck = sigma_chol_inv;
+    for(unsigned c = 0; c < p; ++c){
+      double const mult = *(draw + c),
+        * const end = mean_part_begin + c + 1L;
+      for(double *rhs = mean_part_begin; rhs != end;
+          ++rhs, ++sigma_chol_inv_ck)
+        *rhs += mult * *sigma_chol_inv_ck;
+    }
+
+    double * o = out + 1L + p;
+    for(unsigned c = 0; c < p; c++){
+      deriv_integrand_inner_loop(o, mean_part_begin, c);
+      o += c + 1L;
+    }
+  }
+
+  inline void univariate(double * out, double const lw, double const ub) {
+    constexpr double const sqrt_2_pi_inv = 0.398942280401433;
+    auto dnrm = [&](double const x){
+      return std::exp(-x * x / 2.) * sqrt_2_pi_inv;
+    };
     bool const f_ub = std::isinf(ub),
                f_lb = std::isinf(lw);
 
     double const p_ub = f_ub ? 1 : pnorm_std(ub, 1L, 0L),
                  p_lb = f_lb ? 0 : pnorm_std(lw, 1L, 0L),
-               sig_inv = *wk_mem,
-                  d_ub = f_ub ? 0 : dnrm(ub),
-                  d_lb = f_lb ? 0 : dnrm(lw),
-               d_ub_ub = f_ub ? 0 : ub * d_ub,
-               d_lb_lb = f_lb ? 0 : lw * d_lb;
+                 d_ub = f_ub ? 0 : dnrm(ub),
+                 d_lb = f_lb ? 0 : dnrm(lw),
+              d_ub_ub = f_ub ? 0 : ub * d_ub,
+              d_lb_lb = f_lb ? 0 : lw * d_lb,
+               sd_inv = *sigma_chol_inv;
+
     out[0L] = p_ub - p_lb;
-    out[1L] = -(d_ub - d_lb) * sig_inv;
-    out[2L] = -(d_ub_ub - d_lb_lb) / 2 * sig_inv * sig_inv;
-    return out;
+    out[1L] = -(d_ub - d_lb) * sd_inv;
+    out[2L] = -(d_ub_ub - d_lb_lb) * sd_inv * sd_inv + out[0L] * *sig_inv;
   }
 
-  static void permutate
-    (arma::vec &finest, int const ndim, arma::ivec const &idx,
-     double * const work_mem) noexcept {
-    size_t const dim_cov = (ndim * (ndim + 1L)) / 2L;
+  struct out_type {
+    /**
+     * minvls Actual number of function evaluations used.
+     * inform INFORM = 0 for normal exit, when
+     *             ABSERR <= MAX(ABSEPS, RELEPS*||finest||)
+     *          and
+     *             INTVLS <= MAXCLS.
+     *        INFORM = 1 If MAXVLS was too small to obtain the required
+     *        accuracy. In this case a value finest is returned with
+     *        estimated absolute accuracy ABSERR. */
+    int minvls, inform;
+    /// maximum norm of estimated absolute accuracy of finest
+    double abserr;
+    /// likelihood approximation
+    double likelihood;
+    /// the derivative approximation
+    arma::vec derivs;
+  };
 
-    arma::vec dmu(finest.memptr() + 1L       , ndim   , false, true),
-             dcov(finest.memptr() + 1L + ndim, dim_cov, false, true),
-              cmu(work_mem                   , ndim   , false, true),
-             ccov(work_mem + ndim            , dim_cov, false, true);
+  out_type get_output(double * const res, int const minvls,
+                      int const inform, double const abserr,
+                      int const *indices){
+    // post process
+    double const likelihood = *res;
+    double *o = res + 1 + ndim;
+    double const * sig_inv_ij = sig_inv;
+    for(int c = 0; c < ndim; c++){
+      double const * const end = sig_inv_ij + c + 1L;
+      for(; sig_inv_ij != end; ++sig_inv_ij, ++o){
+        *o -= likelihood * *sig_inv_ij;
+        *o /= 2.;
+      }
+    }
+
+    // gather result
+    out_type out;
+    out.minvls = minvls;
+    out.inform = inform;
+    out.abserr = abserr;
+    out.likelihood = likelihood;
+
+    arma::vec &derivs = out.derivs;
+    int const dim_cov = (ndim * (ndim + 1L)) / 2L;
+    derivs.set_size(ndim + dim_cov);
+
+    double * const dmu  = res + 1,
+           * const dcov = dmu + ndim,
+           * const cmu  = derivs.begin(),
+           * const ccov = cmu + ndim;
 
     /* maps to the indices of the upper triangle matrix */
     auto tri_map = [&](int const r, int const c){
       return r + (c * (c + 1L)) / 2L;
     };
 
-    /* copy to temporaries */
+    /* permutate back and return */
     for(int c = 0; c < ndim; ++c){
-      int const org_c = idx[c];
+      int const org_c = indices[c];
       cmu[org_c] = dmu[c];
 
       for(int r = 0; r <= c; ++r){
         double const val = dcov[tri_map(r, c)];
-        int const org_r = idx[r];
+        int const org_r = indices[r];
         if(org_c >= org_r)
           ccov[tri_map(org_r, org_c)] = val;
         else
@@ -651,11 +725,7 @@ public:
       }
     }
 
-    /* copy back */
-    for(int c = 0; c < ndim; ++c)
-      dmu[c] = cmu[c];
-    for(size_t i = 0; i < dim_cov; ++i)
-      dcov[i] = ccov[i];
+    return out;
   }
 };
 
@@ -663,7 +733,7 @@ class imputation {
 public:
   class type_base {
   public:
-    virtual size_t n_ele() const noexcept = 0;
+    virtual int n_ele() const noexcept = 0;
     virtual void set_val(double const, double *& __restrict__)
       const noexcept = 0;
     virtual ~type_base() = default;
@@ -671,7 +741,7 @@ public:
 
   class known final : public type_base {
   public:
-    inline size_t n_ele() const noexcept {
+    inline int n_ele() const noexcept {
       return 0L;
     };
     inline void set_val(double const, double *& __restrict__)
@@ -680,7 +750,7 @@ public:
 
   class contin final : public type_base {
   public:
-    inline size_t n_ele() const noexcept {
+    inline int n_ele() const noexcept {
       return 1L;
     }
 
@@ -696,7 +766,7 @@ public:
 
     binary(double const border): border(border) { }
 
-    inline size_t n_ele() const noexcept {
+    inline int n_ele() const noexcept {
       return 2L;
     }
 
@@ -716,10 +786,10 @@ public:
 
   class ordinal final : public type_base {
   public:
-    size_t const n_bs;
+    int const n_bs;
     std::unique_ptr<double[]> const borders;
 
-    ordinal(double const *br, size_t const n_ele):
+    ordinal(double const *br, int const n_ele):
     n_bs(n_ele - 2L),
     borders(([&](){
 #ifdef DO_CHECKS
@@ -727,7 +797,7 @@ public:
         throw std::invalid_argument("ordinal: n_ele less than three");
 #endif
       std::unique_ptr<double[]> out(new double[n_bs]);
-      for(size_t i = 0; i < n_bs; ++i)
+      for(int i = 0; i < n_bs; ++i)
         *(out.get() + i) = *(br + i + 1L);
       return out;
     })()) { }
@@ -736,18 +806,18 @@ public:
     n_bs(o.n_bs),
     borders(([&](){
       std::unique_ptr<double[]> out(new double[n_bs]);
-      for(size_t i = 0; i < n_bs; ++i)
+      for(int i = 0; i < n_bs; ++i)
         *(out.get() + i) = *(o.borders.get() + i);
       return out;
     })()) { }
 
-    inline size_t n_ele() const noexcept {
+    inline int n_ele() const noexcept {
       return n_bs + 1L;
     }
 
     inline void set_val(double const v, double *& __restrict__ res)
     const noexcept {
-      size_t i = 0L;
+      int i = 0L;
       double const *b = borders.get();
       for(; i < n_bs; ++i, ++b)
         if(v < *b){
@@ -767,99 +837,156 @@ public:
   };
 
 private:
-  static std::vector<type_base const*> const &get_current_list();
-  static void permutate_current_list(int const*);
+  std::vector<type_base const*> cur_list;
+
+  /// working memory
+  static cache_mem<double> dmem;
+  int const n_integrands_val = get_n_integrands(cur_list),
+            ndim;
+  double * __restrict__ const mu_vec   = dmem.get_mem(),
+         * __restrict__ const sig_chol = mu_vec + ndim,
+         * __restrict__ const cdf_mem  = sig_chol + (ndim * (ndim + 1)) / 2,
+         * __restrict__ const xtr_mem  = cdf_mem + n_integrands_val;
 
 public:
-  static void set_current_list(std::vector<type_base const *>&);
-
-  static void set_child_wk_mem
-  (arma::vec const &mu, arma::mat const &sigma,
-   double * const wk_mem, int const *permu_idx){
-    if(permu_idx)
-      permutate_current_list(permu_idx);
-
-    size_t const p = mu.n_elem,
-           size_up = (p * (p + 1L)) / 2L;
-
-    arma::mat tmp_mat(wk_mem + size_up, p, p, false, true);
-    if(!arma::chol(tmp_mat, sigma))
-      throw std::runtime_error("imputation::set_child_wk_mem: chol failed");
-    copy_upper_tri(tmp_mat, wk_mem);
-
-    double *m = wk_mem + size_up;
-    double const *mea = mu.begin();
-    for(size_t i = 0; i < p; ++i, ++m, ++mea)
-      *m = *mea;
+  /**
+   * must be be called before calling other member functions to allocate
+   * working memory.
+   */
+  static void alloc_mem(std::vector<type_base const*> const cur_list,
+                        int const max_dim, int const max_threads){
+    int const n_ints = get_n_integrands(cur_list);
+    rand_Korobov<cdf<imputation> >::alloc_mem(max_dim, n_ints, max_threads);
+    cdf<imputation>::alloc_mem(max_dim, max_threads);
+    dmem.set_n_mem(
+      (max_dim * (max_dim + 5)) / 2 + max_dim * max_dim + n_ints,
+      max_threads);
   }
 
-  static int get_n_integrands(arma::vec const&, arma::mat const&) noexcept {
-    auto &cur_list = get_current_list();
+  imputation(std::vector<type_base const *> const &cur_list,
+             arma::vec const &mu, arma::vec const &Sig):
+    cur_list(cur_list), ndim(mu.n_elem) {
+    /* set the mean vector and the Cholesky decomposition of the random
+     * of the random effects. */
+    std::copy(mu.begin(), mu.end(), mu_vec);
+
+    arma::mat tmp_mat(xtr_mem, ndim, ndim, false, true);
+    if(!arma::chol(tmp_mat, Sig))
+      throw std::runtime_error("imputation::imputation: chol failed");
+    copy_upper_tri(tmp_mat, sig_chol);
+  }
+
+  void prep_permutated
+    (arma::mat const &sigma_permu, int const *indices){
+    // permute the mean vector, the covariance matrix, and the cur_list
+    arma::mat tmp_mat(xtr_mem, ndim, ndim, false, true);
+    if(!arma::chol(tmp_mat, sigma_permu))
+      throw std::runtime_error("imputation::prep_permutated: chol failed");
+    copy_upper_tri(tmp_mat, sig_chol);
+
+    for(int i = 0; i < ndim; ++i)
+      // we do not use this memory now as of this writting
+      cdf_mem[i] = mu_vec[indices[i]];
+    std::copy(cdf_mem, cdf_mem + ndim, mu_vec);
+
+    // permutate the type_base list. TODO: memory allocation
+    int const n_ele = cur_list.size();
+    std::vector<type_base const *> new_list;
+    new_list.reserve(n_ele);
+    for(int i = 0; i < n_ele; ++i)
+      new_list.emplace_back(cur_list[indices[i]]);
+    cur_list = new_list;
+  }
+
+  static inline int
+  get_n_integrands(std::vector<type_base const *> const &ls) noexcept {
     int out(1L);
-    for(auto &x : cur_list)
+    for(auto &x : ls)
       out += x->n_ele();
     return out;
   }
 
-  static void integrand
-  (double const * const __restrict__ draw, int const ndim,
-   double * const __restrict__ out,
-   double * const __restrict__ wk_mem) noexcept {
-    arma::uword const p = ndim;
-    double *scale_draw = wk_mem + p + (p * (p + 1L)) / 2L;
-    {
-      // re-locate
-      double * scale_draw_i = scale_draw;
-      double const *mea = wk_mem + (p * (p + 1L)) / 2L;
-      for(size_t i = 0; i < p; ++i, ++scale_draw_i, ++mea)
-        *scale_draw_i = *mea;
-    }
-
-    {
-      // re-scale
-      double const *sig_chol = wk_mem;
-      double * scale_draw_c = scale_draw;
-      for(size_t c = 0; c < p; ++c, ++scale_draw_c){
-        double const * draw_r = draw;
-        for(size_t r = 0; r <= c; ++r, ++sig_chol, ++draw_r)
-          *scale_draw_c += *sig_chol * *draw_r;
-      }
-    }
-
-    auto const &cur_list = get_current_list();
-    double * o = out;
-    *o++ = 1.;
-    double const *scale_draw_i = scale_draw;
-    for(size_t i = 0; i < cur_list.size(); ++i, ++scale_draw_i)
-      cur_list[i]->set_val(*scale_draw_i, o);
+  inline int get_n_integrands() noexcept {
+    return n_integrands_val;
   }
 
-  static void post_process
-    (arma::vec&, int const, double const * const) noexcept { }
+  double * get_wk_mem(){
+    return cdf_mem;
+  }
 
   constexpr static bool needs_last_unif() {
     return true;
   }
 
-  static arma::vec univariate(double const lw, double const ub,
-                              double const * const wk_mem){
+  inline void operator()
+  (double const * __restrict__ draw, double * __restrict__ out,
+   int const *indices, bool const is_permutated){
+    double *scale_draw = xtr_mem;
+    std::copy(mu_vec, mu_vec + ndim, scale_draw);
+
+    {
+      // re-scale
+      double const *sig_chol_rp = sig_chol;
+      double * scale_draw_c = scale_draw;
+      for(int c = 0; c < ndim; ++c, ++scale_draw_c){
+        double const * draw_r = draw;
+        for(int r = 0; r <= c; ++r, ++sig_chol_rp, ++draw_r)
+          *scale_draw_c += *sig_chol_rp * *draw_r;
+      }
+    }
+
+    double * o = out;
+    *o++ = 1.;
+    double const *scale_draw_i = scale_draw;
+    for(int i = 0; i < static_cast<int>(cur_list.size());
+        ++i, ++scale_draw_i)
+      cur_list[i]->set_val(*scale_draw_i, o);
+  }
+
+  inline void univariate(double * out, double const lw, double const ub) {
     throw std::runtime_error("imputation::univariate: not implemented");
   }
 
-  static void permutate
-    (arma::vec &finest, int const ndim, arma::ivec const &idx,
-     double * const work_mem) noexcept {
-    arma::vec permu_res(finest.size());
+  struct out_type {
+    /**
+     * minvls Actual number of function evaluations used.
+     * inform INFORM = 0 for normal exit, when
+     *             ABSERR <= MAX(ABSEPS, RELEPS*||finest||)
+     *          and
+     *             INTVLS <= MAXCLS.
+     *        INFORM = 1 If MAXVLS was too small to obtain the required
+     *        accuracy. In this case a value finest is returned with
+     *        estimated absolute accuracy ABSERR. */
+    int minvls, inform;
+    /// maximum norm of estimated absolute accuracy of finest
+    double abserr;
+    /// likelihood approximation
+    double likelihood;
+    /// the imputed values
+    arma::vec imputations;
+  };
+
+  out_type get_output(double * res, int const minvls,
+                      int const inform, double const abserr,
+                      int const *indices){
+    // permutate back the result and return
+    out_type out;
+    out.minvls = minvls;
+    out.inform = inform;
+    out.abserr = abserr;
+    out.likelihood = *res;
+
+    arma::vec &imputations = out.imputations;
+    imputations.set_size(get_n_integrands() - 1);
     arma::uvec offset(ndim);
-    auto &cur_list = get_current_list();
 
     /* we make two passes. One to figure out where to write the ith type
      * to and one to do the writting */
     for(int c = 0; c < ndim; ++c)
-      offset[idx[c]] = cur_list[c]->n_ele();
+      offset[indices[c]] = cur_list[c]->n_ele();
 
     {
-      size_t cur = 1L;
+      int cur = 1L; // one as the first element is the CDF approximation
       for(int i = 0L; i < ndim; ++i){
         cur += offset[i];
         offset[i] = cur - offset[i];
@@ -867,22 +994,20 @@ public:
     }
 
     // do the copying
-    permu_res[0] = finest[0];
     {
-      double const *v = finest.begin() + 1L;
+      double const *v = res + 1L;
       for(int c = 0; c < ndim; ++c){
-        int const org_c = idx[c];
-        size_t const n_ele = cur_list[c]->n_ele();
-        double *r = permu_res.begin() + offset[org_c];
-        for(size_t i = 0; i < n_ele; ++i, ++r, ++v)
+        int const org_c = indices[c];
+        int const n_ele = cur_list[c]->n_ele();
+        double *r = imputations.begin() + offset[org_c] - 1;
+        for(int i = 0; i < n_ele; ++i, ++r, ++v)
           *r = *v;
       }
     }
 
-    finest = permu_res;
+    return out;
   }
 };
-
-}
+} // namespace restrictcdf
 
 #endif

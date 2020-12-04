@@ -7,4 +7,8 @@
 #define MDGC_NOEXCEPT noexcept
 #endif
 
+inline constexpr size_t cacheline_size(){
+  return 128L;
+}
+
 #endif

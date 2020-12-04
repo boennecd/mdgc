@@ -16,13 +16,12 @@ void F77_NAME(mvtdst)(
 }
 
 namespace pmvnorm {
-arma::ivec get_infin(arma::vec const &lower, arma::vec const &upper){
-  arma::uword const n = lower.size();
+void get_infin(arma::ivec &out, arma::vec const &lower,
+               arma::vec const &upper){
 #ifdef DO_CHECKS
   if(upper.size() != n)
     throw std::invalid_argument("get_infin: invalid 'upper'");
 #endif
-  arma::ivec out(n);
 
   double const *l = lower.begin(),
                *u = upper.begin();
@@ -38,7 +37,11 @@ arma::ivec get_infin(arma::vec const &lower, arma::vec const &upper){
     else
       o =  2L;
   }
+}
 
+arma::ivec get_infin(arma::vec const &lower, arma::vec const &upper){
+  arma::ivec out(lower.size());
+  get_infin(out, lower, upper);
   return out;
 }
 

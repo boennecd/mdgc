@@ -208,26 +208,34 @@ Rcpp::NumericVector pmvnorm_to_R
    double const rel_eps, bool const derivs, bool const do_reorder = true,
    bool const use_aprx = false){
   parallelrng::set_rng_seeds(1L);
-  restrictcdf::cdf<restrictcdf::deriv>::set_working_memory(
-    lower.n_elem, 1L);
 
-  auto res = ([&](){
-    if(derivs)
-      return restrictcdf::cdf<restrictcdf::deriv>
-      (lower, upper, mu, Sigma, do_reorder, use_aprx).approximate(
-          maxvls, abs_eps, rel_eps);
+  if(derivs){
+    restrictcdf::deriv::alloc_mem(lower.n_elem, 1L);
+    restrictcdf::deriv functor(mu, Sigma);
 
-    return restrictcdf::cdf<restrictcdf::likelihood>
-      (lower, upper, mu, Sigma, do_reorder, use_aprx).approximate(
-          maxvls, abs_eps, rel_eps);
-  })();
+    auto res = restrictcdf::cdf<restrictcdf::deriv>
+    (functor, lower, upper, mu, Sigma, do_reorder, use_aprx).approximate(
+        maxvls, abs_eps, rel_eps);
 
-  Rcpp::NumericVector out;
-  out = res.finest;
+    Rcpp::NumericVector out(res.derivs.n_elem + 1);
+    out[0] = res.likelihood;
+    std::copy(res.derivs.begin(), res.derivs.end(), &out[1]);
+    out.attr("minvls") = res.minvls;
+    out.attr("inform") = res.inform;
+    out.attr("abserr") = res.abserr;
+    return out;
+  }
+
+  restrictcdf::likelihood::alloc_mem(lower.n_elem, 1L);
+  restrictcdf::likelihood functor;
+  auto res = restrictcdf::cdf<restrictcdf::likelihood>
+    (functor, lower, upper, mu, Sigma, do_reorder, use_aprx).approximate(
+        maxvls, abs_eps, rel_eps);
+
+  Rcpp::NumericVector out = Rcpp::NumericVector::create(res.likelihood);
   out.attr("minvls") = res.minvls;
   out.attr("inform") = res.inform;
   out.attr("abserr") = res.abserr;
-
   return out;
 }
 
@@ -424,7 +432,7 @@ inline SEXP impute_set_val_R
     return impute_set_val_R(*b, val, names, marg, lower, upper, code,
                             truth);
 
-  throw std::invalid_argument("impute_set_val: not implemented");
+  throw std::invalid_argument("impute_set_val_R: not implemented");
 }
 
 // [[Rcpp::export()]]
@@ -456,17 +464,25 @@ Rcpp::List impute
     return out;
   })();
 
+  // vector with pointer to the above
+  std::vector<impute_base const *> const type_list_ptr = ([&](){
+    std::vector<impute_base const *> out;
+    out.reserve(type_list.size());
+    for(auto &x : type_list)
+      out.emplace_back(x.get());
+    return out;
+  })();
+
   // find values using QMC
-  size_t out_dim(0L);
-  for(auto &x : type_list)
-    out_dim += impute_get_output_dim(x.get());
+  size_t const out_dim =
+    restrictcdf::imputation::get_n_integrands(type_list_ptr) - 1;
 
   size_t const n_obs = lower.n_cols;
   arma::mat out_dat(out_dim, n_obs);
   size_t const n_vars = lower.n_rows;
 
-  restrictcdf::cdf<restrictcdf::imputation>::set_working_memory
-    (n_vars, n_threads);
+  restrictcdf::imputation::alloc_mem(type_list_ptr, n_vars, n_threads);
+
 #ifdef _OPENMP
   omp_set_num_threads(n_threads);
 #endif
@@ -478,18 +494,17 @@ Rcpp::List impute
   vec w_obs_val(n_vars),
         w_upper(n_vars),
         w_lower(n_vars);
-  known known_obj;
 
   uvec a_idx_int, a_idx_obs;
   vec a_obs_val, a_upper, a_lower, mu_use;
 
-  std::vector<impute_base const*> type_i, type_i_cp;
+  std::vector<impute_base const *> type_i;
 
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static) \
   firstprivate(w_idx_int, w_idx_obs, w_obs_val, w_upper, w_lower) \
-  private(known_obj, a_idx_int, a_idx_obs, a_obs_val, a_upper, a_lower, \
-          mu_use, type_i, type_i_cp)
+  private(a_idx_int, a_idx_obs, a_obs_val, a_upper, a_lower, \
+          mu_use, type_i)
 #endif
   for(size_t i = 0; i < n_obs; ++i){
     // create covariance matrix and bounds to pass
@@ -564,6 +579,7 @@ Rcpp::List impute
     // create the type objects to pass
     type_i.clear();
     type_i.reserve(n_i);
+    known known_obj;
     {
       arma::uword const *cur_idx_obs = a_idx_obs.begin();
       size_t j = 0;
@@ -578,36 +594,33 @@ Rcpp::List impute
         } else
           type_i.emplace_back(type_list[j].get());
       }
-
     }
-    type_i_cp = type_i;
-    restrictcdf::imputation::set_current_list(type_i_cp);
 
+    restrictcdf::imputation imputer(type_i, mu_use, Sigma_use);
     auto res = restrictcdf::cdf<restrictcdf::imputation>
-      (a_lower, a_upper, mu_use, Sigma_use, do_reorder,
-       use_aprx).approximate(
-        maxit, abs_eps, rel_eps, minvls);
+      (imputer, a_lower, a_upper, mu_use, Sigma_use, do_reorder,
+       use_aprx).approximate(maxit, abs_eps, rel_eps, minvls);
 
-    res.finest /= res.finest[0L];
+    res.imputations /= res.likelihood;
 
     double *o = out_dat.colptr(i);
-    double const *rval = res.finest.begin() + 1;
+    double const *rval = res.imputations.begin();
     {
       arma::uword const *cur_idx_obs = a_idx_obs.begin();
       size_t j = 0;
       for(; j < n_vars; ++j){
-        auto type_j = type_list[j].get();
+        auto &type_j = type_list[j];
 
         if(cur_idx_obs != a_idx_obs.end() and j == *cur_idx_obs){
           ++cur_idx_obs;
-          o += impute_get_output_dim(type_j);
+          o += impute_get_output_dim(type_j.get());
           continue;
         }
 
         if(code.at(j, i) == 2L)
-          o += impute_get_output_dim(type_j);
+          o += impute_get_output_dim(type_j.get());
         else
-          impute_set_val(type_j, o, rval);
+          impute_set_val(type_j.get(), o, rval);
       }
     }
   }

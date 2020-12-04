@@ -10,6 +10,9 @@ namespace pmvnorm {
  */
 arma::ivec get_infin(arma::vec const &lower, arma::vec const &upper);
 
+void get_infin
+  (arma::ivec &out, arma::vec const &lower, arma::vec const &upper);
+
 struct cor_vec_res {
   arma::vec cor_vec, sds;
 };

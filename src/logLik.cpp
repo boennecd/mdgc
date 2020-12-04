@@ -11,18 +11,10 @@
 using std::log;
 
 namespace {
-static std::unique_ptr<double[]> log_ml_wk;
-static size_t wk_mem_per_thread = 0L,
-                current_wk_size = 0L;
+static cache_mem<double> log_ml_mem;
 
-double * get_working_memory_log_ml(){
-#ifdef _OPENMP
-  size_t const my_num = omp_get_thread_num();
-#else
-  size_t const my_num(0L);
-#endif
-
-  return log_ml_wk.get() + my_num * wk_mem_per_thread;
+inline double * get_working_memory_log_ml() noexcept {
+  return log_ml_mem.get_mem();
 }
 
 void set_working_memory_log_ml(size_t const n_int, size_t const n_obs,
@@ -33,23 +25,7 @@ void set_working_memory_log_ml(size_t const n_int, size_t const n_obs,
           size_temp_mem = n_int_sq + n_obs_sq + n_int * n_obs + n_int,
                 max_dim = size_shared_mem + size_temp_mem;
 
-  constexpr size_t const cachline_size = 128L,
-                                  mult = cachline_size / sizeof(double),
-                              min_size = 2L * mult;
-
-  size_t m_dim = max_dim;
-  m_dim = std::max(m_dim, min_size);
-  m_dim = (m_dim + mult - 1L) / mult;
-  m_dim *= mult;
-  wk_mem_per_thread = m_dim;
-
-  size_t const new_size =
-    std::max(n_threads, static_cast<size_t>(1L)) * m_dim;
-  if(new_size > current_wk_size){
-    log_ml_wk.reset(new double[new_size]);
-    current_wk_size = new_size;
-
-  }
+  log_ml_mem.set_n_mem(max_dim, n_threads);
 }
 } // namespace
 
@@ -155,13 +131,14 @@ double log_ml_term::approximate
     }
 
     if(comp_deriv){
+      deriv functor(mea, V);
       auto res =
-        cdf<deriv>(lower, upper, mea, V, do_reorder,
+        cdf<deriv>(functor, lower, upper, mea, V, do_reorder,
                    use_aprx).approximate(
                        maxpts, abs_eps, rel_eps, minvls);
-      double const p_hat = res.finest[0];
-      arma::vec d_mu(res.finest.memptr() + 1L, n_int, false, true),
-                 d_V(res.finest.memptr() + 1L + n_int,
+      double const p_hat = res.likelihood;
+      arma::vec d_mu(res.derivs.begin(), n_int, false, true),
+                 d_V(d_mu      .end()  ,
                      (n_int * (n_int + 1L)) / 2L, false, true);
       d_mu /= p_hat;
       d_V  /= p_hat;
@@ -224,11 +201,11 @@ double log_ml_term::approximate
       }
 
     } else {
+      likelihood functor;
       auto res =
-        cdf<likelihood>(lower, upper, mea, V, do_reorder,
-                        use_aprx).approximate(
-                            maxpts, abs_eps, rel_eps);
-      out += log(res.finest[0]);
+        cdf<likelihood>(functor, lower, upper, mea, V, do_reorder,
+                        use_aprx).approximate(maxpts, abs_eps, rel_eps);
+      out += log(res.likelihood);
     }
   }
 
@@ -245,7 +222,8 @@ void log_ml_term::set_working_memory(
       max_n_obs = t.n_obs;
   }
 
-  cdf<deriv>::set_working_memory(max_n_int, n_threads);
+  likelihood::alloc_mem(max_n_int, n_threads);
+  deriv     ::alloc_mem(max_n_int, n_threads);
   set_working_memory_log_ml(max_n_int, max_n_obs, n_threads);
 }
 

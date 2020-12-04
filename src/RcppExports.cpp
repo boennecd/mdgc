@@ -133,7 +133,7 @@ BEGIN_RCPP
 END_RCPP
 }
 
-RcppExport SEXP run_testthat_tests();
+RcppExport SEXP run_testthat_tests(SEXP);
 
 static const R_CallMethodDef CallEntries[] = {
     {"_mdgc_get_log_lm_terms_cpp", (DL_FUNC) &_mdgc_get_log_lm_terms_cpp, 3},
@@ -144,7 +144,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_mdgc_get_commutation_vec", (DL_FUNC) &_mdgc_get_commutation_vec, 3},
     {"_mdgc_x_dot_X_kron_I_wrap", (DL_FUNC) &_mdgc_x_dot_X_kron_I_wrap, 3},
     {"_mdgc_impute", (DL_FUNC) &_mdgc_impute, 15},
-    {"run_testthat_tests", (DL_FUNC) &run_testthat_tests, 0},
+    {"run_testthat_tests", (DL_FUNC) &run_testthat_tests, 1},
     {NULL, NULL, 0}
 };
 

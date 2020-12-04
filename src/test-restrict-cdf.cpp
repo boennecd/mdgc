@@ -36,26 +36,28 @@ context("restrictcdf unit tests") {
           << 2.916 << -3.957 << -0.879 << 2.916 << 7.361 << -0.648
           << -1.788 << -3.957 << -0.648 << 11.735;
     sigma.reshape(4L, 4L);
-    restrictcdf::cdf<restrictcdf::likelihood>::set_working_memory(4L, 1L);
+    restrictcdf::likelihood::alloc_mem(4L, 1L);
 
     double const abs_eps = std::pow(std::numeric_limits<double>::epsilon(),
                                    .33);
     double constexpr const E_prop(0.0181507102495727);
     {
+      restrictcdf::likelihood functor;
       auto res = restrictcdf::cdf<restrictcdf::likelihood>(
-        mean, sigma, false).approximate(1000000L, abs_eps, -1);
+        functor, mean, sigma, false).approximate(1000000L, abs_eps, -1);
 
       expect_true(res.inform == 0L);
       expect_true(res.abserr                        < 100. * abs_eps);
-      expect_true(std::abs(res.finest[0L] - E_prop) < 100. * abs_eps);
+      expect_true(std::abs(res.likelihood - E_prop) < 100. * abs_eps);
     }
     {
+      restrictcdf::likelihood functor;
       auto res = restrictcdf::cdf<restrictcdf::likelihood>(
-        mean, sigma, true).approximate(1000000L, abs_eps, -1);
+        functor, mean, sigma, true).approximate(1000000L, abs_eps, -1);
 
       expect_true(res.inform == 0L);
       expect_true(res.abserr                        < 100. * abs_eps);
-      expect_true(std::abs(res.finest[0L] - E_prop) < 100. * abs_eps);
+      expect_true(std::abs(res.likelihood - E_prop) < 100. * abs_eps);
     }
   }
 
@@ -94,27 +96,30 @@ context("restrictcdf unit tests") {
           << 2.916 << -3.957 << -0.879 << 2.916 << 7.361 << -0.648
           << -1.788 << -3.957 << -0.648 << 11.735;
     sigma.reshape(4L, 4L);
-    restrictcdf::cdf<restrictcdf::likelihood>::set_working_memory(4L, 1L);
+    restrictcdf::likelihood::alloc_mem(4L, 1L);
 
     double const abs_eps = std::pow(std::numeric_limits<double>::epsilon(),
                                    .33);
     double constexpr E_prop(0.0693596863013216);
     {
+      restrictcdf::likelihood functor;
       auto res = restrictcdf::cdf<restrictcdf::likelihood>(
-        lower, upper, mean, sigma, false, false).approximate(1000000L, abs_eps, -1);
-
-      expect_true(res.inform == 0L);
-      expect_true(res.abserr                        < 100. * abs_eps);
-      expect_true(std::abs(res.finest[0L] - E_prop) < 100. * abs_eps);
-    }
-    {
-      auto res = restrictcdf::cdf<restrictcdf::likelihood>(
-        lower, upper, mean, sigma, true, false).approximate(
+        functor, lower, upper, mean, sigma, false, false).approximate(
             1000000L, abs_eps, -1);
 
       expect_true(res.inform == 0L);
       expect_true(res.abserr                        < 100. * abs_eps);
-      expect_true(std::abs(res.finest[0L] - E_prop) < 100. * abs_eps);
+      expect_true(std::abs(res.likelihood - E_prop) < 100. * abs_eps);
+    }
+    {
+      restrictcdf::likelihood functor;
+      auto res = restrictcdf::cdf<restrictcdf::likelihood>(
+        functor, lower, upper, mean, sigma, true, false).approximate(
+            1000000L, abs_eps, -1);
+
+      expect_true(res.inform == 0L);
+      expect_true(res.abserr                        < 100. * abs_eps);
+      expect_true(std::abs(res.likelihood - E_prop) < 100. * abs_eps);
     }
   }
 
@@ -139,6 +144,8 @@ context("restrictcdf unit tests") {
     double const mu(.5);
     double const va(.8);
 
+    restrictcdf::likelihood::alloc_mem(1, 1);
+
     double const eps = std::pow(std::numeric_limits<double>::epsilon(), .5);
     for(size_t i = 0; i < 3; ++i){
       arma::vec l(1), u(1), m(1);
@@ -148,12 +155,13 @@ context("restrictcdf unit tests") {
       m[0] = mu;
       s[0] = va;
 
+      restrictcdf::likelihood functor;
       auto res = restrictcdf::cdf<restrictcdf::likelihood>(
-        l, u, m, s, false, false).approximate(1000000L, 1e-8, -1);
+        functor, l, u, m, s, false, false).approximate(1000000L, 1e-8, -1);
 
       expect_true(res.inform == 0L);
       expect_true(res.abserr                           <= 0);
-      expect_true(std::abs(res.finest[0L] - expect[i]) <  eps);
+      expect_true(std::abs(res.likelihood - expect[i]) <  eps);
     }
 
     for(size_t i = 0; i < 3; ++i){
@@ -164,12 +172,13 @@ context("restrictcdf unit tests") {
       m[0] = mu;
       s[0] = va;
 
+      restrictcdf::likelihood functor;
       auto res = restrictcdf::cdf<restrictcdf::likelihood>(
-        l, u, m, s, true, false).approximate(1000000L, 1e-8, -1);
+        functor, l, u, m, s, true, false).approximate(1000000L, 1e-8, -1);
 
       expect_true(res.inform == 0L);
       expect_true(res.abserr                           <= 0);
-      expect_true(std::abs(res.finest[0L] - expect[i]) <  eps);
+      expect_true(std::abs(res.likelihood - expect[i]) <  eps);
     }
   }
 
@@ -200,6 +209,8 @@ context("restrictcdf unit tests") {
     double const mu(.5);
     double const va(.8);
 
+    restrictcdf::deriv::alloc_mem(3, 1);
+
     double const eps = std::pow(std::numeric_limits<double>::epsilon(), .5);
     for(size_t i = 0; i < 3; ++i){
       arma::vec l(1), u(1), m(1);
@@ -209,14 +220,15 @@ context("restrictcdf unit tests") {
       m[0] = mu;
       s[0] = va;
 
+      restrictcdf::deriv functor(m, s);
       auto res = restrictcdf::cdf<restrictcdf::deriv>(
-        l, u, m, s, false, false).approximate(1000000L, 1e-8, -1);
+        functor, l, u, m, s, false, false).approximate(1000000L, 1e-8, -1);
 
       expect_true(res.inform == 0L);
       expect_true(res.abserr                           <= 0);
-      expect_true(std::abs(res.finest[0L] - expect.at(0L, i)) <  eps);
-      expect_true(std::abs(res.finest[1L] - expect.at(1L, i)) <  eps);
-      expect_true(std::abs(res.finest[2L] - expect.at(2L, i)) <  eps);
+      expect_true(std::abs(res.likelihood - expect.at(0L, i)) <  eps);
+      expect_true(std::abs(res.derivs[0] - expect.at(1L, i)) <  eps);
+      expect_true(std::abs(res.derivs[1] - expect.at(2L, i)) <  eps);
     }
 
     for(size_t i = 0; i < 3; ++i){
@@ -227,14 +239,15 @@ context("restrictcdf unit tests") {
       m[0] = mu;
       s[0] = va;
 
+      restrictcdf::deriv functor(m, s);
       auto res = restrictcdf::cdf<restrictcdf::deriv>(
-        l, u, m, s, true, false).approximate(1000000L, 1e-8, -1);
+        functor, l, u, m, s, true, false).approximate(1000000L, 1e-8, -1);
 
       expect_true(res.inform == 0L);
       expect_true(res.abserr                           <= 0);
-      expect_true(std::abs(res.finest[0L] - expect.at(0L, i)) <  eps);
-      expect_true(std::abs(res.finest[1L] - expect.at(1L, i)) <  eps);
-      expect_true(std::abs(res.finest[2L] - expect.at(2L, i)) <  eps);
+      expect_true(std::abs(res.likelihood - expect.at(0L, i)) <  eps);
+      expect_true(std::abs(res.derivs[0] - expect.at(1L, i)) <  eps);
+      expect_true(std::abs(res.derivs[1] - expect.at(2L, i)) <  eps);
     }
   }
 
@@ -282,7 +295,7 @@ context("restrictcdf unit tests") {
           << -1.931 << -0.359 << 0.847 << 13.438 << 6.106 << -1.017
           << -1.931 << 6.106 << 11.67;
     sigma.reshape(4L, 4L);
-    restrictcdf::cdf<restrictcdf::deriv>::set_working_memory(4L, 1L);
+    restrictcdf::deriv::alloc_mem(4L, 1L);
 
     arma::vec expect;
     expect << 0.0724695784076199 << -0.0198615541220946 << -0.0348869861554662
@@ -294,26 +307,28 @@ context("restrictcdf unit tests") {
     double const abs_eps = std::pow(
       std::numeric_limits<double>::epsilon(), .4);
     {
+      restrictcdf::deriv functor(mean, sigma);
       auto res = restrictcdf::cdf<restrictcdf::deriv>(
-        mean, sigma, false).approximate(10000000L, abs_eps, -1);
+        functor, mean, sigma, false).approximate(10000000L, abs_eps, -1);
 
       expect_true(res.inform == 0L);
-      expect_true(res.finest.n_elem == expect.n_elem);
-      expect_true(std::abs(res.finest[0] - expect[0]) < 1e-5);
+      expect_true(res.derivs.n_elem + 1 == expect.n_elem);
+      expect_true(std::abs(res.likelihood - expect[0]) < 1e-5);
       for(unsigned i = 1; i < expect.n_elem; ++i)
-        expect_true(std::abs(res.finest[i] - expect[i]) < 1e-5);
+        expect_true(std::abs(res.derivs[i - 1] - expect[i]) < 1e-5);
     }
     {
+      restrictcdf::deriv functor(mean, sigma);
       auto res = restrictcdf::cdf<restrictcdf::deriv>(
-        mean, sigma, true).approximate(10000000L, abs_eps, -1);
+        functor, mean, sigma, true).approximate(10000000L, abs_eps, -1);
 
       expect_true(res.inform == 0L);
-      expect_true(res.finest.n_elem == expect.n_elem);
-      expect_true(std::abs(res.finest[0] - expect[0]) < 1e-5);
+      expect_true(res.derivs.n_elem + 1 == expect.n_elem);
+      expect_true(std::abs(res.likelihood - expect[0]) < 1e-5);
       for(unsigned i = 1; i < 5L; ++i)
-        expect_true(std::abs(res.finest[i] - expect[i]) < 1e-5);
+        expect_true(std::abs(res.derivs[i - 1] - expect[i]) < 1e-5);
       for(unsigned i = 5; i < expect.n_elem; ++i)
-        expect_true(std::abs(res.finest[i] - expect[i]) < 1e-5);
+        expect_true(std::abs(res.derivs[i - 1] - expect[i]) < 1e-5);
     }
   }
 
@@ -364,7 +379,7 @@ context("restrictcdf unit tests") {
           << -1.931 << -0.359 << 0.847 << 13.438 << 6.106 << -1.017
           << -1.931 << 6.106 << 11.67;
     sigma.reshape(4L, 4L);
-    restrictcdf::cdf<restrictcdf::deriv>::set_working_memory(4L, 1L);
+    restrictcdf::deriv::alloc_mem(4L, 1L);
 
     arma::vec expect;
     expect << 0.10798294314481     << -0.016084833560177   << 0.0207517208958157
@@ -376,28 +391,30 @@ context("restrictcdf unit tests") {
     double const abs_eps = std::pow(
       std::numeric_limits<double>::epsilon(), .4);
     {
+        restrictcdf::deriv functor(mean, sigma);
         auto res = restrictcdf::cdf<restrictcdf::deriv>(
-          lower, upper, mean, sigma, false, false).approximate(
+          functor, lower, upper, mean, sigma, false, false).approximate(
               10000000L, abs_eps, -1);
 
         expect_true(res.inform == 0L);
-        expect_true(res.finest.n_elem == expect.n_elem);
-        expect_true(std::abs(res.finest[0] - expect[0]) < 1e-5);
+        expect_true(res.derivs.n_elem + 1 == expect.n_elem);
+        expect_true(std::abs(res.likelihood - expect[0]) < 1e-5);
         for(unsigned i = 1; i < expect.n_elem; ++i)
-          expect_true(std::abs(res.finest[i] - expect[i]) < 1e-5);
+          expect_true(std::abs(res.derivs[i - 1] - expect[i]) < 1e-5);
     }
     {
+      restrictcdf::deriv functor(mean, sigma);
       auto res = restrictcdf::cdf<restrictcdf::deriv>(
-        lower, upper, mean, sigma, true, false).approximate(
+        functor, lower, upper, mean, sigma, true, false).approximate(
             10000000L, abs_eps, -1);
 
       expect_true(res.inform == 0L);
-      expect_true(res.finest.n_elem == expect.n_elem);
-      expect_true(std::abs(res.finest[0] - expect[0]) < 1e-5);
+      expect_true(res.derivs.n_elem + 1 == expect.n_elem);
+      expect_true(std::abs(res.likelihood - expect[0]) < 1e-5);
       for(unsigned i = 1; i < 5L; ++i)
-        expect_true(std::abs(res.finest[i] - expect[i]) < 1e-5);
+        expect_true(std::abs(res.derivs[i - 1] - expect[i]) < 1e-5);
       for(unsigned i = 5; i < expect.n_elem; ++i)
-        expect_true(std::abs(res.finest[i] - expect[i]) < 1e-5);
+        expect_true(std::abs(res.derivs[i - 1] - expect[i]) < 1e-5);
     }
   }
 }

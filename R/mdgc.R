@@ -503,7 +503,7 @@ svrg <- function(par_fn, nobs, val, batch_size, maxit = 10L, seed = 1L, lr,
 
     if(verbose)
       cat(
-        sprintf("End if iteration %4d with learning rate %.8f", k - 1L,
+        sprintf("End of iteration %4d with learning rate %.8f", k - 1L,
                 lr_use),
         sprintf("Log marginal likelihood approximation is %12.2f", fun_vals[k]),
         sprintf("Previous approximate gradient norm was %14.2f\n",
