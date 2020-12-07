@@ -10,7 +10,7 @@ mdgc(
   maxit = 10L,
   batch_size = NULL,
   rel_eps = 0.001,
-  method = c("svrg", "adam"),
+  method = c("svrg", "adam", "aug_Lagran"),
   seed = 1L,
   epsilon = 1e-08,
   beta_1 = 0.9,
@@ -113,7 +113,7 @@ if(require(catdata)){
   # impute data
   impu <- mdgc(retinopathy, lr = 1e-3, maxit = 25L, batch_size = 25L,
                rel_eps = 1e-3, maxpts = 5000L, verbose = TRUE,
-               n_threads = 1L)
+               n_threads = 1L, method = "svrg")
 
   # show correlation matrix
   cat("\nEstimated correlation matrix\n")
@@ -126,6 +126,25 @@ if(require(catdata)){
   print(head(impu$ximp, 10))
   cat("\nTruth:\n")
   print(head(truth, 10))
+
+  # using augmented lagrangian method
+  cat("\n")
+  impu_aug <- mdgc(retinopathy, maxit = 25L, rel_eps = 1e-3,
+                   maxpts = 5000L, verbose = TRUE,
+                   n_threads = 1L, method = "aug_Lagran")
+
+  # compare the log-likelihood estimate
+  obj <- get_mdgc_log_ml(retinopathy)
+  cat(sprintf("Maximum log likelihood with SVRG vs. augmented Lagrangian:\n  \%.2f vs. \%.2f\n",
+              mdgc_log_ml(obj, vcov = impu    $vcov, rel_eps = 1e-3),
+              mdgc_log_ml(obj, vcov = impu_aug$vcov, rel_eps = 1e-3)))
+
+  # show correlation matrix
+  cat("\nEstimated correlation matrix (augmented Lagrangian)\n")
+  print(impu_aug$vcov)
+
+  cat("\nImputed values (augmented Lagrangian):\n")
+  print(head(impu_aug$ximp, 10))
 }
 }
 \references{

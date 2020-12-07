@@ -91,8 +91,9 @@ get_mdgc <- function(dat){
 #' Creates a C++ object which is needed to approximate the log marginal
 #' likelihood. The object cannot be saved.
 #'
-#' @param object mdgc object from \code{\link{get_mdgc}}. Ignored by the
-#' default method.
+#' @param object mdgc object from \code{\link{get_mdgc}} or a
+#' \code{\link{data.frame}} to pass to \code{\link{get_mdgc}}. Ignored by
+#' the default method.
 #' @param lower #variables x #observation matrix with lower bounds
 #' for each variable on the normal scale.
 #' @param upper #variables x #observation matrix with upper bounds
@@ -115,6 +116,11 @@ get_mdgc_log_ml <- function(object, ...)
 get_mdgc_log_ml.mdgc <- function(object, ...)
   get_mdgc_log_ml.default(lower = object$lower, upper = object$upper,
                           code = object$code)
+
+#' @rdname get_mdgc_log_ml
+#' @export
+get_mdgc_log_ml.data.frame <- function(object, ...)
+  get_mdgc_log_ml(get_mdgc(object))
 
 #' @rdname get_mdgc_log_ml
 #' @export
@@ -275,6 +281,10 @@ mdgc_start_value.default <- function(object, lower, upper, code,
 #' @param epsilon,beta_1,beta_2 ADAM parameters.
 #' @param conv_crit relative convergence threshold.
 #' @param verbose logical for whether to print output during the estimation.
+#' @param mu starting value for the penalty in the augmented Lagrangian
+#' method.
+#' @param lambda starting values for the Lagrange multiplier estimates.
+#' \code{NULL} yields a default.
 #' @inheritParams mdgc_log_ml
 #'
 #' @references
@@ -282,14 +292,17 @@ mdgc_start_value.default <- function(object, lower, upper, code,
 #'
 #' Johnson, R., & Zhang, T. (2013). \emph{Accelerating stochastic gradient descent using predictive variance reduction}. In Advances in neural information processing systems.
 #'
+#' @importFrom stats optim
 #' @export
 mdgc_fit <- function(ptr, vcov, lr = 1e-3, rel_eps = 1e-3,
                      maxit = 10L, batch_size = NULL,
-                     method = c("svrg", "adam"), seed = 1L, epsilon = 1e-8,
+                     method = c("svrg", "adam", "aug_Lagran"), seed = 1L,
+                     epsilon = 1e-8,
                      beta_1 = .9, beta_2 = .999, n_threads = 1L,
                      do_reorder = TRUE, abs_eps = -1., maxpts = 10000L,
                      minvls = 100L, verbose = FALSE, decay = .98,
-                     conv_crit = 1e-6, use_aprx = FALSE){
+                     conv_crit = 1e-6, use_aprx = FALSE, mu = 1,
+                     lambda = NULL){
   #####
   # checks
   nvars <- attr(ptr, "nvars")
@@ -307,7 +320,7 @@ mdgc_fit <- function(ptr, vcov, lr = 1e-3, rel_eps = 1e-3,
     is.integer(batch_size), length(batch_size) == 1L, batch_size > 0L,
     batch_size <= nobs,
     is.numeric(rel_eps), length(rel_eps) == 1L, rel_eps >= 0.,
-    is.character(method), method %in% c("svrg", "adam"),
+    is.character(method), method %in% c("svrg", "adam", "aug_Lagran"),
     is.integer(seed), length(seed) == 1L, is.finite(seed) || is.null(seed),
     is.integer(n_threads), length(n_threads) == 1L, n_threads > 0L,
     is.numeric(epsilon), length(epsilon) == 1L, epsilon >= 0.,
@@ -322,12 +335,18 @@ mdgc_fit <- function(ptr, vcov, lr = 1e-3, rel_eps = 1e-3,
     is.numeric(decay), length(decay) == 1L, decay > 0,
     is.numeric(conv_crit), length(conv_crit) == 1L, is.finite(conv_crit),
     is.logical(use_aprx), length(use_aprx) == 1L,
-    is.finite(use_aprx))
+    is.finite(use_aprx),
+    is.numeric(mu), length(mu) == 1L, mu > 0,
+    is.null(lambda) || is.numeric(lambda))
 
   #####
   # assign functions to use
   # indices used to apply a matrix product with a get_commutation matrix
   com_vec <- get_commutation_vec(nvars, nvars, FALSE)
+
+  # indices of a diagonal entries with in a vector with only the lower
+  # diagonal
+  idx_diag <- c(1L, 1L + cumsum(NCOL(vcov):2))
 
   # computes the approximate log marginal likelihood.
   #
@@ -356,7 +375,6 @@ mdgc_fit <- function(ptr, vcov, lr = 1e-3, rel_eps = 1e-3,
       gr <- gr[com_vec] + c(gr)
       gr <- x_dot_X_kron_I(x = gr, X = tmp, l = nvars)
       gr <- gr[, lower.tri(tmp, TRUE)]
-      idx_diag <- c(1L, 1L + cumsum(NCOL(tmp):2))
       gr[idx_diag] <- gr[idx_diag] * diag(tmp)
 
       attr(log_ml, "grad") <- gr
@@ -383,8 +401,98 @@ mdgc_fit <- function(ptr, vcov, lr = 1e-3, rel_eps = 1e-3,
       batch_size = batch_size, maxit = maxit, seed = seed, lr = lr,
       verbose = verbose, maxpts = maxpts_use, decay = decay,
       conv_crit = conv_crit, rel_eps = rel_eps))
+  else if(method != "aug_Lagran")
+    stop(sprintf("Method '%s' is not implemented", method))
 
-  stop(sprintf("Method '%s' is not implemented", method))
+  # construct function to evaluate the constraints and the derivatives
+  # first assign the indices for the contraints
+  constraints_idx <- matrix(rep(1:NROW(vcov), 2), ncol = 2,
+                            dimnames = list(NULL, c("row", "col")))
+  constraints_idx <- constraints_idx - 1
+  # then the wanted value
+  constraints_val <- rep(1, NROW(vcov))
+  # then the functions
+  get_cons <- function(par){
+    par_exp <- par
+    par_exp[idx_diag] <- exp(par[idx_diag])
+    conts <- lower_tri_inner(x = par_exp, idx = constraints_idx,
+                             jacob = FALSE, rhs = numeric())
+    conts - constraints_val
+  }
+  c_func <- function(par, derivs = FALSE, lambda, mu){
+    mu_scaled <- mu * nobs / 2
+    conts <- get_cons(par)
+
+    if(!derivs)
+      return(-drop(lambda %*% conts) + mu_scaled * sum(conts^2))
+
+    rhs <- -lambda + 2 * mu_scaled * conts
+    par_exp <- par
+    par_exp[idx_diag] <- exp(par[idx_diag])
+    out <- lower_tri_inner(x = par_exp, idx = constraints_idx,
+                           jacob = TRUE, rhs = rhs)
+    out[idx_diag] <- out[idx_diag] * exp(par[idx_diag])
+    out
+  }
+
+  # assign function for the augmented problem
+  indices <- 0:(nobs - 1L)
+  is_ok <- function(par){
+    egs <- try(eigen(.get_lchol_inv(par))$values, silent = TRUE)
+    if(inherits(egs, "try-error"))
+      return(FALSE)
+    !(any(egs < 0) || max(egs) * .Machine$double.eps * 10 > min(egs))
+  }
+  fn <- function(par, mu, lambda){
+    if(!is_ok(par))
+      return(NA_real_)
+    -par_fn(par = par, comp_derivs = FALSE, indices = indices,
+            maxpts = maxpts) + c_func(
+              par = par, derivs = FALSE, lambda = lambda, mu = mu)
+  }
+  gr <- function(par, mu, lambda){
+    if(!is_ok(par))
+      stop("invalid 'par' in 'gr'")
+    -attr(par_fn(
+      par = par, comp_derivs = TRUE, indices = indices,
+      maxpts = maxpts), "grad") + c_func(
+              par = par, derivs = TRUE, lambda = lambda, mu = mu)
+  }
+
+  # perform the augmented Lagrangian method
+  if(is.null(lambda))
+    lambda <- numeric(length(constraints_val))
+  stopifnot(length(lambda) == length(constraints_val),
+            all(is.finite(lambda)))
+  par <- .get_lchol(vcov)
+  const_norm <- Inf
+  for(i in 1:maxit){
+    if(verbose)
+      cat(sprintf("\nSolving inner problem in iteration %d\n", i))
+    opt_res <- optim(par, fn, gr, method = "BFGS", mu = mu, lambda = lambda,
+                     control = list(trace = verbose, reltol = conv_crit,
+                                    REPORT = 1, maxit = maxit))
+
+    # check constraints
+    const <- get_cons(opt_res$par)
+    all_ok <- all(abs(const) < 1e-3)
+    if(all_ok)
+      break
+
+    # update lambda, mu and par. Then repaet
+    lambda <- lambda - mu * nobs * const
+    new_norm <- norm(t(const), "F")
+    if(verbose)
+      cat(sprintf("Norm of constraint constraint violation: %16.8f\n",
+                  new_norm))
+    if(new_norm > const_norm / 2)
+      mu <- mu * 10
+    const_norm <- new_norm
+    par <- opt_res$par
+  }
+
+  list(result = cov2cor(.get_lchol_inv(par)), mu = mu,
+       lambda = lambda)
 }
 
 #####
@@ -658,7 +766,7 @@ mdgc_impute <- function(object, vcov, rel_eps = 1e-3, maxit = 10000L,
 #'   # impute data
 #'   impu <- mdgc(retinopathy, lr = 1e-3, maxit = 25L, batch_size = 25L,
 #'                rel_eps = 1e-3, maxpts = 5000L, verbose = TRUE,
-#'                n_threads = 1L)
+#'                n_threads = 1L, method = "svrg")
 #'
 #'   # show correlation matrix
 #'   cat("\nEstimated correlation matrix\n")
@@ -671,10 +779,29 @@ mdgc_impute <- function(object, vcov, rel_eps = 1e-3, maxit = 10000L,
 #'   print(head(impu$ximp, 10))
 #'   cat("\nTruth:\n")
 #'   print(head(truth, 10))
+#'
+#'   # using augmented lagrangian method
+#'   cat("\n")
+#'   impu_aug <- mdgc(retinopathy, maxit = 25L, rel_eps = 1e-3,
+#'                    maxpts = 5000L, verbose = TRUE,
+#'                    n_threads = 1L, method = "aug_Lagran")
+#'
+#'   # compare the log-likelihood estimate
+#'   obj <- get_mdgc_log_ml(retinopathy)
+#'   cat(sprintf("Maximum log likelihood with SVRG vs. augmented Lagrangian:\n  %.2f vs. %.2f\n",
+#'               mdgc_log_ml(obj, vcov = impu    $vcov, rel_eps = 1e-3),
+#'               mdgc_log_ml(obj, vcov = impu_aug$vcov, rel_eps = 1e-3)))
+#'
+#'   # show correlation matrix
+#'   cat("\nEstimated correlation matrix (augmented Lagrangian)\n")
+#'   print(impu_aug$vcov)
+#'
+#'   cat("\nImputed values (augmented Lagrangian):\n")
+#'   print(head(impu_aug$ximp, 10))
 #' }
 mdgc <- function(dat, lr = 1e-3, maxit = 10L, batch_size = NULL,
-                 rel_eps = 1e-3,
-                 method = c("svrg", "adam"), seed = 1L, epsilon = 1e-8,
+                 rel_eps = 1e-3, method = c("svrg", "adam", "aug_Lagran"),
+                 seed = 1L, epsilon = 1e-8,
                  beta_1 = .9, beta_2 = .999, n_threads = 1L,
                  do_reorder = TRUE, abs_eps = -1, maxpts = 10000L,
                  minvls = 100L, verbose = FALSE, irel_eps = rel_eps,

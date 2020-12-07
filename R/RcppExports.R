@@ -33,3 +33,7 @@ impute <- function(lower, upper, code, Sigma, truth, margs, rel_eps, abs_eps, ma
     .Call(`_mdgc_impute`, lower, upper, code, Sigma, truth, margs, rel_eps, abs_eps, maxit, passed_names, outer_names, n_threads, do_reorder, minvls, use_aprx)
 }
 
+lower_tri_inner <- function(x, idx, jacob, rhs) {
+    .Call(`_mdgc_lower_tri_inner`, x, idx, jacob, rhs)
+}
+

@@ -3,6 +3,7 @@
 \name{get_mdgc_log_ml}
 \alias{get_mdgc_log_ml}
 \alias{get_mdgc_log_ml.mdgc}
+\alias{get_mdgc_log_ml.data.frame}
 \alias{get_mdgc_log_ml.default}
 \title{Get Pointer to C++ Object to Approximate the Log Marginal Likelihood}
 \usage{
@@ -10,11 +11,14 @@ get_mdgc_log_ml(object, ...)
 
 \method{get_mdgc_log_ml}{mdgc}(object, ...)
 
+\method{get_mdgc_log_ml}{data.frame}(object, ...)
+
 \method{get_mdgc_log_ml}{default}(object, lower, upper, code, ...)
 }
 \arguments{
-\item{object}{mdgc object from \code{\link{get_mdgc}}. Ignored by the
-default method.}
+\item{object}{mdgc object from \code{\link{get_mdgc}} or a
+\code{\link{data.frame}} to pass to \code{\link{get_mdgc}}. Ignored by
+the default method.}
 
 \item{...}{used to pass arguments to S3 methods.}
 

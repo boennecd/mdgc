@@ -182,17 +182,34 @@ mark(`Setup time` = {
 #> # A tibble: 1 x 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Setup time   17.3ms     18ms      54.7    8.86MB     12.4
+#> 1 Setup time   17.6ms     18ms      54.1    8.86MB     12.3
 
-# fit the model using two different methods
+# fit the model using three different methods
 set.seed(60941821)
+system.time(
+  fit_Lagran_start <- mdgc_fit(
+    ptr = log_ml_ptr, vcov = start_val, n_threads = 4L, 
+    maxit = 25L, method = "aug_Lagran", rel_eps = 1e-3, maxpts = 200L, 
+    verbose = FALSE))
+#>    user  system elapsed 
+#>   148.7     0.0    37.2
+system.time(
+  fit_Lagran <- mdgc_fit(
+    ptr = log_ml_ptr, vcov = fit_Lagran_start$result, n_threads = 4L, 
+    maxit = 25L, method = "aug_Lagran", rel_eps = 1e-3, maxpts = 5000L, 
+    verbose = FALSE, mu = fit_Lagran_start$mu, 
+    lambda = fit_Lagran_start$lambda))
+#>    user  system elapsed 
+#>   33.19    0.00    8.39
+
 system.time(
   fit_adam <- mdgc_fit(
     ptr = log_ml_ptr, vcov = start_val, n_threads = 4L, 
     lr = 1e-3, maxit = 25L, batch_size = 100L, method = "adam", 
      rel_eps = 1e-3, maxpts = 5000L))
 #>    user  system elapsed 
-#>   37.49    0.00    9.38
+#>    42.0     0.0    10.5
+
 set.seed(fit_seed <- 19570958L)
 system.time(
   fit_svrg <- mdgc_fit(
@@ -299,13 +316,18 @@ system.time(
 #> Log marginal likelihood approximation is    -23331.65
 #> Previous approximate gradient norm was         227.54
 #>    user  system elapsed 
-#>    79.4     0.0    19.9
+#>    84.7     0.0    21.2
 
 # compare the log marginal likelihood 
-mdgc_log_ml(vcov = fit_adam$result, ptr = log_ml_ptr, rel_eps = 1e-3)
-#> [1] -23351
-mdgc_log_ml(vcov = fit_svrg$result, ptr = log_ml_ptr, rel_eps = 1e-3)
-#> [1] -23332
+print(c(
+  `Augmented Lagrangian` = 
+    mdgc_log_ml(vcov = fit_Lagran$result, ptr = log_ml_ptr, rel_eps = 1e-3),
+  ADAM = 
+    mdgc_log_ml(vcov = fit_adam$result  , ptr = log_ml_ptr, rel_eps = 1e-3),
+  SVRG =
+    mdgc_log_ml(vcov = fit_svrg$result  , ptr = log_ml_ptr, rel_eps = 1e-3)), digits = 10)
+#> Augmented Lagrangian                 ADAM                 SVRG 
+#>         -23331.13897         -23350.31261         -23331.61267
 
 # we can use an approximation in the method
 set.seed(fit_seed)
@@ -415,7 +437,7 @@ system.time(
 #> Log marginal likelihood approximation is    -23331.65
 #> Previous approximate gradient norm was         227.54
 #>    user  system elapsed 
-#>    58.8     0.0    14.7
+#>    57.0     0.0    14.2
 norm(fit_svrg_aprx$result - fit_svrg$result, "F") # essentially the same
 #> [1] 9.54e-08
 
@@ -433,24 +455,38 @@ do_plot <- function(est, truth, main){
   f(est - truth, "Difference")
 }
 
-do_plot(fit_adam$result, dat$Sigma, "Estimates (ADAM)")
+do_plot(fit_Lagran$result, dat$Sigma, "Estimates (Aug. Lagrangian)")
 ```
 
 <img src="man/figures/README-sim_dat-1.png" width="100%" />
 
 ``` r
-do_plot(fit_svrg$result, dat$Sigma, "Estimates (SVRG)")
+do_plot(fit_adam  $result, dat$Sigma, "Estimates (ADAM)")
 ```
 
 <img src="man/figures/README-sim_dat-2.png" width="100%" />
 
 ``` r
+do_plot(fit_svrg  $result, dat$Sigma, "Estimates (SVRG)")
+```
+
+<img src="man/figures/README-sim_dat-3.png" width="100%" />
+
+``` r
+
+norm(fit_Lagran$result - dat$Sigma, "F")
+#> [1] 0.486
+norm(fit_adam  $result - dat$Sigma, "F")
+#> [1] 0.501
+norm(fit_svrg  $result - dat$Sigma, "F")
+#> [1] 0.488
+
 # perform the imputation
 system.time(
   imp_res <- mdgc_impute(mdgc_obj, fit_svrg$result, rel_eps = 1e-3,
                          maxit = 10000L, n_threads = 4L))
 #>    user  system elapsed 
-#>   17.31    0.00    4.78
+#>   16.85    0.00    4.71
 
 # look at the result for one of the observations
 imp_res[2L]
@@ -647,7 +683,7 @@ system.time(miss_res <- missForest(miss_forest_arg))
 #>   missForest iteration 8 in progress...done!
 #>   missForest iteration 9 in progress...done!
 #>    user  system elapsed 
-#>  47.279   0.036  47.338
+#>  45.570   0.035  45.607
 
 # turn binary variables back to logicals
 miss_res$ximp[, is_log] <- lapply(

@@ -11,7 +11,7 @@ mdgc_fit(
   rel_eps = 0.001,
   maxit = 10L,
   batch_size = NULL,
-  method = c("svrg", "adam"),
+  method = c("svrg", "adam", "aug_Lagran"),
   seed = 1L,
   epsilon = 1e-08,
   beta_1 = 0.9,
@@ -24,7 +24,9 @@ mdgc_fit(
   verbose = FALSE,
   decay = 0.98,
   conv_crit = 1e-06,
-  use_aprx = FALSE
+  use_aprx = FALSE,
+  mu = 1,
+  lambda = NULL
 )
 }
 \arguments{
@@ -67,6 +69,12 @@ reordering. \code{TRUE} is likely the best option.}
 \item{use_aprx}{logical for whether to use an approximation of
 \code{\link{pnorm}} and \code{\link{qnorm}}. This may yield a
 noticeable reduction in the computation time.}
+
+\item{mu}{starting value for the penalty in the augmented Lagrangian
+method.}
+
+\item{lambda}{starting values for the Lagrange multiplier estimates.
+\code{NULL} yields a default.}
 }
 \description{
 Estimates the correlation matrix. The \code{lr} parameter

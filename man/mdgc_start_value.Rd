@@ -12,8 +12,9 @@ mdgc_start_value(object, ...)
 mdgc_start_value.default(object, lower, upper, code, n_threads = 1L, ...)
 }
 \arguments{
-\item{object}{mdgc object from \code{\link{get_mdgc}}. Ignored by the
-default method.}
+\item{object}{mdgc object from \code{\link{get_mdgc}} or a
+\code{\link{data.frame}} to pass to \code{\link{get_mdgc}}. Ignored by
+the default method.}
 
 \item{...}{used to pass arguments to S3 methods.}
 

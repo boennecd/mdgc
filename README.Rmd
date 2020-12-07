@@ -174,13 +174,26 @@ mark(`Setup time` = {
   start_val <- mdgc_start_value(mdgc_obj)
 }, min_iterations = 10)
 
-# fit the model using two different methods
+# fit the model using three different methods
 set.seed(60941821)
+system.time(
+  fit_Lagran_start <- mdgc_fit(
+    ptr = log_ml_ptr, vcov = start_val, n_threads = 4L, 
+    maxit = 25L, method = "aug_Lagran", rel_eps = 1e-3, maxpts = 200L, 
+    verbose = FALSE))
+system.time(
+  fit_Lagran <- mdgc_fit(
+    ptr = log_ml_ptr, vcov = fit_Lagran_start$result, n_threads = 4L, 
+    maxit = 25L, method = "aug_Lagran", rel_eps = 1e-3, maxpts = 5000L, 
+    verbose = FALSE, mu = fit_Lagran_start$mu, 
+    lambda = fit_Lagran_start$lambda))
+
 system.time(
   fit_adam <- mdgc_fit(
     ptr = log_ml_ptr, vcov = start_val, n_threads = 4L, 
     lr = 1e-3, maxit = 25L, batch_size = 100L, method = "adam", 
      rel_eps = 1e-3, maxpts = 5000L))
+
 set.seed(fit_seed <- 19570958L)
 system.time(
   fit_svrg <- mdgc_fit(
@@ -189,8 +202,13 @@ system.time(
     verbose = TRUE, rel_eps = 1e-3, maxpts = 5000L))
 
 # compare the log marginal likelihood 
-mdgc_log_ml(vcov = fit_adam$result, ptr = log_ml_ptr, rel_eps = 1e-3)
-mdgc_log_ml(vcov = fit_svrg$result, ptr = log_ml_ptr, rel_eps = 1e-3)
+print(c(
+  `Augmented Lagrangian` = 
+    mdgc_log_ml(vcov = fit_Lagran$result, ptr = log_ml_ptr, rel_eps = 1e-3),
+  ADAM = 
+    mdgc_log_ml(vcov = fit_adam$result  , ptr = log_ml_ptr, rel_eps = 1e-3),
+  SVRG =
+    mdgc_log_ml(vcov = fit_svrg$result  , ptr = log_ml_ptr, rel_eps = 1e-3)), digits = 10)
 
 # we can use an approximation in the method
 set.seed(fit_seed)
@@ -216,8 +234,14 @@ do_plot <- function(est, truth, main){
   f(est - truth, "Difference")
 }
 
-do_plot(fit_adam$result, dat$Sigma, "Estimates (ADAM)")
-do_plot(fit_svrg$result, dat$Sigma, "Estimates (SVRG)")
+do_plot(fit_Lagran$result, dat$Sigma, "Estimates (Aug. Lagrangian)")
+do_plot(fit_adam  $result, dat$Sigma, "Estimates (ADAM)")
+do_plot(fit_svrg  $result, dat$Sigma, "Estimates (SVRG)")
+
+norm(fit_Lagran$result - dat$Sigma, "F")
+norm(fit_adam  $result - dat$Sigma, "F")
+norm(fit_svrg  $result - dat$Sigma, "F")
+
 # perform the imputation
 system.time(
   imp_res <- mdgc_impute(mdgc_obj, fit_svrg$result, rel_eps = 1e-3,

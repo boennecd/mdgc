@@ -132,6 +132,19 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// lower_tri_inner
+Rcpp::NumericVector lower_tri_inner(Rcpp::NumericVector x, Rcpp::IntegerMatrix idx, bool const jacob, Rcpp::NumericVector rhs);
+RcppExport SEXP _mdgc_lower_tri_inner(SEXP xSEXP, SEXP idxSEXP, SEXP jacobSEXP, SEXP rhsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type x(xSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerMatrix >::type idx(idxSEXP);
+    Rcpp::traits::input_parameter< bool const >::type jacob(jacobSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type rhs(rhsSEXP);
+    rcpp_result_gen = Rcpp::wrap(lower_tri_inner(x, idx, jacob, rhs));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 RcppExport SEXP run_testthat_tests(SEXP);
 
@@ -144,6 +157,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_mdgc_get_commutation_vec", (DL_FUNC) &_mdgc_get_commutation_vec, 3},
     {"_mdgc_x_dot_X_kron_I_wrap", (DL_FUNC) &_mdgc_x_dot_X_kron_I_wrap, 3},
     {"_mdgc_impute", (DL_FUNC) &_mdgc_impute, 15},
+    {"_mdgc_lower_tri_inner", (DL_FUNC) &_mdgc_lower_tri_inner, 4},
     {"run_testthat_tests", (DL_FUNC) &run_testthat_tests, 1},
     {NULL, NULL, 0}
 };

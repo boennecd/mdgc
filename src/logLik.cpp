@@ -171,7 +171,7 @@ double log_ml_term::approximate
           // TODO: memory allocation
           arma::mat inc = d_mu * obs_scaled.t();
 
-          inc /= 2.; // TODO: why?
+          inc /= 2.;
           inc.reshape(n_int, n_obs);
           derivs(idx_int, idx_obs) += inc;
           derivs(idx_obs, idx_int) += inc.t();
@@ -194,7 +194,7 @@ double log_ml_term::approximate
           // TODO: memory allocation
           arma::mat inc = 2 * dmat_V_full * S_oo_inv_S_oi.t();
 
-          inc /= 2.; // TODO: why?
+          inc /= 2.;
           derivs(idx_int, idx_obs) -= inc;
           derivs(idx_obs, idx_int) -= inc.t();
         }

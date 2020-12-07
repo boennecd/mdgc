@@ -646,3 +646,67 @@ Rcpp::List impute
 
   return out;
 }
+
+/**
+ * This function computes the outer product of rows and columns of a
+ * lower triangular matrix X. That is
+ *
+ *   c(X) = (x(i_1)^T x(j_1), ..., x(i_m)^T x(j_m))
+ *
+ * The functions takes a vector with the lower triangular entries. The
+ * gradient with respect to rhs^Tc'(X) is returned if jacob is true.
+ */
+// [[Rcpp::export(rng = false)]]
+Rcpp::NumericVector lower_tri_inner
+  (Rcpp::NumericVector x, Rcpp::IntegerMatrix idx, bool const jacob,
+   Rcpp::NumericVector rhs) {
+  if(idx.nrow() < 1)
+    return Rcpp::NumericVector();
+
+  double const fdim = .5 * (std::sqrt(8 * x.size() + 1) - 1);
+  int const dim = std::lround(fdim);
+  if(std::abs(fdim / dim - 1) >
+       std::numeric_limits<double>::epsilon() * 10)
+    throw std::invalid_argument("lower_tri_outer: invalid x");
+  if(idx.ncol() != 2L)
+    throw std::invalid_argument("lower_tri_outer: invalid idx");
+  if(jacob and rhs.size() != idx.nrow())
+    throw std::invalid_argument("lower_tri_outer: invalid rhs");
+
+  auto tri_map = [&](int const r, int const c){
+    return r + c * dim - (c * (c + 1)) / 2;
+  };
+
+  if(jacob){
+    Rcpp::NumericVector out(x.size());
+    for(int i = 0; i < idx.nrow(); ++i){
+      int const row_i = idx(i, 0),
+                col_i = idx(i, 1);
+
+      int const n_terms = std::min(row_i, col_i) + 1;
+      int icol = tri_map(col_i, 0),
+          irow = tri_map(row_i, 0);
+      for(int j = 0; j < n_terms; ++j, icol += dim - j, irow += dim - j){
+        out(icol) += x[irow] * rhs[i];
+        out(irow) += x[icol] * rhs[i];
+      }
+    }
+
+    return out;
+  }
+
+  Rcpp::NumericVector out(idx.nrow());
+  for(int i = 0; i < idx.nrow(); ++i){
+    double out_i(0.);
+    int const row_i = idx(i, 0),
+              col_i = idx(i, 1);
+    int const n_terms = std::min(row_i, col_i) + 1;
+    double const *dcol = &x[tri_map(col_i, 0)],
+                 *drow = &x[tri_map(row_i, 0)];
+    for(int j = 0; j < n_terms; ++j, dcol += dim - j, drow += dim - j)
+      out_i += *drow * *dcol;
+    out[i] = out_i;
+  }
+
+  return out;
+}
