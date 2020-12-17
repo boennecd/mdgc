@@ -19,8 +19,10 @@ namespace pmvnorm {
 void get_infin(arma::ivec &out, arma::vec const &lower,
                arma::vec const &upper){
 #ifdef DO_CHECKS
-  if(upper.size() != n)
+  if(upper.size() != lower.size())
     throw std::invalid_argument("get_infin: invalid 'upper'");
+  if(out.size() != lower.size())
+    throw std::invalid_argument("get_infin: invalid 'out'");
 #endif
 
   double const *l = lower.begin(),

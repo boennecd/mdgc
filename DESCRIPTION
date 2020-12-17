@@ -31,7 +31,8 @@ LinkingTo:
     Rcpp,
     RcppArmadillo,
     testthat, 
-    BH
+    BH, 
+    psqn
 Imports: 
     Rcpp
 Suggests: 

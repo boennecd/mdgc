@@ -127,7 +127,7 @@ if(require(catdata)){
   cat("\nTruth:\n")
   print(head(truth, 10))
 
-  # using augmented lagrangian method
+  # using augmented Lagrangian method
   cat("\n")
   impu_aug <- mdgc(retinopathy, maxit = 25L, rel_eps = 1e-3,
                    maxpts = 5000L, verbose = TRUE,

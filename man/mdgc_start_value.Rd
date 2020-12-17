@@ -9,7 +9,15 @@ mdgc_start_value(object, ...)
 
 mdgc_start_value(object, ...)
 
-mdgc_start_value.default(object, lower, upper, code, n_threads = 1L, ...)
+mdgc_start_value.default(
+  object,
+  lower,
+  upper,
+  code,
+  categorical,
+  n_threads = 1L,
+  ...
+)
 }
 \arguments{
 \item{object}{mdgc object from \code{\link{get_mdgc}} or a
@@ -28,6 +36,11 @@ for each variable on the normal scale.}
 each variable on the normal scale. Zero implies an observed value (the
 value in \code{upper}), one implies a missing value, and two implies an
 interval.}
+
+\item{categorical}{\code{\link{list}} with 3xn \code{\link{matrix}} with
+categorical outcomes. The first index is the outcome as an integer code,
+the second index is the number of categories, and the third index is the
+index of each categorial variable.}
 
 \item{n_threads}{number of threads to use.}
 }

@@ -20,9 +20,12 @@ get_mdgc <- function(dat){
   reals <- which(sapply(dat, is.numeric))
   bins  <- which(sapply(dat, is.logical))
   ords  <- which(sapply(dat, is.ordered))
+  mults <- which(sapply(dat, is.factor))
+  mults <- setdiff(mults, ords)
 
   nc <- NCOL(dat)
-  stopifnot(length(reals) + length(bins) + length(ords) == nc)
+  stopifnot(
+    length(reals) + length(bins) + length(ords) + length(mults) == nc)
 
   # estimate the marginals
   margs <- lapply(1:nc, function(j){
@@ -61,6 +64,29 @@ get_mdgc <- function(dat){
       attr(out, "borders") <- c(-Inf, ub)
       return(out)
 
+    } else if(is.factor(x)){
+      phat <- table(x) / length(x)
+      mu <- multinomial_find_means(phat)
+      if(attr(mu, "info-code") != 0)
+        warning("multinomial_find_means had non-zero convergence code")
+      mu_aug <- c(0., mu)
+
+      out <- function(x){
+        lv <- c(vapply(!is.na(x), function(x)
+          rep(if(x) -Inf else NA_real_, length(phat)),
+          numeric(length(phat))))
+        ub <- c(vapply(!is.na(x), function(x)
+          if(x) -mu_aug else rep(NA_real_, length(phat)),
+          numeric(length(phat))))
+
+        n <- length(x)
+        list(lower = matrix(lv, n, byrow = TRUE),
+             upper = matrix(ub, n, byrow = TRUE))
+      }
+      attr(out, "levels") <- levels(x)
+      attr(out, "means") <- mu
+
+      return(out)
     }
 
     stop("type not implemented")
@@ -68,9 +94,15 @@ get_mdgc <- function(dat){
 
   # get upper and lower bounds or points for the latent variables
   Z <- mapply(function(x, func) func(x), x = dat, func = margs,
-                SIMPLIFY = "array")
-  lower <- t(Z[, 1L, ])
-  upper <- t(Z[, 2L, ])
+              SIMPLIFY = FALSE)
+  lower <- t(do.call(
+    cbind, lapply(Z, function(x){
+      if(is.matrix(x)) x[, 1] else x$lower
+    })))
+  upper <- t(do.call(
+    cbind, lapply(Z, function(x){
+      if(is.matrix(x)) x[, 2] else x$upper
+    })))
 
   # assign codes for missingness pattern
   code <- matrix(0L, NROW(lower), NCOL(lower))
@@ -78,12 +110,29 @@ get_mdgc <- function(dat){
   code[is_na == 0L] <- 2L
   code[is_na == 2L] <- 1L
 
+  # construct matrix for categorical outcomes
+  if(length(mults)){
+    n_lvls <- sapply(dat[mults], function(x) length(levels(x)))
+    n_vars <- sapply(dat, function(x)
+      if(is.factor(x) && !is.ordered(x)) length(levels(x)) else 1L)
+    idx <- c(0L, cumsum(head(n_vars, -1L)))
+
+    categorical <- lapply(1:NROW(dat), function(i)
+      rbind(as.integer(dat[i, mults]),
+            n_lvls,
+            idx[mults]))
+
+  } else
+    categorical <- replicate(NROW(dat), matrix(0L, 0L, 0L))
+
   # get the true values (needed for imputation)
-  truth <- t(matrix(as.numeric(unlist(dat)), NROW(dat), NCOL(dat)))
+  truth <- t(matrix(as.numeric(unlist(dat)), NROW(dat), NCOL(dat),
+                    dimnames = dimnames(dat)))
 
   structure(list(
     lower = lower, upper = upper, code = code, margs = margs,
-    reals = reals, bins = bins, ords = ords, truth = truth), class = "mdgc")
+    reals = reals, bins = bins, ords = ords, truth = truth,
+    categorical = categorical), class = "mdgc")
 }
 
 #' Get Pointer to C++ Object to Approximate the Log Marginal Likelihood
@@ -102,6 +151,10 @@ get_mdgc <- function(dat){
 #' each variable on the normal scale. Zero implies an observed value (the
 #' value in \code{upper}), one implies a missing value, and two implies an
 #' interval.
+#' @param categorical \code{\link{list}} with 3xn \code{\link{matrix}} with
+#' categorical outcomes. The first index is the outcome as an integer code,
+#' the second index is the number of categories, and the third index is the
+#' index of each categorial variable.
 #' @param ... used to pass arguments to S3 methods.
 #'
 #' @seealso
@@ -115,7 +168,8 @@ get_mdgc_log_ml <- function(object, ...)
 #' @export
 get_mdgc_log_ml.mdgc <- function(object, ...)
   get_mdgc_log_ml.default(lower = object$lower, upper = object$upper,
-                          code = object$code)
+                          code = object$code,
+                          categorical = object$categorical)
 
 #' @rdname get_mdgc_log_ml
 #' @export
@@ -124,20 +178,26 @@ get_mdgc_log_ml.data.frame <- function(object, ...)
 
 #' @rdname get_mdgc_log_ml
 #' @export
-get_mdgc_log_ml.default <- function(object, lower, upper, code, ...){
+get_mdgc_log_ml.default <- function(object, lower, upper, code, categorical,
+                                    ...){
   # checks
   di <- dim(lower)
   stopifnot(
     di[1] > 0L, di[2] > 0L, length(di) == 2L,
     all(di == dim(upper)), all(di == dim(code)),
     is.numeric(lower), is.numeric(upper), is.integer(code),
-    all(is.finite(code)), all(range(code) %in% 0:2))
+    all(is.finite(code)), all(range(code) %in% 0:2),
+    is.list(categorical),
+    all(sapply(categorical, function(x) is.matrix(x) && is.integer(x))),
+    all(dim(categorical[[1L]]) == sapply(categorical, dim)))
 
   keep <- colSums(is.na(lower) & is.na(upper)) < NROW(upper)
   out <- get_log_lm_terms_cpp(lower = lower[, keep], upper = upper[, keep],
-                              code = code[, keep])
+                              code = code[, keep],
+                              categorical = categorical[keep])
   attr(out, "nobs") <- NCOL(upper)
   attr(out, "nvars") <- NROW(lower)
+  attr(out, "categorical") <- categorical
   out
 }
 
@@ -233,15 +293,17 @@ mdgc_start_value <- function(...)
 #' @rdname mdgc_start_value
 #' @export
 mdgc_start_value <- function(object, ...)
-  mdgc_start_value.default(lower = object$lower, upper = object$upper,
-                           code = object$code, ...)
+  mdgc_start_value.default(
+    lower = object$lower, upper = object$upper, code = object$code,
+    categorical = object$categorical, ...)
 
 #' @rdname mdgc_start_value
 #' @importFrom stats cov cov2cor
 #' @export
 mdgc_start_value.default <- function(object, lower, upper, code,
-                                     n_threads = 1L, ...){
-  Z <- get_z_hat(lower, upper, code, n_threads = n_threads)
+                                     categorical, n_threads = 1L, ...){
+  Z <- get_z_hat(lower, upper, code, categorical = categorical,
+                 n_threads = n_threads)
   out <- cov(t(Z), use = "pairwise.complete.obs")
 
   # handle non-postive definite estimates
@@ -252,7 +314,106 @@ mdgc_start_value.default <- function(object, lower, upper, code,
     out <- tcrossprod(eg$vectors * rep(eg$values, each = NROW(Z)), eg$vectors)
   }
 
+  out <- cov2cor(out)
+  any_cate <- length(categorical[[1L]])
+  if(!any_cate)
+    return(out)
+
+  # constrain the matrix
+  # first assign the indices for the contraints
+  n_latent <- NCOL(out)
+  constraints_idx <- matrix(rep(1:n_latent, 2), ncol = 2,
+                            dimnames = list(NULL, c("row", "col")))
+  constraints_idx <- constraints_idx - 1
+  # then the wanted value
+  constraints_val <- rep(1, n_latent)
+
+  # add zero constraints from the categorical values
+  zero_indices <- .get_categorical_zero_indices(categorical)
+  constraints_val <- c(constraints_val, rep(0, NROW(zero_indices)))
+  constraints_idx <- rbind(constraints_idx, zero_indices)
+
+  # assign objective function and the gradient
+  com_vec <- get_commutation_vec(n_latent, n_latent, FALSE)
+  get_mat_from_cholesky <- function(x){
+    out <- matrix(0., n_latent, n_latent)
+    out[lower.tri(out, TRUE)] <- x
+    tcrossprod(out)
+  }
+  fn <- function(x, lambda, mu){
+    out_hat <- get_mat_from_cholesky(x)
+    consts <- lower_tri_inner(
+      x = x, idx = constraints_idx, jacob = FALSE, rhs = numeric())
+    consts <- consts - constraints_val
+
+    norm(out_hat - out, "F")^2 / 2 - sum(lambda * consts) +
+      mu / 2 * sum(consts^2)
+  }
+  gr <- function(x, lambda, mu){
+    out_hat <- get_mat_from_cholesky(x)
+
+    L <- matrix(0., n_latent, n_latent)
+    L[lower.tri(L, TRUE)] <- x
+
+    d_Sig <- out_hat - out
+    d_Sig <- ((d_Sig + d_Sig[com_vec]) %*% L)[lower.tri(L, TRUE)]
+
+    consts <- lower_tri_inner(
+      x = x, idx = constraints_idx, jacob = FALSE, rhs = numeric())
+    consts <- consts - constraints_val
+
+    rhs <- -lambda + mu * consts
+    d_aug <- lower_tri_inner(
+      x = x, idx = constraints_idx, jacob = TRUE, rhs = rhs)
+
+    d_Sig + d_aug
+  }
+
+  # augmented Lagrangian method
+  lambda <- numeric(NROW(constraints_idx))
+  mu <- 1
+  par <- t(chol(out))[lower.tri(out, TRUE)]
+
+  # perform the optimization
+  for(i in 1:25){
+    opt <- optim(par, fn, gr, mu = mu, lambda = lambda, method = "BFGS")
+    par <- opt$par
+
+    consts <- lower_tri_inner(
+      x = par, idx = constraints_idx, jacob = FALSE, rhs = numeric()) -
+      constraints_val
+
+    all_ok <- all(abs(consts) < 1e-8)
+    if(all_ok)
+      break
+
+    # update lambda, mu and par. Then repaet
+    lambda <- lambda - mu * consts
+    mu <- mu * 5
+  }
+
+  # get the matrix and potentially alter eigenvalues
+  out <- get_mat_from_cholesky(par)
+  eg <- eigen(out, symmetric = TRUE)
+  eps <- 1e-2 * max(eg$values)
+  if(any(is_small <- eg$values < eps)){
+    eg$values[is_small] <- eps
+    out <- tcrossprod(eg$vectors * rep(eg$values, each = NROW(Z)), eg$vectors)
+  }
+
   cov2cor(out)
+}
+
+.get_categorical_zero_indices <- function(categorical){
+  # the matrices should be the same for all log likelihood terms
+  cat_info <- categorical[[1L]]
+  cat_info <- apply(cat_info, 2L, function(info){
+    latent_idx <- info[3]
+    n_vars <- info[2]
+    indices <- latent_idx + 1:n_vars - 1L
+    subset(expand.grid(row = indices, col = indices), row > col)
+  })
+  do.call(rbind, lapply(cat_info, as.matrix))
 }
 
 #' Estimate the Correlation Matrix
@@ -339,6 +500,10 @@ mdgc_fit <- function(ptr, vcov, lr = 1e-3, rel_eps = 1e-3,
     is.numeric(mu), length(mu) == 1L, mu > 0,
     is.null(lambda) || is.numeric(lambda))
 
+  categorical <- attr(ptr, "categorical")
+  any_categorical <- length(categorical[[1L]]) > 0
+  stopifnot(!any_categorical || method == "aug_Lagran")
+
   #####
   # assign functions to use
   # indices used to apply a matrix product with a get_commutation matrix
@@ -411,6 +576,15 @@ mdgc_fit <- function(ptr, vcov, lr = 1e-3, rel_eps = 1e-3,
   constraints_idx <- constraints_idx - 1
   # then the wanted value
   constraints_val <- rep(1, NROW(vcov))
+
+  if(any_categorical){
+    # add constraints for off-diagonal elements
+    cat_info <- .get_categorical_zero_indices(categorical)
+
+    constraints_val <- c(constraints_val, rep(0, NROW(cat_info)))
+    constraints_idx <- rbind(constraints_idx, cat_info)
+  }
+
   # then the functions
   get_cons <- function(par){
     par_exp <- par
@@ -472,9 +646,10 @@ mdgc_fit <- function(ptr, vcov, lr = 1e-3, rel_eps = 1e-3,
     opt_res <- optim(par, fn, gr, method = "BFGS", mu = mu, lambda = lambda,
                      control = list(trace = verbose, reltol = conv_crit,
                                     REPORT = 1, maxit = maxit))
+    par <- opt_res$par
 
     # check constraints
-    const <- get_cons(opt_res$par)
+    const <- get_cons(par)
     all_ok <- all(abs(const) < 1e-3)
     if(all_ok)
       break
@@ -483,12 +658,12 @@ mdgc_fit <- function(ptr, vcov, lr = 1e-3, rel_eps = 1e-3,
     lambda <- lambda - mu * nobs * const
     new_norm <- norm(t(const), "F")
     if(verbose)
-      cat(sprintf("Norm of constraint constraint violation: %16.8f\n",
+      cat(sprintf("Norm of constraint violation: %16.8f\n",
                   new_norm))
     if(new_norm > const_norm / 2)
       mu <- mu * 10
+    # TODO: always increase mu
     const_norm <- new_norm
-    par <- opt_res$par
   }
 
   list(result = cov2cor(.get_lchol_inv(par)), mu = mu,
@@ -672,7 +847,10 @@ mdgc_impute <- function(object, vcov, rel_eps = 1e-3, maxit = 10000L,
   #####
   # checks
   margs <- object$margs
+  categorical <- object$categorical
   nvars <- length(margs)
+  if(length(categorical[[1L]]) > 0)
+    nvars <- nvars + sum(categorical[[1L]][2, ]) - NCOL(categorical[[1L]])
   stopifnot(
     inherits(object, "mdgc"),
     is.matrix(vcov), is.numeric(vcov), all(dim(vcov) == nvars),
@@ -712,9 +890,9 @@ mdgc_impute <- function(object, vcov, rel_eps = 1e-3, maxit = 10000L,
          Sigma = vcov, truth = object$truth,
          margs = margs_pass, rel_eps = rel_eps, abs_eps = abs_eps,
          maxit = maxit, passed_names = passed_names,
-         outer_names = rownames(object$lower), n_threads = n_threads,
+         outer_names = rownames(object$truth), n_threads = n_threads,
          do_reorder = do_reorder, minvls = minvls,
-         use_aprx = use_aprx)
+         use_aprx = use_aprx, categorical = categorical)
 }
 
 #' Perform Model Estimation and Imputation
@@ -780,7 +958,7 @@ mdgc_impute <- function(object, vcov, rel_eps = 1e-3, maxit = 10000L,
 #'   cat("\nTruth:\n")
 #'   print(head(truth, 10))
 #'
-#'   # using augmented lagrangian method
+#'   # using augmented Lagrangian method
 #'   cat("\n")
 #'   impu_aug <- mdgc(retinopathy, maxit = 25L, rel_eps = 1e-3,
 #'                    maxpts = 5000L, verbose = TRUE,
@@ -809,7 +987,7 @@ mdgc <- function(dat, lr = 1e-3, maxit = 10L, batch_size = NULL,
                  start_val = NULL, decay = .98, conv_crit = 1e-5,
                  use_aprx = FALSE){
   mdgc_obj <- get_mdgc(dat)
-  p <- NCOL(dat)
+  p <- NROW(mdgc_obj$lower)
   log_ml_ptr <- get_mdgc_log_ml(mdgc_obj)
   if(is.null(start_val))
     start_val <- mdgc_start_value(mdgc_obj, n_threads = n_threads)
@@ -826,7 +1004,7 @@ mdgc <- function(dat, lr = 1e-3, maxit = 10L, batch_size = NULL,
     maxpts = maxpts, minvls = minvls, verbose = verbose, decay = decay,
     conv_crit = conv_crit, use_aprx = use_aprx)
   vcov <- fit$result
-  colnames(vcov) <- rownames(vcov) <- colnames(dat)
+  colnames(vcov) <- rownames(vcov) <- rownames(mdgc_obj$lower)
 
   if(verbose)
     cat("Performing imputation...\n")
@@ -850,9 +1028,12 @@ mdgc <- function(dat, lr = 1e-3, maxit = 10L, batch_size = NULL,
   is_cont <- which(sapply(org_data, is.numeric))
   is_bin  <- which(sapply(org_data, is.logical))
   is_ord  <- which(sapply(org_data, is.ordered))
+  is_mult <- which(sapply(org_data, is.factor))
+  is_mult <- setdiff(is_mult, is_ord)
   stopifnot(
-    length(is_cont) + length(is_bin) + length(is_ord) == NCOL(org_data))
-  is_cat <- c(is_bin, is_ord)
+    length(is_cont) + length(is_bin) + length(is_ord) + length(is_mult) ==
+      NCOL(org_data))
+  is_cat <- c(is_bin, is_ord, is_mult)
 
   trans_to_df <- function(x){
     if(is.matrix(x))
@@ -867,12 +1048,16 @@ mdgc <- function(dat, lr = 1e-3, maxit = 10L, batch_size = NULL,
   out <- cbind(out_cont, out_cat)
 
   # set factor levels etc.
-  out <- out[, order(c(is_cont, is_bin, is_ord))]
+  out <- out[, order(c(is_cont, is_bin, is_ord, is_mult))]
   if(length(is_bin) > 0)
     out[, is_bin] <- out[, is_bin] > 1L
   if(length(is_ord) > 0)
     for(i in is_ord)
       out[[i]] <- ordered(
+        unlist(out[[i]]), labels = levels(org_data[, i]))
+  if(length(is_mult) > 0)
+    for(i in is_mult)
+      out[[i]] <- factor(
         unlist(out[[i]]), labels = levels(org_data[, i]))
 
   colnames(out) <- colnames(org_data)

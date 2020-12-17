@@ -117,10 +117,13 @@ sim_dat <- function(n, p = 3L, n_lvls = 5L){
   truth <- matrix(rnorm(n * p), n) %*% chol(Sig)
   
   # determine the type
-  type <- rep(1:3, each = floor((p + 3 - 1) / 3))[1:p]
+  n_rep <- floor((p + 3 - 1) / 3)
+  type <- rep(1:3, each = n_rep)[1:p]
   is_con <- type == 1L
   is_bin <- type == 2L
   is_ord <- type == 3L
+  col_nam <- c(outer(1:n_rep, c("C", "B", "O"), 
+                     function(x, y) paste0(y, x)))[1:p]
   
   # sample which are masked data 
   is_mask <- matrix(runif(n * p) < .3, n)
@@ -131,6 +134,7 @@ sim_dat <- function(n, p = 3L, n_lvls = 5L){
   
   # create observed data
   truth_obs <- data.frame(truth)
+  colnames(truth_obs) <- col_nam
   truth_obs[, is_con] <- qexp(pnorm(as.matrix(truth_obs[, is_con])))
   
   bs_border <- 0
@@ -202,7 +206,7 @@ system.time(
     verbose = TRUE, rel_eps = 1e-3, maxpts = 5000L))
 
 # compare the log marginal likelihood 
-print(c(
+print(rbind(
   `Augmented Lagrangian` = 
     mdgc_log_ml(vcov = fit_Lagran$result, ptr = log_ml_ptr, rel_eps = 1e-3),
   ADAM = 
@@ -1036,14 +1040,18 @@ get_z_hat <- function(lower, upper, code){
 tmp <- get_z_hat(mdgc_obj$lower, mdgc_obj$upper, mdgc_obj$code)
 
 # we also have a C++ function to do this which is faster
+categorical_arg <- replicate(NCOL(mdgc_obj$lower), matrix(0L, 0, 0), 
+                             simplify = FALSE) 
 all.equal(tmp, mdgc:::get_z_hat(
-  mdgc_obj$lower, mdgc_obj$upper, mdgc_obj$code, n_threads = 4L))
+  mdgc_obj$lower, mdgc_obj$upper, mdgc_obj$code, 
+  categorical = categorical_arg, n_threads = 4L))
 
 # the latter is faster but both are relatively fast
 mark(
   `R version  ` = get_z_hat(mdgc_obj$lower, mdgc_obj$upper, mdgc_obj$code), 
   `C++ verison` = mdgc:::get_z_hat(
-  mdgc_obj$lower, mdgc_obj$upper, mdgc_obj$code, n_threads = 4L), 
+  mdgc_obj$lower, mdgc_obj$upper, mdgc_obj$code, 
+  categorical = categorical_arg, n_threads = 4L), 
   min_iterations = 10)
 
 # then we can compute an approximation of the covariance matrix as follows
@@ -1125,6 +1133,376 @@ matplot(
   lls, lty = c(1:3, 2:3), col = c(rep("black", 3), rep("darkblue", 2)), 
   ylim = range(lls[-(1:n_skip), ], na.rm = TRUE), bty = "l", 
   type = "l", xlab = "Iteration", ylab = "Log marginal likelihood")
+```
+
+## Adding Multinomial Variables
+We extend the model suggested by @zhao19 in this section. The example is 
+very similar to the previous one but with multinomial variables.
+
+```{r mult_sim, cache = 1, fig.height = 3, fig.width = 7}
+# simulates a data set and mask some of the data.
+#
+# Args: 
+#   n: number of observations. 
+#   p: number of variables. 
+#   n_lvls: number of levels for the ordinal and multinomial variables. 
+#   verbose: print status during the simulation.
+# 
+# Returns: 
+#   Simluated masked data, the true data, and true covariance matrix. 
+sim_dat <- function(n, p = 4L, n_lvls = 5L, verbose = FALSE){
+  # determine the type
+  n_rep <- floor((p + 4 - 1) / 4)
+  type <- rep(1:4, n_rep)[1:p]
+  is_con  <- type == 1L
+  is_bin  <- type == 2L
+  is_ord  <- type == 3L
+  is_mult <- type == 4L
+  
+  col_nam <- c(outer(c("C", "B", "O", "M"), 1:n_rep, paste0))[1:p]
+  idx <- head(cumsum(c(1L, ifelse(type == 4, n_lvls, 1L))), -1L)
+  
+  # get the covariance matrix
+  n_latent <- p + (n_lvls - 1L) * (p %/% 4)
+
+  Sig <- cov2cor(drop(rWishart(1L, 2 * n_latent, diag(n_latent))))
+  
+  # Find the closest matrix which satisfy the zero constraint
+  type_augmented <- unlist(sapply(seq_along(type), function(x)
+    if(x %% 4 == 0) rep(x, n_lvls) else x))
+  zero_indices <- do.call(rbind, tapply(
+    seq_along(type_augmented)[type_augmented %% 4L == 0L], 
+    type_augmented[type_augmented %% 4L == 0L], function(x)
+      subset(expand.grid(row = x, col = x), row > col)))
+  zero_indices <- as.matrix(zero_indices) - 1L
+  
+  # setup objects and functions to run augmented Lagrangian method
+  par <- t(chol(Sig))
+  par <- par[lower.tri(par, TRUE)]
+  
+  # you can skip these function definitions
+  com_vec <- mdgc:::get_commutation_vec(n_latent, n_latent, FALSE)
+  get_mat_from_cholesky <- function(x){
+    out <- matrix(0., n_latent, n_latent)
+    out[lower.tri(out, TRUE)] <- x
+    tcrossprod(out)
+  }
+  fn <- function(x, lambda, mu){
+    sig_hat <- get_mat_from_cholesky(x)
+    consts <- mdgc:::lower_tri_inner(
+      x = x, idx = zero_indices, jacob = FALSE, rhs = numeric())
+    
+    norm(sig_hat - Sig, "F")^2 / 2 - sum(lambda * consts) +
+      mu / 2 * sum(consts^2)
+  }
+  gr <- function(x, lambda, mu){
+    sig_hat <- get_mat_from_cholesky(x)
+    
+    L <- matrix(0., n_latent, n_latent)
+    L[lower.tri(L, TRUE)] <- x
+    
+    d_Sig <- sig_hat - Sig
+    d_Sig <- ((d_Sig + d_Sig[com_vec]) %*% L)[lower.tri(L, TRUE)]
+    
+    consts <- mdgc:::lower_tri_inner(
+      x = x, idx = zero_indices, jacob = FALSE, rhs = numeric())
+    rhs <- -lambda + mu * consts
+    d_aug <- mdgc:::lower_tri_inner(
+      x = x, idx = zero_indices, jacob = TRUE, rhs = rhs)
+    
+    d_Sig + d_aug
+  }
+  
+  # augmented Lagrangian method
+  lambda <- numeric(NROW(zero_indices))
+  mu <- 1
+  
+  # check gradient
+  if(FALSE){
+    x_test      <- runif(length(par))
+    lambda_test <- runif(length(lambda))
+    all.equal(numDeriv::grad(fn, x_test, lambda = lambda_test, mu = mu),
+              gr(x_test, lambda = lambda_test, mu = mu))
+  }
+  
+  for(i in 1:25){
+    opt <- optim(par, fn, gr, mu = mu, lambda = lambda, method = "BFGS")
+    par <- opt$par
+    
+    consts <- mdgc:::lower_tri_inner(
+      x = par, idx = zero_indices, jacob = FALSE, rhs = numeric())
+      
+    all_ok <- all(abs(consts) < 1e-8)
+    if(all_ok)
+      break
+
+    # update lambda, mu and par. Then repaet
+    lambda <- lambda - mu * consts
+    mu <- mu * 5
+  }
+  
+  # we found a matrix. We set it
+  Sig_new <- cov2cor(get_mat_from_cholesky(par))
+  if(verbose)
+    cat(sprintf(
+      "Relative norm difference between the constrained and simulated covariance matrix is %.2f\n", 
+      norm(Sig - Sig_new, "F") / norm(Sig, "F")))
+  
+  Sig <- Sig_new
+      
+  # draw the observations
+  truth <- matrix(rnorm(n * n_latent), n) %*% chol(Sig)
+  
+  # sample which are masked data 
+  is_mask <- matrix(runif(n * p) < .3, n)
+  
+  # make sure we have no rows with all missing data
+  while(any(all_nans <- rowSums(is_mask) == NCOL(is_mask)))
+    is_mask[all_nans, ] <- runif(sum(all_nans) * p) < .3
+  
+  # create the observed data
+  truth_obs <- lapply(type, function(i) if(i == 1L) numeric(n) else integer(n))
+  truth_obs <- data.frame(truth_obs)
+  colnames(truth_obs) <- col_nam
+  
+  bs_ord <- qnorm(seq(0, 1, length.out = n_lvls + 1L))
+  for(i in 1:p){
+    idx_i <- idx[i]
+    switch(
+      type[i],
+      # continous
+      truth_obs[, i] <- qexp(pnorm(truth[, idx_i])),
+      # binary
+      truth_obs[, i] <- truth[, idx_i] > 0,
+      # ordinal
+      {
+        truth_obs[, i] <- 
+          ordered(as.integer(cut(truth[, idx_i], breaks = bs_ord)))
+        levels(truth_obs[, i]) <- 
+          LETTERS[seq_len(length(unique(truth_obs[, i])))]
+      },
+      # multinomial
+      {
+        truth_obs[, i] <- apply(
+          truth[, idx_i + 1:n_lvls - 1L], 1L, which.max)
+        truth_obs[, i] <- factor(truth_obs[, i], 
+                                 labels = paste0("T", 1:n_lvls))
+      }, 
+      stop("Type is not implemented"))
+  }
+
+  # mask the data
+  seen_obs <- truth_obs
+  seen_obs[is_mask] <- NA
+  
+  list(truth = truth, truth_obs = truth_obs, seen_obs = seen_obs, 
+       Sigma = Sig)
+}
+
+# simulate and show the data
+set.seed(1)
+p <- 8L
+dat <- sim_dat(2000L, p = p, verbose = TRUE, n_lvls = 3)
+
+# show the first rows of the observed data
+head(dat$seen_obs)
+
+# assign object to perform the estimation and the imputation
+obj <- get_mdgc(dat$seen_obs)
+ptr <- get_mdgc_log_ml(obj)
+
+# get starting values
+start_vals <- mdgc_start_value(obj)
+
+# plot the starting values and the true values (should not match because of
+# overparameterization)
+par(mar = c(3, 3, 2, 1), mfcol = c(1, 2))
+sc <- colorRampPalette(c("Red", "White", "Blue"))(201)
+image(start_vals [, NCOL(dat$Sigma):1], zlim = c(-1, 1), col = sc, 
+      main = "Starting values")
+image(dat$Sigma  [, NCOL(dat$Sigma):1], zlim = c(-1, 1), col = sc,
+      main = "Truth")
+# check the log marginal likelihood at the starting values and compare with
+# the true values 
+mdgc_log_ml(ptr, start_vals, n_threads = 1L) # at the starting values
+mdgc_log_ml(ptr, dat$Sigma , n_threads = 1L) # at the true values
+
+# much better than using a diagonal matrix!
+mdgc_log_ml(ptr, diag(NROW(dat$Sigma)), n_threads = 1L)
+
+# estimate the model
+system.time(
+  ests <- mdgc_fit(ptr, vcov = start_vals, method = "aug_Lagran",
+                   n_threads = 4L, rel_eps = 1e-2, maxpts = 1000L, 
+                   minvls = 200L, use_aprx = TRUE))
+
+# refine the estimates
+system.time(
+  ests <- mdgc_fit(ptr, vcov = ests$result, method = "aug_Lagran",
+                   n_threads = 4L, rel_eps = 1e-3, maxpts = 10000L, 
+                   minvls = 1000L, mu = ests$mu, lambda = ests$lambda, 
+                   use_aprx = TRUE))
+
+# compare the estimated and the true values (should not match because of
+# overparameterization)
+image(ests$result[, NCOL(dat$Sigma):1], zlim = c(-1, 1), col = sc, 
+      main = "Estimates")
+image(dat$Sigma  [, NCOL(dat$Sigma):1], zlim = c(-1, 1), col = sc, 
+      main = "Truth")
+# perform the imputation
+system.time(
+  imp_res <- mdgc_impute(obj, ests$result, rel_eps = 1e-3,
+                         maxit = 10000L, n_threads = 4L))
+
+# look at the result for one of the observations
+imp_res[1L]
+
+# compare with the observed and true data
+rbind(truth = dat$truth_obs[1L, ], observed = dat$seen_obs[1L, ])
+
+# we can threshold the data like this
+threshold <- function(org_data, imputed){
+  # checks
+  stopifnot(NROW(org_data) == length(imputed), 
+            is.list(imputed), is.data.frame(org_data))
+  
+  # threshold
+  is_cont <- which(sapply(org_data, is.numeric))
+  is_bin  <- which(sapply(org_data, is.logical)) 
+  is_ord  <- which(sapply(org_data, is.ordered))
+  is_mult <- which(sapply(org_data, is.factor))
+  is_mult <- setdiff(is_mult, is_ord)
+  stopifnot(
+    length(is_cont) + length(is_bin) + length(is_ord) + length(is_mult) == 
+      NCOL(org_data))
+  is_cat <- c(is_bin, is_ord, is_mult)
+  
+  trans_to_df <- function(x){
+    if(is.matrix(x))
+      as.data.frame(t(x))
+    else
+      as.data.frame(  x )
+  }
+  
+  out_cont <- trans_to_df(sapply(imputed, function(x) unlist(x[is_cont])))
+  out_cat <- trans_to_df(sapply(imputed, function(x) 
+    sapply(x[is_cat], which.max)))
+  out <- cbind(out_cont, out_cat)
+  
+  # set factor levels etc. 
+  out <- out[, order(c(is_cont, is_bin, is_ord, is_mult))]
+  if(length(is_bin) > 0)
+    out[, is_bin] <- out[, is_bin] > 1L
+  if(length(is_ord) > 0)
+    for(i in is_ord)
+      out[[i]] <- ordered(
+        unlist(out[[i]]), labels = levels(org_data[, i]))
+  if(length(is_mult) > 0)
+    for(i in is_mult)
+      out[[i]] <- factor(
+        unlist(out[[i]]), labels = levels(org_data[, i]))
+  
+  colnames(out) <- colnames(org_data)
+  out
+}
+thresh_dat <- threshold(dat$seen_obs, imp_res)
+
+# compare thresholded data with observed and true data
+head(thresh_dat)
+head(dat$seen_obs)  # observed data
+head(dat$truth_obs) # true data
+
+# compare correct categories
+get_classif_error <- function(impu_dat, truth = dat$truth_obs, 
+                              observed = dat$seen_obs){
+  is_cat <- sapply(truth, function(x)
+    is.logical(x) || is.factor(x))
+  is_match <- impu_dat[, is_cat] == truth[, is_cat]
+  is_match <- matrix(is_match, ncol = sum(is_cat))
+  is_match[!is.na(observed[, is_cat])] <- NA_integer_
+  setNames(1 - colMeans(is_match, na.rm = TRUE), 
+           colnames(truth)[is_cat])
+}
+get_classif_error(thresh_dat)
+
+# compute RMSE
+get_rmse <- function(impu_dat, truth = dat$truth_obs,
+                     observed = dat$seen_obs){
+  is_con <- sapply(truth, is.numeric)
+  err <- as.matrix(impu_dat[, is_con] - truth[, is_con])
+  err[!is.na(observed[, is_con])] <- NA_real_
+  sqrt(colMeans(err^2, na.rm = TRUE))
+}
+get_rmse(thresh_dat)
+
+# we can compare this with missForest
+miss_forest_arg <- dat$seen_obs
+is_log <- sapply(miss_forest_arg, is.logical)
+miss_forest_arg[, is_log] <- lapply(miss_forest_arg[, is_log], as.factor)
+set.seed(1)
+system.time(miss_res <- missForest(miss_forest_arg))
+
+# turn binary variables back to logicals
+miss_res$ximp[, is_log] <- lapply(
+  miss_res$ximp[, is_log], function(x) as.integer(x) > 1L)
+
+# compare errors
+rbind(mdgc       = get_classif_error(thresh_dat),
+      missForest = get_classif_error(miss_res$ximp))
+rbind(mdgc       = get_rmse(thresh_dat),
+      missForest = get_rmse(miss_res$ximp))
+```
+
+### Edgar Anderson's Iris Data
+We make a small example below were we take the iris data set and randomly 
+mask it. Then we compare the imputation method in this package with 
+missForest.
+
+```{r comp_w_iris, cache=1}
+# load the iris data set
+data(iris)
+
+# assign function to produce iris data set with NAs.
+# 
+# Args:
+#   p_na: chance of missing a value.
+get_iris <- function(p_na = .2){
+  is_miss <- matrix(p_na > runif(NROW(iris) * NCOL(iris)), 
+                    NROW(iris), NCOL(iris))
+  while(any(all_missing <- apply(is_miss, 1, all)))
+    # avoid rows with all missing variables
+    is_miss[all_missing, ] <- p_na > runif(sum(all_missing) * NCOL(iris))
+  
+  # create data set with missing values
+  out <- iris
+  out[is_miss] <- NA 
+  out
+}
+
+# get a data set with all missing values
+set.seed(68129371)
+dat <- get_iris()
+
+# use the mdgc method
+system.time(
+  mdgc_res <- mdgc(dat, maxpts = 5000L, n_threads = 4L, maxit = 25L, 
+                   use_aprx = TRUE, method = "aug_Lagran"))
+
+# some of the impuated values
+head(mdgc_res$ximp)
+
+# the errors
+get_classif_error(impu_dat = mdgc_res$ximp, truth = iris, 
+                  observed = dat)
+get_rmse(impu_dat = mdgc_res$ximp, truth = iris, observed = dat)
+
+# compare with missForest
+system.time(miss_res <- missForest(dat))
+
+# the errors
+get_classif_error(impu_dat = miss_res$ximp, truth = iris, 
+                  observed = dat)
+get_rmse(impu_dat = miss_res$ximp, truth = iris, observed = dat)
 ```
 
 ## References

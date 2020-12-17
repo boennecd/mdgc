@@ -40,8 +40,11 @@ context("Testing 'get_log_lm_terms'")
 dat <- readRDS("get_log_lm_terms-test.RDS")
 
 test_that("'get_log_lm_terms' gives the correct result with and without gradients", {
-  ptr <- mdgc:::get_log_lm_terms_cpp(lower = dat$lower, upper = dat$upper,
-                                     code = dat$code)
+  categorical <- replicate(NCOL(dat$lower),
+                           matrix(0L, 0, 0), simplify = FALSE)
+  ptr <- mdgc:::get_log_lm_terms_cpp(
+    lower = dat$lower, upper = dat$upper, code = dat$code,
+    categorical = categorical)
 
   lcov_to_mat <- function(par){
     p <- (sqrt(8 * length(par) + 1) - 1) / 2
@@ -165,8 +168,11 @@ test_that("'get_log_lm_terms' gives the correct result with and without gradient
 dat <- readRDS("get_log_lm_terms-test-ord-bin.RDS")
 
 test_that("'get_log_lm_terms' gives the correct result with and without gradients (ordinal and binary data)", {
-  ptr <- mdgc:::get_log_lm_terms_cpp(lower = dat$lower, upper = dat$upper,
-                                     code = dat$code)
+  categorical <- replicate(NCOL(dat$lower),
+                           matrix(0L, 0, 0), simplify = FALSE)
+  ptr <- mdgc:::get_log_lm_terms_cpp(
+    lower = dat$lower, upper = dat$upper, code = dat$code,
+    categorical = categorical)
 
   lcov_to_mat <- function(par){
     p <- (sqrt(8 * length(par) + 1) - 1) / 2

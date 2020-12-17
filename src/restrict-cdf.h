@@ -733,30 +733,41 @@ class imputation {
 public:
   class type_base {
   public:
+    virtual int n_latent() const noexcept = 0;
     virtual int n_ele() const noexcept = 0;
-    virtual void set_val(double const, double *& __restrict__)
+    virtual void set_val(double const *, double * __restrict__)
       const noexcept = 0;
     virtual ~type_base() = default;
   };
 
   class known final : public type_base {
+    int const n_latent_val;
   public:
+    inline int n_latent() const noexcept {
+      return n_latent_val;
+    }
     inline int n_ele() const noexcept {
       return 0L;
     };
-    inline void set_val(double const, double *& __restrict__)
+    inline void set_val(double const *, double * __restrict__)
       const noexcept { };
+
+    known(int const n_latent_val = 1): n_latent_val(n_latent_val) { }
   };
 
   class contin final : public type_base {
   public:
+    inline int n_latent() const noexcept {
+      return 1L;
+    }
+
     inline int n_ele() const noexcept {
       return 1L;
     }
 
-    inline void set_val(double const v, double *& __restrict__ res)
+    inline void set_val(double const *v, double * __restrict__ res)
     const noexcept {
-      *res++ = v;
+      *res = *v;
     }
   };
 
@@ -766,19 +777,23 @@ public:
 
     binary(double const border): border(border) { }
 
+    inline int n_latent() const noexcept {
+      return 1L;
+    }
+
     inline int n_ele() const noexcept {
       return 2L;
     }
 
-    inline void set_val(double const v, double *& __restrict__ res)
+    inline void set_val(double const *v, double * __restrict__ res)
       const noexcept {
-      if(v < border){
+      if(*v < border){
         *res++ = 1.;
-        *res++ = 0.;
+        *res   = 0.;
 
       } else {
         *res++ = 0.;
-        *res++ = 1.;
+        *res   = 1.;
 
       }
     }
@@ -811,16 +826,20 @@ public:
       return out;
     })()) { }
 
+    inline int n_latent() const noexcept {
+      return 1L;
+    }
+
     inline int n_ele() const noexcept {
       return n_bs + 1L;
     }
 
-    inline void set_val(double const v, double *& __restrict__ res)
+    inline void set_val(double const *v, double * __restrict__ res)
     const noexcept {
       int i = 0L;
       double const *b = borders.get();
       for(; i < n_bs; ++i, ++b)
-        if(v < *b){
+        if(*v < *b){
           *res++ = 1.;
           break;
         } else
@@ -833,6 +852,36 @@ public:
         for(; i <= n_bs; ++i)
           *res++ = 0.;
       }
+    }
+  };
+
+  class multinomial final : public type_base {
+  public:
+    int const n_lvls;
+
+    multinomial(int const n_lvls): n_lvls(n_lvls) { }
+
+    int n_latent() const noexcept {
+      return n_lvls;
+    }
+    int n_ele() const noexcept {
+      return n_lvls;
+    };
+
+    void set_val
+      (double const *v, double * __restrict__ res) const noexcept {
+      int max_lvl(0);
+      double max_val = *v;
+      res[0] = 1.;
+
+      for(int i = 1; i < n_lvls; ++i)
+        if(v[i] > max_val){
+          res[max_lvl] = 0;
+          max_lvl = i;
+          max_val = v[i];
+          res[i] = 1;
+        } else
+          res[i] = 0;
     }
   };
 
@@ -854,17 +903,25 @@ public:
    * working memory.
    */
   static void alloc_mem(std::vector<type_base const*> const cur_list,
-                        int const max_dim, int const max_threads){
+                        int const max_threads){
     int const n_ints = get_n_integrands(cur_list);
-    rand_Korobov<cdf<imputation> >::alloc_mem(max_dim, n_ints, max_threads);
-    cdf<imputation>::alloc_mem(max_dim, max_threads);
+    int n_latent(0);
+    for(auto &x : cur_list)
+      n_latent += x->n_latent();
+    rand_Korobov<cdf<imputation> >::alloc_mem(n_latent, n_ints, max_threads);
+    cdf<imputation>::alloc_mem(n_latent, max_threads);
     dmem.set_n_mem(
-      (max_dim * (max_dim + 5)) / 2 + max_dim * max_dim + n_ints,
+      // mu_vec, sig_chol, and an extra n_latent vector
+      (n_latent * (n_latent + 5)) / 2 +
+        // a full n_latent x n_latent matrix and one n_latent vector
+        n_latent * (n_latent + 1) +
+        // memory for cdf_mem
+        n_ints,
       max_threads);
   }
 
   imputation(std::vector<type_base const *> const &cur_list,
-             arma::vec const &mu, arma::vec const &Sig):
+             arma::vec const &mu, arma::mat const &Sig):
     cur_list(cur_list), ndim(mu.n_elem) {
     /* set the mean vector and the Cholesky decomposition of the random
      * of the random effects. */
@@ -888,14 +945,6 @@ public:
       // we do not use this memory now as of this writting
       cdf_mem[i] = mu_vec[indices[i]];
     std::copy(cdf_mem, cdf_mem + ndim, mu_vec);
-
-    // permutate the type_base list. TODO: memory allocation
-    int const n_ele = cur_list.size();
-    std::vector<type_base const *> new_list;
-    new_list.reserve(n_ele);
-    for(int i = 0; i < n_ele; ++i)
-      new_list.emplace_back(cur_list[indices[i]]);
-    cur_list = new_list;
   }
 
   static inline int
@@ -935,12 +984,23 @@ public:
       }
     }
 
+    // permutate
+    double *scale_draw_permu = nullptr;
+    if(is_permutated){
+      scale_draw_permu = scale_draw + ndim;
+      for(int i = 0; i < ndim; ++i)
+        scale_draw_permu[indices[i]] = scale_draw[i];
+    } else
+      scale_draw_permu = scale_draw;
+
     double * o = out;
     *o++ = 1.;
-    double const *scale_draw_i = scale_draw;
-    for(int i = 0; i < static_cast<int>(cur_list.size());
-        ++i, ++scale_draw_i)
-      cur_list[i]->set_val(*scale_draw_i, o);
+    double const *scale_draw_i = scale_draw_permu;
+    for(int i = 0; i < static_cast<int>(cur_list.size()); ++i){
+      cur_list[i]->set_val(scale_draw_i, o);
+      o            += cur_list[i]->n_ele();
+      scale_draw_i += cur_list[i]->n_latent();
+    }
   }
 
   inline void univariate(double * out, double const lw, double const ub) {
@@ -969,7 +1029,7 @@ public:
   out_type get_output(double * res, int const minvls,
                       int const inform, double const abserr,
                       int const *indices){
-    // permutate back the result and return
+    // copy the result and return
     out_type out;
     out.minvls = minvls;
     out.inform = inform;
@@ -977,33 +1037,8 @@ public:
     out.likelihood = *res;
 
     arma::vec &imputations = out.imputations;
-    imputations.set_size(get_n_integrands() - 1);
-    arma::uvec offset(ndim);
-
-    /* we make two passes. One to figure out where to write the ith type
-     * to and one to do the writting */
-    for(int c = 0; c < ndim; ++c)
-      offset[indices[c]] = cur_list[c]->n_ele();
-
-    {
-      int cur = 1L; // one as the first element is the CDF approximation
-      for(int i = 0L; i < ndim; ++i){
-        cur += offset[i];
-        offset[i] = cur - offset[i];
-      }
-    }
-
-    // do the copying
-    {
-      double const *v = res + 1L;
-      for(int c = 0; c < ndim; ++c){
-        int const org_c = indices[c];
-        int const n_ele = cur_list[c]->n_ele();
-        double *r = imputations.begin() + offset[org_c] - 1;
-        for(int i = 0; i < n_ele; ++i, ++r, ++v)
-          *r = *v;
-      }
-    }
+    imputations.set_size(std::max(0, get_n_integrands() - 1));
+    std::copy(res + 1, res + 1 + imputations.n_elem, imputations.begin());
 
     return out;
   }
