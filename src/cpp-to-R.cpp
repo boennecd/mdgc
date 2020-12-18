@@ -63,7 +63,7 @@ SEXP get_log_lm_terms_cpp(arma::mat const &lower, arma::mat const &upper,
 
     for(size_t j = 0; j < p; ++j){
       if       (code.at(j, i) == 0L){
-        /* observed value */
+        // observed value
         w_idx_obs.at(n_o  ) = j;
         w_obs_val.at(n_o++) = upper.at(j, i);
       } else if(code.at(j, i) == 1L) {
@@ -73,9 +73,9 @@ SEXP get_log_lm_terms_cpp(arma::mat const &lower, arma::mat const &upper,
             cate_arg.shed_col(k);
             break;
           }
-        /* do nothing. The value is missing. */
+        // do nothing. The value is missing.
       } else if(code.at(j, i) == 2L){
-        /* Z is in an interval */
+        // Z is in an interval
         w_idx_int.at(n_i  ) = j;
         w_lower  .at(n_i  ) = lower.at(j, i);
         w_upper  .at(n_i++) = upper.at(j, i);

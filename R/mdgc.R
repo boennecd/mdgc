@@ -154,7 +154,7 @@ get_mdgc <- function(dat){
 #' @param categorical \code{\link{list}} with 3xn \code{\link{matrix}} with
 #' categorical outcomes. The first index is the outcome as an integer code,
 #' the second index is the number of categories, and the third index is the
-#' index of each categorial variable.
+#' index of each categorial variable (this is zero-based).
 #' @param ... used to pass arguments to S3 methods.
 #'
 #' @seealso
@@ -192,8 +192,9 @@ get_mdgc_log_ml.default <- function(object, lower, upper, code, categorical,
     all(dim(categorical[[1L]]) == sapply(categorical, dim)))
 
   keep <- colSums(is.na(lower) & is.na(upper)) < NROW(upper)
-  out <- get_log_lm_terms_cpp(lower = lower[, keep], upper = upper[, keep],
-                              code = code[, keep],
+  out <- get_log_lm_terms_cpp(lower = lower[, keep, drop = FALSE],
+                              upper = upper[, keep, drop = FALSE],
+                              code =  code [, keep, drop = FALSE],
                               categorical = categorical[keep])
   attr(out, "nobs") <- NCOL(upper)
   attr(out, "nvars") <- NROW(lower)

@@ -260,3 +260,212 @@ test_that("'get_log_lm_terms' gives the correct result with and without gradient
   expect_equal(c(attr(grad, "grad")) %*% jac, true_grad,
                tolerance = 1e-3)
 })
+
+test_that("mdgc_log_ml gives the correct result with a single log marginal likelihood term", {
+  n_lvl <- c(3L, 4L, 5L)
+  n_latent <- n_lvl[1] + n_lvl[3] + 4L
+  # dput(cov2cor(drop(rWishart(1L, 2 * n_latent, diag(n_latent)))))
+  Sig <- structure(c(1, -0.139976486533139, -0.252394041490724, 0.0328479391884292, 0.33209161389653, -0.0802581313618109, 0.142279177667647, 0.114400486140885, 0.0084305016074294, -0.208392048350881, 0.0241710440085548, 0.0692588360372489, -0.139976486533139, 1, 0.15006370015725, 0.0387966113834449, 0.040653657443624, -0.163867176796534, -0.163776074146943, -0.00677335530339495, -0.0962742888220896, -0.363172104047447, -0.0345447459494092, 0.017633351661753, -0.252394041490724, 0.15006370015725, 1, -0.2576125675092, -0.120204683054427, 0.325392375081554, 0.0617473677009837, -0.323965717346053, 0.172023461202382, -0.0483353723590527, 0.00743318236676117, 0.188726831046407, 0.0328479391884292, 0.0387966113834449, -0.2576125675092, 1, 0.369589014205649, -0.226449781307351, -0.232296759237575, 0.119732751860623, -0.341216668163613, -0.117472102794596, -0.208383502686246, -0.177819043633142, 0.33209161389653, 0.040653657443624, -0.120204683054427, 0.369589014205649, 1, -0.0319803022599951, -0.329435492022031, 0.0999548164047468, 0.0113250918738276, 0.0845154592053214, -0.12843295462476, -0.0529800713738894, -0.0802581313618109, -0.163867176796534, 0.325392375081554, -0.226449781307351, -0.0319803022599951, 1, 0.0540971106518889, -0.263844638490977, 0.10682435039763, 0.0102738072433955, -0.115033109688909, 0.0885163680527274, 0.142279177667647, -0.163776074146943, 0.0617473677009837, -0.232296759237575, -0.329435492022031, 0.0540971106518889, 1, 0.282127993763662, 0.196370386133481, -0.262622833662247, 0.0673683870070675, -0.0443091951152617, 0.114400486140885, -0.00677335530339495, -0.323965717346053, 0.119732751860623, 0.0999548164047468, -0.263844638490977, 0.282127993763662, 1, -0.156072363656726, 0.0454778524087398, 0.205042507925608, -0.0150339689622075, 0.0084305016074294, -0.0962742888220896, 0.172023461202382, -0.341216668163613, 0.0113250918738276, 0.10682435039763, 0.196370386133481, -0.156072363656726, 1, 0.156828343541278, -0.0063302709111426, 0.0523227195166851, -0.208392048350881, -0.363172104047447, -0.0483353723590527, -0.117472102794596, 0.0845154592053214, 0.0102738072433955, -0.262622833662247, 0.0454778524087398, 0.156828343541278, 1, 0.191638870428741, -0.0762526882470861, 0.0241710440085548, -0.0345447459494092, 0.00743318236676117, -0.208383502686246, -0.12843295462476, -0.115033109688909, 0.0673683870070675, 0.205042507925608, -0.0063302709111426, 0.191638870428741, 1, 0.184869417557784, 0.0692588360372489, 0.017633351661753, 0.188726831046407, -0.177819043633142, -0.0529800713738894, 0.0885163680527274, -0.0443091951152617, -0.0150339689622075, 0.0523227195166851, -0.0762526882470861, 0.184869417557784, 1), .Dim = c(12L, 12L ))
+  # dput(c(rnorm(n_lvl[1]), 0, 0, rnorm(n_latent - n_lvl[1] - 2L)))
+  mu <- c(1.37414772401687, 0.287678504785475, -0.262694211676933, 0, 0, 1.89638937266271, 0.0806366010191161, 0.853503953969782, -1.30949921135887, -0.639517569806596, 0.724772050061993, -0.46190976626267)
+  # dput(mvtnorm::rmvnorm(1L, mu, Sig))
+  obs_x <- c(0.698464938402946, -0.91241587967978, -0.588384537744868, -0.566074730636501, 1.22396370835824, 1.04393663847435, 0.134511857961685, 1.7761587334823, -0.731218046435423, 0.28578514459854, -0.083723324156426, -1.25132416246612)
+
+  O_lvls <- qnorm(seq(0, 1, length.out = n_lvl[2L] + 1L))
+  obs <- data.frame(
+    M1 = factor(which.min(obs_x[1:n_lvl[1L]]), levels = 1:n_lvl[1L]),
+    C1 = obs_x[n_lvl[1L] + 1L],
+    C2 = obs_x[n_lvl[1L] + 2L],
+    B1 = obs_x[n_lvl[1L] + 3L] > 0,
+    O1 = cut(obs_x[n_lvl[1L] + 4L], breaks = O_lvls),
+    M2 = factor(which.min(tail(obs_x, n_lvl[3L])), levels = 1:n_lvl[3L]))
+  obs$O1 <- ordered(obs$O1, labels = levels(obs$O1),
+                    levels = levels(obs$O1))
+
+  # setup
+  lower <- rep(-Inf, n_latent) # default to -Inf
+  upper <- numeric(n_latent)   # default to zero
+
+  # handle continous
+  upper[n_lvl[1L] + 1:2] <- obs_x[n_lvl[1L] + 1:2]
+
+  # handle the binary
+  if(obs$B1){
+    lower[n_lvl[1L] + 3L] <- -mu[n_lvl[1L] + 3L]
+    upper[n_lvl[1L] + 3L] <- Inf
+  } else
+    upper[n_lvl[1L] + 3L] <- -mu[n_lvl[1L] + 3L]
+
+  # handle the ordinal
+  lower[n_lvl[1L] + 4L] <-
+    O_lvls[as.integer(obs$O1)     ] - mu[n_lvl[1L] + 4L]
+  upper[n_lvl[1L] + 4L] <-
+    O_lvls[as.integer(obs$O1) + 1L] - mu[n_lvl[1L] + 4L]
+
+  # the categorical
+  upper[1:n_lvl[1L]] <- -mu[1:n_lvl[1L]]
+  upper[n_latent - n_lvl[3L]:1 + 1L] <- -tail(mu, n_lvl[3L])
+  code <- c(rep(2L, n_lvl[1L]), 0L, 0L, rep(2L, n_latent - n_lvl[1L] - 2L))
+
+  # setup the categorical argument
+  categorical <- list(rbind(
+    c(as.integer(obs$M1), as.integer(obs$M2)), n_lvl[c(1, 3)],
+    c(0L, n_latent - n_lvl[3])))
+
+  # compute value to compare with
+  is_con <- n_lvl[1L] + 1:2
+  is_int <- setdiff(1:n_latent, is_con)
+  # dput(mvtnorm::dmvnorm(obs_x[is_con], mu[is_con], Sig[is_con, is_con], log = TRUE))
+  f1 <- -3.11413974714096
+
+  Sig_int <- Sig[is_int, is_int] - Sig[is_int, is_con] %*% solve(
+    Sig[is_con, is_con], Sig[is_con, is_int])
+  mu_int <- drop(mu[is_int] + Sig[is_int, is_con] %*%
+    solve(Sig[is_con, is_con], obs_x[is_con] - mu[is_con]))
+  n_int <- length(mu_int)
+
+  D <- matrix(0., n_int - 2L, 2L)
+  D[1:(n_lvl[1L] - 1), 1L] <- 1
+  D[n_int - 2L - (n_lvl[3L] - 1):1 + 1, 2L] <- 1
+  idx_cat_obs <- c(as.integer(obs$M1),
+                   n_lvl[1] + 2L + as.integer(obs$M2))
+  idx_not_cat_obs <- setdiff(1:n_int, idx_cat_obs)
+  Sig_use <- Sig_int[idx_not_cat_obs, idx_not_cat_obs] +
+    D %*% Sig_int[idx_cat_obs, idx_cat_obs] %*% t(D) -
+    D %*% Sig_int[idx_cat_obs, idx_not_cat_obs] -
+    Sig_int[idx_not_cat_obs, idx_cat_obs] %*% t(D)
+  mu_use <- drop(mu_int[idx_not_cat_obs] - D %*% mu_int[idx_cat_obs])
+
+  lw <- rep(-Inf, n_int - 2L)
+  up <- numeric(n_int - 2L)
+
+  # handle the binary
+  if(obs$B1){
+    lw[n_lvl[1L] - 1L + 1L] <- 0
+    up[n_lvl[1L] - 1L + 1L] <- Inf
+  }
+
+  # handle the ordinal
+  lw[n_lvl[1L] - 1L + 2L] <- O_lvls[as.integer(obs$O1)     ]
+  up[n_lvl[1L] - 1L + 2L] <- O_lvls[as.integer(obs$O1) + 1L]
+
+  # dput(log(mvtnorm::pmvnorm(lw, up, mu_use, sigma = Sig_use, algorithm = mvtnorm::GenzBretz(1e6, 0, 1e-6))))
+  f2 <- -6.8975911813762
+
+  #####
+  # permutations should not matter so we check different permutations
+  var_idx <- c(list(1:n_lvl[1]), as.list(n_lvl[1] + 1:4),
+               list(n_lvl[1] + 4L + 1:n_lvl[3L]))
+
+  # get_perms <- function(x){
+  #   stopifnot(is.atomic(x)) # for the matrix call to make sense
+  #   out <- as.matrix(expand.grid(
+  #     replicate(length(x), x, simplify = FALSE), stringsAsFactors = FALSE))
+  #   out[apply(out,1, anyDuplicated) == 0, ]
+  # }
+  # perms <- apply(get_perms(1:6), 1, list)
+  # perms <- sample(perms, 15)
+  # dput(perms, control = c("keepInteger"))
+  perms <- list(list(c(4L, 6L, 3L, 2L, 5L, 1L)), list(c(3L, 5L, 2L, 4L, 1L, 6L)), list(c(3L, 4L, 5L, 6L, 2L, 1L)), list(c(6L, 5L, 4L, 2L, 1L, 3L)), list(c(5L, 3L, 6L, 1L, 2L, 4L)), list(c(4L, 2L, 6L, 3L, 5L, 1L)), list(c(4L, 3L, 5L, 1L, 6L, 2L)), list(c(2L, 5L, 4L, 1L, 3L, 6L)), list(c(1L, 3L, 4L, 6L, 5L, 2L)), list(c(1L, 6L, 2L, 5L, 4L, 3L)), list(c(1L, 4L, 2L, 3L, 5L, 6L)), list(c(3L, 4L, 2L, 5L, 1L, 6L)), list(c(3L, 2L, 1L, 6L, 5L, 4L)), list(c(6L, 1L, 4L, 2L, 5L, 3L)), list(c(3L, 1L, 6L, 5L, 2L, 4L)))
+
+  for(perm in perms){
+    ord <- unlist(perm)
+    indicies <- unlist(var_idx[ord])
+
+    # compute the result
+    cate_arg <- categorical[[1L]]
+    if(which(ord == 1L) > which(ord == 6L)){
+      cate_arg <- cbind(cate_arg[, 2], cate_arg[, 1])
+      cate_arg[3, 1] <- which(indicies == var_idx[[6L]][1L]) - 1L
+      cate_arg[3, 2] <- which(indicies == var_idx[[1L]][1L]) - 1L
+    } else {
+      cate_arg[3, 1] <- which(indicies == var_idx[[1L]][1L]) - 1L
+      cate_arg[3, 2] <- which(indicies == var_idx[[6L]][1L]) - 1L
+    }
+
+    cate_arg <- list(cate_arg)
+
+    cpp_obj <- get_mdgc_log_ml(
+      lower = matrix(lower[indicies]),
+      upper = matrix(upper[indicies]),
+      code  = matrix(code [indicies]),
+      categorical = cate_arg)
+
+    res <- mdgc_log_ml(cpp_obj, vcov = Sig[indicies, indicies],
+                       rel_eps = 1e-5, maxpts = 10000L)
+    expect_equal(res, f1 + f2, tolerance = 1e-4)
+  }
+
+  #####
+  # missing values
+  do_drop <- c(1:n_lvl[1], n_lvl[1] + 2L)
+  code[do_drop] <- 1L
+
+  # compute the true value
+  is_con <- setdiff(is_con, do_drop)
+  is_int <- setdiff(is_int, do_drop)
+  # dput(mvtnorm::dmvnorm(obs_x[is_con], mu[is_con], Sig[is_con, is_con, drop = FALSE], log = TRUE))
+  f1 <- -1.07915883353727
+
+  Sig_int <- Sig[is_int, is_int] - Sig[is_int, is_con] %*% solve(
+    Sig[is_con, is_con, drop = FALSE], Sig[is_con, is_int, drop = FALSE])
+  mu_int <- drop(mu[is_int] + Sig[is_int, is_con, drop = FALSE] %*%
+                   solve(Sig[is_con, is_con, drop = FALSE],
+                         obs_x[is_con, drop = FALSE] - mu[is_con]))
+  n_int <- length(mu_int)
+
+  D <- matrix(0., n_int - 1L, 1L)
+  D[n_int - 1L - (n_lvl[3L] - 1):1 + 1, 1L] <- 1
+  idx_cat_obs <- 2L + as.integer(obs$M2)
+  idx_not_cat_obs <- setdiff(1:n_int, idx_cat_obs)
+  Sig_use <- Sig_int[idx_not_cat_obs, idx_not_cat_obs] +
+    D %*% Sig_int[idx_cat_obs, idx_cat_obs] %*% t(D) -
+    D %*% Sig_int[idx_cat_obs, idx_not_cat_obs] -
+    Sig_int[idx_not_cat_obs, idx_cat_obs] %*% t(D)
+  mu_use <- drop(mu_int[idx_not_cat_obs] - D %*% mu_int[idx_cat_obs])
+
+  lw <- rep(-Inf, n_int - 1L)
+  up <- numeric(n_int - 1L)
+
+  # handle the binary
+  if(obs$B1){
+    lw[1L] <- 0
+    up[1L] <- Inf
+  }
+
+  # handle the ordinal
+  lw[2L] <- O_lvls[as.integer(obs$O1)     ]
+  up[2L] <- O_lvls[as.integer(obs$O1) + 1L]
+
+  # dput(log(mvtnorm::pmvnorm(lw, up, mu_use, sigma = Sig_use, algorithm = mvtnorm::GenzBretz(1e6, 0, 1e-6))))
+  f2 <- -3.90255011045022
+
+  # check the result
+  for(perm in perms){
+    ord <- unlist(perm)
+    indicies <- unlist(var_idx[ord])
+
+    # compute the result
+    cate_arg <- categorical[[1L]]
+    if(which(ord == 1L) > which(ord == 6L)){
+      cate_arg <- cbind(cate_arg[, 2], cate_arg[, 1])
+      cate_arg[3, 1] <- which(indicies == var_idx[[6L]][1L]) - 1L
+      cate_arg[3, 2] <- which(indicies == var_idx[[1L]][1L]) - 1L
+    } else {
+      cate_arg[3, 1] <- which(indicies == var_idx[[1L]][1L]) - 1L
+      cate_arg[3, 2] <- which(indicies == var_idx[[6L]][1L]) - 1L
+    }
+
+    cate_arg <- list(cate_arg)
+
+    cpp_obj <- get_mdgc_log_ml(
+      lower = matrix(lower[indicies]),
+      upper = matrix(upper[indicies]),
+      code  = matrix(code [indicies]),
+      categorical = cate_arg)
+
+    res <- mdgc_log_ml(cpp_obj, vcov = Sig[indicies, indicies],
+                       rel_eps = 1e-5, maxpts = 10000L)
+    expect_equal(res, f1 + f2, tolerance = 1e-4)
+  }
+})

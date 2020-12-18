@@ -40,7 +40,7 @@ interval.}
 \item{categorical}{\code{\link{list}} with 3xn \code{\link{matrix}} with
 categorical outcomes. The first index is the outcome as an integer code,
 the second index is the number of categories, and the third index is the
-index of each categorial variable.}
+index of each categorial variable (this is zero-based).}
 
 \item{n_threads}{number of threads to use.}
 }
