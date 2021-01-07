@@ -7,15 +7,15 @@
 using namespace Rcpp;
 
 // get_log_lm_terms_cpp
-SEXP get_log_lm_terms_cpp(arma::mat const& lower, arma::mat const& upper, arma::imat const& code, Rcpp::List categorical);
-RcppExport SEXP _mdgc_get_log_lm_terms_cpp(SEXP lowerSEXP, SEXP upperSEXP, SEXP codeSEXP, SEXP categoricalSEXP) {
+SEXP get_log_lm_terms_cpp(arma::mat const& lower, arma::mat const& upper, arma::imat const& code, Rcpp::List multinomial);
+RcppExport SEXP _mdgc_get_log_lm_terms_cpp(SEXP lowerSEXP, SEXP upperSEXP, SEXP codeSEXP, SEXP multinomialSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::traits::input_parameter< arma::mat const& >::type lower(lowerSEXP);
     Rcpp::traits::input_parameter< arma::mat const& >::type upper(upperSEXP);
     Rcpp::traits::input_parameter< arma::imat const& >::type code(codeSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type categorical(categoricalSEXP);
-    rcpp_result_gen = Rcpp::wrap(get_log_lm_terms_cpp(lower, upper, code, categorical));
+    Rcpp::traits::input_parameter< Rcpp::List >::type multinomial(multinomialSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_log_lm_terms_cpp(lower, upper, code, multinomial));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -41,16 +41,16 @@ BEGIN_RCPP
 END_RCPP
 }
 // get_z_hat
-Rcpp::NumericMatrix get_z_hat(arma::mat const& lower, arma::mat const& upper, arma::imat const& code, unsigned const n_threads, Rcpp::List categorical);
-RcppExport SEXP _mdgc_get_z_hat(SEXP lowerSEXP, SEXP upperSEXP, SEXP codeSEXP, SEXP n_threadsSEXP, SEXP categoricalSEXP) {
+Rcpp::NumericMatrix get_z_hat(arma::mat const& lower, arma::mat const& upper, arma::imat const& code, unsigned const n_threads, Rcpp::List multinomial);
+RcppExport SEXP _mdgc_get_z_hat(SEXP lowerSEXP, SEXP upperSEXP, SEXP codeSEXP, SEXP n_threadsSEXP, SEXP multinomialSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::traits::input_parameter< arma::mat const& >::type lower(lowerSEXP);
     Rcpp::traits::input_parameter< arma::mat const& >::type upper(upperSEXP);
     Rcpp::traits::input_parameter< arma::imat const& >::type code(codeSEXP);
     Rcpp::traits::input_parameter< unsigned const >::type n_threads(n_threadsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type categorical(categoricalSEXP);
-    rcpp_result_gen = Rcpp::wrap(get_z_hat(lower, upper, code, n_threads, categorical));
+    Rcpp::traits::input_parameter< Rcpp::List >::type multinomial(multinomialSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_z_hat(lower, upper, code, n_threads, multinomial));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -110,8 +110,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // impute
-Rcpp::List impute(arma::mat const& lower, arma::mat const& upper, arma::imat const& code, arma::mat const& Sigma, arma::mat const& truth, Rcpp::List margs, Rcpp::List categorical, double const rel_eps, double const abs_eps, unsigned const maxit, Rcpp::List passed_names, Rcpp::CharacterVector outer_names, int const n_threads, bool const do_reorder, int const minvls, bool const use_aprx);
-RcppExport SEXP _mdgc_impute(SEXP lowerSEXP, SEXP upperSEXP, SEXP codeSEXP, SEXP SigmaSEXP, SEXP truthSEXP, SEXP margsSEXP, SEXP categoricalSEXP, SEXP rel_epsSEXP, SEXP abs_epsSEXP, SEXP maxitSEXP, SEXP passed_namesSEXP, SEXP outer_namesSEXP, SEXP n_threadsSEXP, SEXP do_reorderSEXP, SEXP minvlsSEXP, SEXP use_aprxSEXP) {
+Rcpp::List impute(arma::mat const& lower, arma::mat const& upper, arma::imat const& code, arma::mat const& Sigma, arma::mat const& truth, Rcpp::List margs, Rcpp::List multinomial, double const rel_eps, double const abs_eps, unsigned const maxit, Rcpp::List passed_names, Rcpp::CharacterVector outer_names, int const n_threads, bool const do_reorder, int const minvls, bool const use_aprx);
+RcppExport SEXP _mdgc_impute(SEXP lowerSEXP, SEXP upperSEXP, SEXP codeSEXP, SEXP SigmaSEXP, SEXP truthSEXP, SEXP margsSEXP, SEXP multinomialSEXP, SEXP rel_epsSEXP, SEXP abs_epsSEXP, SEXP maxitSEXP, SEXP passed_namesSEXP, SEXP outer_namesSEXP, SEXP n_threadsSEXP, SEXP do_reorderSEXP, SEXP minvlsSEXP, SEXP use_aprxSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -121,7 +121,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< arma::mat const& >::type Sigma(SigmaSEXP);
     Rcpp::traits::input_parameter< arma::mat const& >::type truth(truthSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type margs(margsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type categorical(categoricalSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type multinomial(multinomialSEXP);
     Rcpp::traits::input_parameter< double const >::type rel_eps(rel_epsSEXP);
     Rcpp::traits::input_parameter< double const >::type abs_eps(abs_epsSEXP);
     Rcpp::traits::input_parameter< unsigned const >::type maxit(maxitSEXP);
@@ -131,7 +131,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< bool const >::type do_reorder(do_reorderSEXP);
     Rcpp::traits::input_parameter< int const >::type minvls(minvlsSEXP);
     Rcpp::traits::input_parameter< bool const >::type use_aprx(use_aprxSEXP);
-    rcpp_result_gen = Rcpp::wrap(impute(lower, upper, code, Sigma, truth, margs, categorical, rel_eps, abs_eps, maxit, passed_names, outer_names, n_threads, do_reorder, minvls, use_aprx));
+    rcpp_result_gen = Rcpp::wrap(impute(lower, upper, code, Sigma, truth, margs, multinomial, rel_eps, abs_eps, maxit, passed_names, outer_names, n_threads, do_reorder, minvls, use_aprx));
     return rcpp_result_gen;
 END_RCPP
 }

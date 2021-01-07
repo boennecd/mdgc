@@ -2,7 +2,7 @@
 % Please edit documentation in R/mdgc.R
 \name{mdgc_fit}
 \alias{mdgc_fit}
-\title{Estimate the Correlation Matrix}
+\title{Estimate the Covariance Matrix}
 \usage{
 mdgc_fit(
   ptr,
@@ -77,7 +77,7 @@ method.}
 \code{NULL} yields a default.}
 }
 \description{
-Estimates the correlation matrix. The \code{lr} parameter
+Estimates the covariance matrix. The \code{lr} parameter
 and the \code{batch_size} parameter is likely data dependent.
 Convergence should be monitored e.g. by using \code{verbose = TRUE}
 with \code{method = "svrg"}.

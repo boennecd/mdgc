@@ -75,7 +75,8 @@ reordering. \code{TRUE} is likely the best option.}
 
 \item{iminvls}{minimum number of samples in the imputation.}
 
-\item{start_val}{starting value for the correlation matrix. Use \code{NULL} if unspecified.}
+\item{start_val}{starting value for the covariance matrix. Use
+\code{NULL} if unspecified.}
 
 \item{decay}{the learning rate used by SVRG is given by \code{lr * decay^iteration_number}.}
 

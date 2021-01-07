@@ -21,7 +21,7 @@ mdgc_log_ml(
 \arguments{
 \item{ptr}{object returned by \code{\link{get_mdgc_log_ml}}.}
 
-\item{vcov}{correlation matrix.}
+\item{vcov}{covariance matrix.}
 
 \item{rel_eps}{relative error for each term.}
 

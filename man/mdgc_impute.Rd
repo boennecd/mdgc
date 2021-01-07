@@ -2,7 +2,7 @@
 % Please edit documentation in R/mdgc.R
 \name{mdgc_impute}
 \alias{mdgc_impute}
-\title{Impute Missing Values Given a Correlation Matrix}
+\title{Impute Missing Values Given a Covariance Matrix}
 \usage{
 mdgc_impute(
   object,
@@ -19,7 +19,7 @@ mdgc_impute(
 \arguments{
 \item{object}{returned object from \code{\link{get_mdgc}}.}
 
-\item{vcov}{correlation matrix to condition on in the imputation.}
+\item{vcov}{covariance matrix to condition on in the imputation.}
 
 \item{rel_eps}{relative error for each term.}
 
@@ -43,6 +43,6 @@ A list with imputed values for the continuous variables and a vector with
 probabilities for each level for the ordinal variables.
 }
 \description{
-Imputes missing values given a correlation matrix using a similar
+Imputes missing values given a covariance matrix using a similar
 quasi-random numbers method as \code{\link{mdgc_fit}}.
 }

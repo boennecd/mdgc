@@ -30,13 +30,13 @@ struct ml_terms {
  * then it is the observed value.
  * @param code Matrix with type of outcomes. 0 is an observed value,
  * 1 is a missing value, and 2 is a value in an interval.
- * @param categorical list with 3xn matrix with categorical outcomes. The
+ * @param multinomial list with 3xn matrix with multinomial outcomes. The
  * first index is the outcome, the second index is the number of categories,
  * and the third index is the index of the first latent variable.
  */
 // [[Rcpp::export(rng = false)]]
 SEXP get_log_lm_terms_cpp(arma::mat const &lower, arma::mat const &upper,
-                          arma::imat const &code, Rcpp::List categorical){
+                          arma::imat const &code, Rcpp::List multinomial){
   auto out = Rcpp::XPtr<ml_terms>(new ml_terms());
 
   size_t const n = lower.n_cols,
@@ -45,8 +45,8 @@ SEXP get_log_lm_terms_cpp(arma::mat const &lower, arma::mat const &upper,
     throw std::invalid_argument("get_log_lm_terms: invalid 'upper'");
   if(code.n_rows != p or code.n_cols != n)
     throw std::invalid_argument("get_log_lm_terms: invalid 'code'");
-  if(static_cast<size_t>(categorical.size()) != n)
-    throw std::invalid_argument("get_log_lm_terms: invalid 'categorical'");
+  if(static_cast<size_t>(multinomial.size()) != n)
+    throw std::invalid_argument("get_log_lm_terms: invalid 'multinomial'");
 
   /* fill in the log ml terms objects */
   std::vector<log_ml_term> &terms = out->terms;
@@ -59,7 +59,7 @@ SEXP get_log_lm_terms_cpp(arma::mat const &lower, arma::mat const &upper,
 
   for(size_t i = 0; i < n; ++i){
     size_t n_o(0L), n_i(0L);
-    cate_arg = Rcpp::as<arma::imat>(categorical[i]);
+    cate_arg = Rcpp::as<arma::imat>(multinomial[i]);
 
     for(size_t j = 0; j < p; ++j){
       if       (code.at(j, i) == 0L){
@@ -67,7 +67,7 @@ SEXP get_log_lm_terms_cpp(arma::mat const &lower, arma::mat const &upper,
         w_idx_obs.at(n_o  ) = j;
         w_obs_val.at(n_o++) = upper.at(j, i);
       } else if(code.at(j, i) == 1L) {
-        // check if we need to remove a categorical outcome
+        // check if we need to remove a multinomial outcome
         for(size_t k = 0; k < cate_arg.n_cols; ++k)
           if(static_cast<size_t>(cate_arg.at(2, k)) == j){
             cate_arg.shed_col(k);
@@ -179,7 +179,7 @@ Rcpp::NumericVector eval_log_lm_terms(
 // [[Rcpp::export(rng = false)]]
 Rcpp::NumericMatrix get_z_hat
 (arma::mat const &lower, arma::mat const &upper, arma::imat const &code,
- unsigned const n_threads, Rcpp::List categorical){
+ unsigned const n_threads, Rcpp::List multinomial){
   size_t const p = lower.n_rows,
                n = upper.n_cols;
   if(upper.n_rows != p or upper.n_cols != n)
@@ -188,12 +188,12 @@ Rcpp::NumericMatrix get_z_hat
     throw std::invalid_argument("get_z_hat: invalid lower");
   if(n_threads < 1)
     throw std::invalid_argument("get_z_hat: invalid n_threads");
-  if(static_cast<size_t>(categorical.size()) != n)
-    throw std::invalid_argument("get_z_hat: invalid categorical");
+  if(static_cast<size_t>(multinomial.size()) != n)
+    throw std::invalid_argument("get_z_hat: invalid multinomial");
 
-  // check if there are any categorical variables
+  // check if there are any multinomial variables
   bool any_cate(false);
-  for(auto ca : categorical)
+  for(auto ca : multinomial)
     if(Rcpp::as<arma::imat>(ca).n_elem > 0){
       any_cate = true;
       break;
@@ -205,22 +205,22 @@ Rcpp::NumericMatrix get_z_hat
 #pragma omp parallel for num_threads(n_threads) schedule(static) if(!any_cate)
 #endif
   for(size_t j = 0; j < n; ++j){
-    arma::imat categorical_j;
+    arma::imat multinomial_j;
     if(any_cate)
-      categorical_j = Rcpp::as<arma::imat>(categorical[j]);
+      multinomial_j = Rcpp::as<arma::imat>(multinomial[j]);
 
     size_t k(0);
     double * oj = o + j * p;
     for(size_t i = 0; i < p; ++i, ++oj){
-      if(any_cate and k < categorical_j.n_cols and
-           i == static_cast<size_t>(categorical_j.at(2, k))){
+      if(any_cate and k < multinomial_j.n_cols and
+           i == static_cast<size_t>(multinomial_j.at(2, k))){
         /** we will set the observed level value to the median on the latent
          *  scale conditional on it being the greatest value. We set the
          *  other values to the median of a truncated normal distribution.
          */
-        int const obs_lvl = categorical_j.at(0, k) - 1,
+        int const obs_lvl = multinomial_j.at(0, k) - 1,
               idx_obs_lvl = obs_lvl + i,
-                   n_lvls = categorical_j.at(1, k);
+                   n_lvls = multinomial_j.at(1, k);
 
         if(code.at(i, j) == 1L)
           // the value is missing
@@ -532,13 +532,13 @@ inline SEXP impute_set_val_R
 Rcpp::List impute
   (arma::mat const &lower, arma::mat const &upper, arma::imat const &code,
    arma::mat const &Sigma, arma::mat const &truth, Rcpp::List margs,
-   Rcpp::List categorical,
+   Rcpp::List multinomial,
    double const rel_eps, double const abs_eps, unsigned const maxit,
    Rcpp::List passed_names, Rcpp::CharacterVector outer_names,
    int const n_threads, bool const do_reorder, int const minvls,
    bool const use_aprx = false){
   // setup vector to pass to RQMC method
-  std::vector<vec> cate_means; // means of the categorical variables
+  std::vector<vec> cate_means; // means of the multinomial variables
 
   std::vector<std::unique_ptr<impute_base> > const type_list = ([&](){
     std::vector<std::unique_ptr<impute_base> > out;
@@ -609,8 +609,8 @@ Rcpp::List impute
   known_objs.insert(std::pair<int, known>(1L, known(1L)));
 
   std::vector<imat> cate_mat;
-  cate_mat.reserve(categorical.size());
-  for(auto &cate : categorical){
+  cate_mat.reserve(multinomial.size());
+  for(auto &cate : multinomial){
     cate_mat.emplace_back(Rcpp::as<imat>(cate));
     arma::imat &new_ele = cate_mat.back();
     for(arma::uword k = 0; k < new_ele.n_cols; ++k){
@@ -797,12 +797,12 @@ Rcpp::List impute
           continue;
         }
 
-        /* we know it is a latent variable which is categorical, binary or
+        /* we know it is a latent variable which is multinomial, binary or
          * ordinal. Thus, there will be a latent variable regardless of
          * whether we observe the value or not. */
         if(static_cast<size_t>(k) < cate_mat_i.n_cols and
              j == cate_mat_i.at(2, k)){
-          // we have a categorical outcome
+          // we have a multinomial outcome
           int const n_lvls = cate_mat_i.at(1, k);
 
           if(code.at(j, i) == 2L) {

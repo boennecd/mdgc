@@ -1,4 +1,4 @@
-/* Given a categorical variable with K levels with probabilities
+/* Given a multinomial variable with K levels with probabilities
  * p_1,\dots,p_K we assume that we observe outcome k if and only if
  * A_k > A_l \forall l \neq k and we assume that
  * (A_1,\dots,A_K)^\top \sim N(\vec\mu, I) where \mu_1 = 0.

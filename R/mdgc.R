@@ -1,7 +1,7 @@
 #' Get mdgc Object
 #' @description
 #' Creates a mdgc object which is needed for estimation of the
-#' correlation matrix and to perform imputation.
+#' covariance matrix and to perform imputation.
 #'
 #' @param dat \code{\link{data.frame}} with continuous, ordinal, and binary
 #' data.
@@ -110,20 +110,20 @@ get_mdgc <- function(dat){
   code[is_na == 0L] <- 2L
   code[is_na == 2L] <- 1L
 
-  # construct matrix for categorical outcomes
+  # construct matrix for multinomial outcomes
   if(length(mults)){
     n_lvls <- sapply(dat[mults], function(x) length(levels(x)))
     n_vars <- sapply(dat, function(x)
       if(is.factor(x) && !is.ordered(x)) length(levels(x)) else 1L)
     idx <- c(0L, cumsum(head(n_vars, -1L)))
 
-    categorical <- lapply(1:NROW(dat), function(i)
+    multinomial <- lapply(1:NROW(dat), function(i)
       rbind(as.integer(dat[i, mults]),
             n_lvls,
             idx[mults]))
 
   } else
-    categorical <- replicate(NROW(dat), matrix(0L, 0L, 0L))
+    multinomial <- replicate(NROW(dat), matrix(0L, 0L, 0L))
 
   # get the true values (needed for imputation)
   truth <- t(matrix(as.numeric(unlist(dat)), NROW(dat), NCOL(dat),
@@ -132,7 +132,7 @@ get_mdgc <- function(dat){
   structure(list(
     lower = lower, upper = upper, code = code, margs = margs,
     reals = reals, bins = bins, ords = ords, truth = truth,
-    categorical = categorical), class = "mdgc")
+    multinomial = multinomial), class = "mdgc")
 }
 
 #' Get Pointer to C++ Object to Approximate the Log Marginal Likelihood
@@ -151,10 +151,10 @@ get_mdgc <- function(dat){
 #' each variable on the normal scale. Zero implies an observed value (the
 #' value in \code{upper}), one implies a missing value, and two implies an
 #' interval.
-#' @param categorical \code{\link{list}} with 3xn \code{\link{matrix}} with
-#' categorical outcomes. The first index is the outcome as an integer code,
+#' @param multinomial \code{\link{list}} with 3xn \code{\link{matrix}} with
+#' multinomial outcomes. The first index is the outcome as an integer code,
 #' the second index is the number of categories, and the third index is the
-#' index of each categorial variable (this is zero-based).
+#' index of each multinomial variable (this is zero-based).
 #' @param ... used to pass arguments to S3 methods.
 #'
 #' @seealso
@@ -169,7 +169,7 @@ get_mdgc_log_ml <- function(object, ...)
 get_mdgc_log_ml.mdgc <- function(object, ...)
   get_mdgc_log_ml.default(lower = object$lower, upper = object$upper,
                           code = object$code,
-                          categorical = object$categorical)
+                          multinomial = object$multinomial)
 
 #' @rdname get_mdgc_log_ml
 #' @export
@@ -178,7 +178,7 @@ get_mdgc_log_ml.data.frame <- function(object, ...)
 
 #' @rdname get_mdgc_log_ml
 #' @export
-get_mdgc_log_ml.default <- function(object, lower, upper, code, categorical,
+get_mdgc_log_ml.default <- function(object, lower, upper, code, multinomial,
                                     ...){
   # checks
   di <- dim(lower)
@@ -187,18 +187,18 @@ get_mdgc_log_ml.default <- function(object, lower, upper, code, categorical,
     all(di == dim(upper)), all(di == dim(code)),
     is.numeric(lower), is.numeric(upper), is.integer(code),
     all(is.finite(code)), all(range(code) %in% 0:2),
-    is.list(categorical),
-    all(sapply(categorical, function(x) is.matrix(x) && is.integer(x))),
-    all(dim(categorical[[1L]]) == sapply(categorical, dim)))
+    is.list(multinomial),
+    all(sapply(multinomial, function(x) is.matrix(x) && is.integer(x))),
+    all(dim(multinomial[[1L]]) == sapply(multinomial, dim)))
 
   keep <- colSums(is.na(lower) & is.na(upper)) < NROW(upper)
   out <- get_log_lm_terms_cpp(lower = lower[, keep, drop = FALSE],
                               upper = upper[, keep, drop = FALSE],
                               code =  code [, keep, drop = FALSE],
-                              categorical = categorical[keep])
+                              multinomial = multinomial[keep])
   attr(out, "nobs") <- NCOL(upper)
   attr(out, "nvars") <- NROW(lower)
-  attr(out, "categorical") <- categorical
+  attr(out, "multinomial") <- multinomial
   out
 }
 
@@ -213,7 +213,7 @@ get_mdgc_log_ml.default <- function(object, lower, upper, code, categorical,
 #' \code{\link{mdgc_fit}}
 #'
 #' @param ptr object returned by \code{\link{get_mdgc_log_ml}}.
-#' @param vcov correlation matrix.
+#' @param vcov covariance matrix.
 #' @param rel_eps relative error for each term.
 #' @param n_threads number of threads to use.
 #' @param comp_derivs logical for whether to approximate the gradient.
@@ -279,10 +279,10 @@ mdgc_log_ml <- function(ptr, vcov, rel_eps = 1e-2, n_threads = 1L,
     comp_derivs = comp_derivs, do_reorder = do_reorder, minvls = minvls,
     use_aprx = use_aprx)
 
-#' Get Starting Value for the Correlation Matrix Using a Heuristic
+#' Get Starting Value for the Covariance Matrix Using a Heuristic
 #'
 #' @description
-#' Uses a heuristic to get starting values for the correlation matrix. These
+#' Uses a heuristic to get starting values for the covariance matrix. These
 #' can be passed e.g. to \code{\link{mdgc_fit}}.
 #'
 #' @inheritParams get_mdgc_log_ml
@@ -296,14 +296,14 @@ mdgc_start_value <- function(...)
 mdgc_start_value <- function(object, ...)
   mdgc_start_value.default(
     lower = object$lower, upper = object$upper, code = object$code,
-    categorical = object$categorical, ...)
+    multinomial = object$multinomial, ...)
 
 #' @rdname mdgc_start_value
 #' @importFrom stats cov cov2cor
 #' @export
 mdgc_start_value.default <- function(object, lower, upper, code,
-                                     categorical, n_threads = 1L, ...){
-  Z <- get_z_hat(lower, upper, code, categorical = categorical,
+                                     multinomial, n_threads = 1L, ...){
+  Z <- get_z_hat(lower, upper, code, multinomial = multinomial,
                  n_threads = n_threads)
   out <- cov(t(Z), use = "pairwise.complete.obs")
 
@@ -316,7 +316,7 @@ mdgc_start_value.default <- function(object, lower, upper, code,
   }
 
   out <- cov2cor(out)
-  any_cate <- length(categorical[[1L]])
+  any_cate <- length(multinomial[[1L]])
   if(!any_cate)
     return(out)
 
@@ -329,8 +329,8 @@ mdgc_start_value.default <- function(object, lower, upper, code,
   # then the wanted value
   constraints_val <- rep(1, n_latent)
 
-  # add zero constraints from the categorical values
-  zero_indices <- .get_categorical_zero_indices(categorical)
+  # add zero constraints from the multinomial values
+  zero_indices <- .get_multinomial_zero_indices(multinomial)
   constraints_val <- c(constraints_val, rep(0, NROW(zero_indices)))
   constraints_idx <- rbind(constraints_idx, zero_indices)
 
@@ -405,9 +405,9 @@ mdgc_start_value.default <- function(object, lower, upper, code,
   cov2cor(out)
 }
 
-.get_categorical_zero_indices <- function(categorical){
+.get_multinomial_zero_indices <- function(multinomial){
   # the matrices should be the same for all log likelihood terms
-  cat_info <- categorical[[1L]]
+  cat_info <- multinomial[[1L]]
   cat_info <- apply(cat_info, 2L, function(info){
     latent_idx <- info[3]
     n_vars <- info[2]
@@ -417,10 +417,10 @@ mdgc_start_value.default <- function(object, lower, upper, code,
   do.call(rbind, lapply(cat_info, as.matrix))
 }
 
-#' Estimate the Correlation Matrix
+#' Estimate the Covariance Matrix
 #'
 #' @description
-#' Estimates the correlation matrix. The \code{lr} parameter
+#' Estimates the covariance matrix. The \code{lr} parameter
 #' and the \code{batch_size} parameter is likely data dependent.
 #' Convergence should be monitored e.g. by using \code{verbose = TRUE}
 #' with \code{method = "svrg"}.
@@ -501,9 +501,9 @@ mdgc_fit <- function(ptr, vcov, lr = 1e-3, rel_eps = 1e-3,
     is.numeric(mu), length(mu) == 1L, mu > 0,
     is.null(lambda) || is.numeric(lambda))
 
-  categorical <- attr(ptr, "categorical")
-  any_categorical <- length(categorical[[1L]]) > 0
-  stopifnot(!any_categorical || method == "aug_Lagran")
+  multinomial <- attr(ptr, "multinomial")
+  any_multinomial <- length(multinomial[[1L]]) > 0
+  stopifnot(!any_multinomial || method == "aug_Lagran")
 
   #####
   # assign functions to use
@@ -578,9 +578,9 @@ mdgc_fit <- function(ptr, vcov, lr = 1e-3, rel_eps = 1e-3,
   # then the wanted value
   constraints_val <- rep(1, NROW(vcov))
 
-  if(any_categorical){
+  if(any_multinomial){
     # add constraints for off-diagonal elements
-    cat_info <- .get_categorical_zero_indices(categorical)
+    cat_info <- .get_multinomial_zero_indices(multinomial)
 
     constraints_val <- c(constraints_val, rep(0, NROW(cat_info)))
     constraints_idx <- rbind(constraints_idx, cat_info)
@@ -828,14 +828,14 @@ svrg <- function(par_fn, nobs, val, batch_size, maxit = 10L, seed = 1L, lr,
   lSig[lower.tri(lSig, TRUE)]
 }
 
-#' Impute Missing Values Given a Correlation Matrix
+#' Impute Missing Values Given a Covariance Matrix
 #'
 #' @description
-#' Imputes missing values given a correlation matrix using a similar
+#' Imputes missing values given a covariance matrix using a similar
 #' quasi-random numbers method as \code{\link{mdgc_fit}}.
 #'
 #' @param object returned object from \code{\link{get_mdgc}}.
-#' @param vcov correlation matrix to condition on in the imputation.
+#' @param vcov covariance matrix to condition on in the imputation.
 #' @inheritParams mdgc_fit
 #' @inheritParams mdgc_log_ml
 #' @export
@@ -849,10 +849,10 @@ mdgc_impute <- function(object, vcov, rel_eps = 1e-3, maxit = 10000L,
   #####
   # checks
   margs <- object$margs
-  categorical <- object$categorical
+  multinomial <- object$multinomial
   nvars <- length(margs)
-  if(length(categorical[[1L]]) > 0)
-    nvars <- nvars + sum(categorical[[1L]][2, ]) - NCOL(categorical[[1L]])
+  if(length(multinomial[[1L]]) > 0)
+    nvars <- nvars + sum(multinomial[[1L]][2, ]) - NCOL(multinomial[[1L]])
   stopifnot(
     inherits(object, "mdgc"),
     is.matrix(vcov), is.numeric(vcov), all(dim(vcov) == nvars),
@@ -894,7 +894,7 @@ mdgc_impute <- function(object, vcov, rel_eps = 1e-3, maxit = 10000L,
          maxit = maxit, passed_names = passed_names,
          outer_names = rownames(object$truth), n_threads = n_threads,
          do_reorder = do_reorder, minvls = minvls,
-         use_aprx = use_aprx, categorical = categorical)
+         use_aprx = use_aprx, multinomial = multinomial)
 }
 
 #' Perform Model Estimation and Imputation
@@ -917,7 +917,8 @@ mdgc_impute <- function(object, vcov, rel_eps = 1e-3, maxit = 10000L,
 #' @param imaxit maximum number of samples to draw in the imputation.
 #' @param iabs_eps absolute convergence threshold for each term in the imputation.
 #' @param iminvls minimum number of samples in the imputation.
-#' @param start_val starting value for the correlation matrix. Use \code{NULL} if unspecified.
+#' @param start_val starting value for the covariance matrix. Use
+#' \code{NULL} if unspecified.
 #' @export
 #'
 #' @references

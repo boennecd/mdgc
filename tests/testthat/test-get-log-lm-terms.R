@@ -40,11 +40,11 @@ context("Testing 'get_log_lm_terms'")
 dat <- readRDS("get_log_lm_terms-test.RDS")
 
 test_that("'get_log_lm_terms' gives the correct result with and without gradients", {
-  categorical <- replicate(NCOL(dat$lower),
+  multinomial <- replicate(NCOL(dat$lower),
                            matrix(0L, 0, 0), simplify = FALSE)
   ptr <- mdgc:::get_log_lm_terms_cpp(
     lower = dat$lower, upper = dat$upper, code = dat$code,
-    categorical = categorical)
+    multinomial = multinomial)
 
   lcov_to_mat <- function(par){
     p <- (sqrt(8 * length(par) + 1) - 1) / 2
@@ -168,11 +168,11 @@ test_that("'get_log_lm_terms' gives the correct result with and without gradient
 dat <- readRDS("get_log_lm_terms-test-ord-bin.RDS")
 
 test_that("'get_log_lm_terms' gives the correct result with and without gradients (ordinal and binary data)", {
-  categorical <- replicate(NCOL(dat$lower),
+  multinomial <- replicate(NCOL(dat$lower),
                            matrix(0L, 0, 0), simplify = FALSE)
   ptr <- mdgc:::get_log_lm_terms_cpp(
     lower = dat$lower, upper = dat$upper, code = dat$code,
-    categorical = categorical)
+    multinomial = multinomial)
 
   lcov_to_mat <- function(par){
     p <- (sqrt(8 * length(par) + 1) - 1) / 2
@@ -302,13 +302,13 @@ test_that("mdgc_log_ml gives the correct result with a single log marginal likel
   upper[n_lvl[1L] + 4L] <-
     O_lvls[as.integer(obs$O1) + 1L] - mu[n_lvl[1L] + 4L]
 
-  # the categorical
+  # the multinomial
   upper[1:n_lvl[1L]] <- -mu[1:n_lvl[1L]]
   upper[n_latent - n_lvl[3L]:1 + 1L] <- -tail(mu, n_lvl[3L])
   code <- c(rep(2L, n_lvl[1L]), 0L, 0L, rep(2L, n_latent - n_lvl[1L] - 2L))
 
-  # setup the categorical argument
-  categorical <- list(rbind(
+  # setup the multinomial argument
+  multinomial <- list(rbind(
     c(as.integer(obs$M1), as.integer(obs$M2)), n_lvl[c(1, 3)],
     c(0L, n_latent - n_lvl[3])))
 
@@ -373,7 +373,7 @@ test_that("mdgc_log_ml gives the correct result with a single log marginal likel
     indicies <- unlist(var_idx[ord])
 
     # compute the result
-    cate_arg <- categorical[[1L]]
+    cate_arg <- multinomial[[1L]]
     if(which(ord == 1L) > which(ord == 6L)){
       cate_arg <- cbind(cate_arg[, 2], cate_arg[, 1])
       cate_arg[3, 1] <- which(indicies == var_idx[[6L]][1L]) - 1L
@@ -389,7 +389,7 @@ test_that("mdgc_log_ml gives the correct result with a single log marginal likel
       lower = matrix(lower[indicies]),
       upper = matrix(upper[indicies]),
       code  = matrix(code [indicies]),
-      categorical = cate_arg)
+      multinomial = cate_arg)
 
     res <- mdgc_log_ml(cpp_obj, vcov = Sig[indicies, indicies],
                        rel_eps = 1e-5, maxpts = 10000L)
@@ -446,7 +446,7 @@ test_that("mdgc_log_ml gives the correct result with a single log marginal likel
     indicies <- unlist(var_idx[ord])
 
     # compute the result
-    cate_arg <- categorical[[1L]]
+    cate_arg <- multinomial[[1L]]
     if(which(ord == 1L) > which(ord == 6L)){
       cate_arg <- cbind(cate_arg[, 2], cate_arg[, 1])
       cate_arg[3, 1] <- which(indicies == var_idx[[6L]][1L]) - 1L
@@ -462,7 +462,7 @@ test_that("mdgc_log_ml gives the correct result with a single log marginal likel
       lower = matrix(lower[indicies]),
       upper = matrix(upper[indicies]),
       code  = matrix(code [indicies]),
-      categorical = cate_arg)
+      multinomial = cate_arg)
 
     res <- mdgc_log_ml(cpp_obj, vcov = Sig[indicies, indicies],
                        rel_eps = 1e-5, maxpts = 10000L)

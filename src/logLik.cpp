@@ -139,8 +139,8 @@ double log_ml_term::approximate
       size_t j(0);
       for(size_t k = 0; k < D.n_cols; ++k)
         for(; j < n_int(); ++j)
-          if(idx_int[j] == static_cast<size_t>(categorical.at(2, k))){
-            int const n_lvls = categorical.at(1, k);
+          if(idx_int[j] == static_cast<size_t>(multinomial.at(2, k))){
+            int const n_lvls = multinomial.at(1, k);
             for(int l = 0; l < n_lvls - 1; ++l, ++j)
               D.at(j - k, k) = 1;
             ++j;

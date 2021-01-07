@@ -3,7 +3,7 @@
 \name{mdgc_start_value}
 \alias{mdgc_start_value}
 \alias{mdgc_start_value.default}
-\title{Get Starting Value for the Correlation Matrix Using a Heuristic}
+\title{Get Starting Value for the Covariance Matrix Using a Heuristic}
 \usage{
 mdgc_start_value(object, ...)
 
@@ -14,7 +14,7 @@ mdgc_start_value.default(
   lower,
   upper,
   code,
-  categorical,
+  multinomial,
   n_threads = 1L,
   ...
 )
@@ -37,14 +37,14 @@ each variable on the normal scale. Zero implies an observed value (the
 value in \code{upper}), one implies a missing value, and two implies an
 interval.}
 
-\item{categorical}{\code{\link{list}} with 3xn \code{\link{matrix}} with
-categorical outcomes. The first index is the outcome as an integer code,
+\item{multinomial}{\code{\link{list}} with 3xn \code{\link{matrix}} with
+multinomial outcomes. The first index is the outcome as an integer code,
 the second index is the number of categories, and the third index is the
-index of each categorial variable (this is zero-based).}
+index of each multinomial variable (this is zero-based).}
 
 \item{n_threads}{number of threads to use.}
 }
 \description{
-Uses a heuristic to get starting values for the correlation matrix. These
+Uses a heuristic to get starting values for the covariance matrix. These
 can be passed e.g. to \code{\link{mdgc_fit}}.
 }

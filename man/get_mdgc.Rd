@@ -12,7 +12,7 @@ data.}
 }
 \description{
 Creates a mdgc object which is needed for estimation of the
-correlation matrix and to perform imputation.
+covariance matrix and to perform imputation.
 }
 \seealso{
 \code{\link{get_mdgc_log_ml}}, \code{\link{mdgc_impute}}
