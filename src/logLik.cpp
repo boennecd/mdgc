@@ -247,9 +247,8 @@ double log_ml_term::approximate
 
         {
           // TODO: memory allocation
-          arma::mat inc = 2 * d_V_full * S_oo_inv_S_oi.t();
+          arma::mat inc = d_V_full * S_oo_inv_S_oi.t();
 
-          inc /= 2.; // TODO: 2x'ed?
           derivs(idx_int, idx_obs) -= inc;
           derivs(idx_obs, idx_int) -= inc.t();
         }

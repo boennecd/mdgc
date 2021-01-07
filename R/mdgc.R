@@ -651,7 +651,7 @@ mdgc_fit <- function(ptr, vcov, lr = 1e-3, rel_eps = 1e-3,
 
     # check constraints
     const <- get_cons(par)
-    all_ok <- all(abs(const) < 1e-3)
+    all_ok <- all(abs(const) < 1e-4)
     if(all_ok)
       break
 
@@ -663,7 +663,8 @@ mdgc_fit <- function(ptr, vcov, lr = 1e-3, rel_eps = 1e-3,
                   new_norm))
     if(new_norm > const_norm / 2)
       mu <- mu * 10
-    # TODO: always increase mu
+    else
+      mu <- mu * 1.5
     const_norm <- new_norm
   }
 
