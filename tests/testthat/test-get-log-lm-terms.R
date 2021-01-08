@@ -42,9 +42,10 @@ dat <- readRDS("get_log_lm_terms-test.RDS")
 test_that("'get_log_lm_terms' gives the correct result with and without gradients", {
   multinomial <- replicate(NCOL(dat$lower),
                            matrix(0L, 0, 0), simplify = FALSE)
+  idx_non_zero_mean <- 1:4
   ptr <- mdgc:::get_log_lm_terms_cpp(
     lower = dat$lower, upper = dat$upper, code = dat$code,
-    multinomial = multinomial, idx_non_zero_mean = integer())
+    multinomial = multinomial, idx_non_zero_mean = idx_non_zero_mean)
 
   lcov_to_mat <- function(par){
     p <- (sqrt(8 * length(par) + 1) - 1) / 2
@@ -54,37 +55,41 @@ test_that("'get_log_lm_terms' gives the correct result with and without gradient
     L
   }
 
-  log_ml <- function(vcov_log_chol, rel_eps = 1e-5, n_threads = 1L,
+  log_ml <- function(par, rel_eps = 1e-5, n_threads = 1L,
                      comp_derivs = FALSE, seed = NULL){
     if(!is.null(seed))
       set.seed(seed)
+    vcov_log_chol <- head(par, -length(idx_non_zero_mean))
+    mea           <- tail(par,  length(idx_non_zero_mean))
     Arg <- lcov_to_mat(vcov_log_chol)
 
     mdgc:::eval_log_lm_terms(
-      ptr = ptr, vcov = Arg, mu = numeric(),
+      ptr = ptr, vcov = Arg, mu = mea,
       indices = 0:(NCOL(dat$lower) - 1L),
       maxpts = 1000000L, abs_eps = -1, rel_eps = rel_eps, n_threads = n_threads,
       comp_derivs = comp_derivs, minvls = 0L)
   }
 
   set.seed(1)
-  val <- log_ml(dat$Sigma[lower.tri(dat$Sigma, TRUE)])
+  pa <- c(dat$Sigma[lower.tri(dat$Sigma, TRUE)],
+          numeric(length(idx_non_zero_mean)))
+  val <- log_ml(pa)
   # dput(val)
   expect_equal(val, -45.8852616647973, tolerance = 1e-3)
 
-  val <- log_ml(dat$Sigma[lower.tri(dat$Sigma, TRUE)], n_threads = 2)
+  # with more threads
+  val <- log_ml(pa, n_threads = 2)
   expect_equal(val, -45.8852616647973, tolerance = 1e-3)
 
-  grad <- log_ml(dat$Sigma[lower.tri(dat$Sigma, TRUE)], comp_derivs = TRUE)
-  # truth <- numDeriv::jacobian(log_ml, dat$Sigma[lower.tri(dat$Sigma, TRUE)], seed = 1L)
+  grad <- log_ml(pa, comp_derivs = TRUE)
+  # truth <- numDeriv::jacobian(log_ml, pa, seed = 1L)
   # dput(truth)
-  true_grad <- structure(c(
+  true_grad <-c(
     4.44392200186265, 8.26645723733806, 0.0770691610564516,
-    1.28391853303438, -10.3954140181992, -0.487395978873399,
-    2.03205557640943, -0.105889973274042, -5.218467741155,
-    -4.20994886759362, -2.94592203652891, 4.71790766215746,
-    -1.62255015484385, 2.75034658786021, 0.703564051111291),
-    .Dim = c(1L, 15L))
+    1.28391853303438, -10.3954140182037, -0.48739982069906, 2.03203577758658,
+    -0.105887310232136, -5.21844960723815, -4.20995247942651, -2.94589717845707,
+    4.71792106473805, -1.62254861814731, 2.75032259524273, 0.70355964710631,
+    0, -2.2618892073704, -2.70197542613998, -2.09928723929281)
 
   # dput(matrixcalc::duplication.matrix(5L))
   jac <-structure(c(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -106,19 +111,46 @@ test_that("'get_log_lm_terms' gives the correct result with and without gradient
                     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0,
                     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                     1), .Dim = c(25L, 15L))
-  expect_equal(c(attr(grad, "grad")) %*% jac, true_grad,
-               tolerance = 1e-3)
+  expect_equal(
+    drop(c(attr(grad, "grad_vcov")) %*% jac), head(true_grad, -4),
+    tolerance = 1e-3)
+  expect_equal(
+    drop(attr(grad, "grad_mea")), tail(true_grad, 4),
+    tolerance = 1e-3)
 
-  grad <- log_ml(dat$Sigma[lower.tri(dat$Sigma, TRUE)], comp_derivs = TRUE,
-                 n_threads = 2L)
-  expect_equal(c(attr(grad, "grad")) %*% jac, true_grad,
-               tolerance = 1e-3)
+  # now with two threads
+  grad <- log_ml(pa, comp_derivs = TRUE, n_threads = 2L)
+  expect_equal(
+    drop(c(attr(grad, "grad_vcov")) %*% jac), head(true_grad, -4),
+    tolerance = 1e-3)
+  expect_equal(
+    drop(attr(grad, "grad_mea")), tail(true_grad, 4),
+    tolerance = 1e-3)
+
+  # with a different mean
+  pa <- c(dat$Sigma[lower.tri(dat$Sigma, TRUE)],
+          c(-1, -1, .5, 1))
+
+  grad <- log_ml(pa, comp_derivs = TRUE)
+  # truth <- numDeriv::jacobian(log_ml, pa, seed = 1L)
+  # dput(truth)
+  true_grad <- c(
+    4.4536865067216, 8.41361831323731, 0.0677047074608158,
+    1.34830327174643, -10.4850097822861, 0.715754440295721, 2.01389217846365,
+    -2.26194994919321, -8.33693028534194, -5.47086432114414, -1.71520257450454,
+    5.56054925709124, 0.305752972603772, 1.77182637497433, 4.35720858728649,
+    0, -0.667362476405746, -4.1050781283087, -6.14566749995671)
+  expect_equal(
+    drop(c(attr(grad, "grad_vcov")) %*% jac), head(true_grad, -4),
+    tolerance = 1e-3)
+  expect_equal(
+    drop(attr(grad, "grad_mea")), tail(true_grad, 4),
+    tolerance = 1e-3)
 })
 
-test_that("'get_log_lm_terms' gives the correct result with and without gradients with non-fixed means", {
-  expect_true(FALSE)
+test_that("'get_log_lm_terms' gives the correct result with and without gradients with multinomial variables", {
+  expect_true(isTRUE("Implement the test"))
 })
-
 
 # sim_dat <- function(n, p = 4, n_lvls = 5L){
 #   # get the covariance matrix
@@ -174,9 +206,10 @@ dat <- readRDS("get_log_lm_terms-test-ord-bin.RDS")
 test_that("'get_log_lm_terms' gives the correct result with and without gradients (ordinal and binary data)", {
   multinomial <- replicate(NCOL(dat$lower),
                            matrix(0L, 0, 0), simplify = FALSE)
+  idx_non_zero_mean <- 1:5
   ptr <- mdgc:::get_log_lm_terms_cpp(
     lower = dat$lower, upper = dat$upper, code = dat$code,
-    multinomial = multinomial, idx_non_zero_mean = integer())
+    multinomial = multinomial, idx_non_zero_mean = idx_non_zero_mean)
 
   lcov_to_mat <- function(par){
     p <- (sqrt(8 * length(par) + 1) - 1) / 2
@@ -186,37 +219,41 @@ test_that("'get_log_lm_terms' gives the correct result with and without gradient
     L
   }
 
-  log_ml <- function(vcov_log_chol, rel_eps = 1e-5, n_threads = 1L,
+  n_mea <- length(idx_non_zero_mean)
+  log_ml <- function(par, rel_eps = 1e-5, n_threads = 1L,
                      comp_derivs = FALSE, seed = NULL){
     if(!is.null(seed))
       set.seed(seed)
-    Arg <- lcov_to_mat(vcov_log_chol)
+    Arg <- lcov_to_mat(head(par, -n_mea))
+    mea <- tail(par, n_mea)
 
     mdgc:::eval_log_lm_terms(
-      ptr = ptr, vcov = Arg, mu = numeric(), indices = 0:(NCOL(dat$lower) - 1L),
+      ptr = ptr, vcov = Arg, mu = mea, indices = 0:(NCOL(dat$lower) - 1L),
       maxpts = 1000000L, abs_eps = -1, rel_eps = rel_eps, n_threads = n_threads,
       comp_derivs = comp_derivs, minvls = 0L)
   }
 
   set.seed(1)
-  val <- log_ml(dat$Sigma[lower.tri(dat$Sigma, TRUE)])
+  par <- c(dat$Sigma[lower.tri(dat$Sigma, TRUE)], numeric(n_mea))
+  val <- log_ml(par)
   # dput(val)
   expect_equal(val, -50.633131628025, tolerance = 1e-3)
 
-  val <- log_ml(dat$Sigma[lower.tri(dat$Sigma, TRUE)], n_threads = 2)
+  val <- log_ml(par, n_threads = 2)
   expect_equal(val, -50.633131628025, tolerance = 1e-3)
 
-  grad <- log_ml(dat$Sigma[lower.tri(dat$Sigma, TRUE)], comp_derivs = TRUE)
-  # truth <- numDeriv::jacobian(log_ml, dat$Sigma[lower.tri(dat$Sigma, TRUE)], seed = 1L)
+  grad <- log_ml(par, comp_derivs = TRUE)
+  # truth <- numDeriv::jacobian(log_ml, par, seed = 1L)
   # dput(truth)
-  true_grad <- structure(c(
+  true_grad <- c(
     2.18828846268184, 1.14819853573079, -0.833095815058999,
     -1.64775972436418, -3.02462052022083, 2.38038644284807, 4.02535849827106,
     -0.6823072284458, -1.52397119919305, -5.83385872168417, -0.526004633937689,
     -0.772721040056757, -2.15498992108154, 4.76760990982455, -0.156298143778767,
     0.415973653298547, -0.190202356593625, 2.98216021926465, 1.03082094344473,
-    0.816776256035582, -1.55995256546344),
-    .Dim = c(1L, 21L))
+    0.816776256035582, -1.55995256546344,
+    0, -0.151148246224951, 3.97666677411463,
+    -3.30058060270238, 2.99870854999467)
 
   # dput(matrixcalc::duplication.matrix(5L))
   jac <-structure(c(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -256,12 +293,15 @@ test_that("'get_log_lm_terms' gives the correct result with and without gradient
                     0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                     0, 0, 0, 1), .Dim = c(36L, 21L))
-  expect_equal(c(attr(grad, "grad")) %*% jac, true_grad,
+  expect_equal(drop(c(attr(grad, "grad_vcov")) %*% jac),
+               head(true_grad, -n_mea), tolerance = 1e-3)
+  expect_equal(drop(attr(grad, "grad_mea")), tail(true_grad, n_mea),
                tolerance = 1e-3)
 
-  grad <- log_ml(dat$Sigma[lower.tri(dat$Sigma, TRUE)], comp_derivs = TRUE,
-                 n_threads = 2L)
-  expect_equal(c(attr(grad, "grad")) %*% jac, true_grad,
+  grad <- log_ml(par, comp_derivs = TRUE, n_threads = 2L)
+  expect_equal(drop(c(attr(grad, "grad_vcov")) %*% jac),
+               head(true_grad, -n_mea), tolerance = 1e-3)
+  expect_equal(drop(attr(grad, "grad_mea")), tail(true_grad, n_mea),
                tolerance = 1e-3)
 })
 

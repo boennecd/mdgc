@@ -52,6 +52,9 @@ should be sorted.}
 \description{
 Creates a C++ object which is needed to approximate the log marginal
 likelihood. The object cannot be saved.
+
+\code{idx_non_zero_mean} terms with \code{code} equal to zero (
+observed values) are ignored.
 }
 \details{
 Indices are zero-based except the outcome index for multinomial

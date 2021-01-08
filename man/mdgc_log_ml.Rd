@@ -48,10 +48,20 @@ reordering. \code{TRUE} is likely the best option.}
 \code{\link{pnorm}} and \code{\link{qnorm}}. This may yield a
 noticeable reduction in the computation time.}
 }
+\value{
+A numeric vector with a single element with the log marginal likelihood
+approximation. Two attributes are added if \code{comp_derivs} is
+\code{TRUE}: \code{"grad_vcov"} for the derivative approximation with
+respect to \code{vcov} and \code{"grad_mea"} for the derivative
+approximation with respect to \code{mea}.
+}
 \description{
 Approximates the log marginal likelihood and the derivatives using
 quasi-random numbers. The method uses a generalization of the Fortran
 code by Genz and Bretz (2002).
+
+Mean terms for observed continous variables are always assumed to be
+zero.
 }
 \references{
 Genz, A., & Bretz, F. (2002). \emph{Comparison of Methods for the

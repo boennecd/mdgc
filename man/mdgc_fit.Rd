@@ -79,8 +79,9 @@ method.}
 \code{NULL} yields a default.}
 }
 \description{
-Estimates the covariance matrix. The \code{lr} parameter
-and the \code{batch_size} parameter is likely data dependent.
+Estimates the covariance matrix and the non-zero mean terms.
+The \code{lr} parameter and the \code{batch_size} parameter is likely
+data dependent.
 Convergence should be monitored e.g. by using \code{verbose = TRUE}
 with \code{method = "svrg"}.
 

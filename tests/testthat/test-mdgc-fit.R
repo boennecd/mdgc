@@ -67,7 +67,7 @@ test_that("ADAM gives the same", {
     ptr = log_ml_ptr, vcov = start_val, mea = mdgc_obj$means,
     n_threads = 2L, lr = 1e-2, maxit = 5L, batch_size = 10L,
     method = "adam", minvls = 1000L)
-  expect_equal(fit_adam, fit_adam_2, tolerance = 1e-3)
+  expect_equal(fit_adam, fit_adam_2, tolerance = 1e-2)
 
   set.seed(1L)
   fit_adam_3 <- mdgc_fit(
@@ -95,7 +95,7 @@ test_that("svrg gives the same", {
     ptr = log_ml_ptr, vcov = start_val, mea = mdgc_obj$means,
     n_threads = 2L, lr = 1e-2, maxit = 5L, batch_size = 10L,
     method = "svrg", minvls = 1000L)
-  expect_equal(fit_svrg, fit_svrg_2, tolerance = 1e-3)
+  expect_equal(fit_svrg, fit_svrg_2, tolerance = 1e-2)
 
   set.seed(1L)
   fit_svrg_3 <- mdgc_fit(

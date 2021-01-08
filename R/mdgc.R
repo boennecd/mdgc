@@ -171,6 +171,9 @@ get_mdgc <- function(dat){
 #' Creates a C++ object which is needed to approximate the log marginal
 #' likelihood. The object cannot be saved.
 #'
+#' \code{idx_non_zero_mean} terms with \code{code} equal to zero (
+#' observed values) are ignored.
+#'
 #' @param object mdgc object from \code{\link{get_mdgc}} or a
 #' \code{\link{data.frame}} to pass to \code{\link{get_mdgc}}. Ignored by
 #' the default method.
@@ -248,6 +251,16 @@ get_mdgc_log_ml.default <- function(object, lower, upper, code, multinomial,
 #' Approximates the log marginal likelihood and the derivatives using
 #' quasi-random numbers. The method uses a generalization of the Fortran
 #' code by Genz and Bretz (2002).
+#'
+#' Mean terms for observed continous variables are always assumed to be
+#' zero.
+#'
+#' @return
+#' A numeric vector with a single element with the log marginal likelihood
+#' approximation. Two attributes are added if \code{comp_derivs} is
+#' \code{TRUE}: \code{"grad_vcov"} for the derivative approximation with
+#' respect to \code{vcov} and \code{"grad_mea"} for the derivative
+#' approximation with respect to \code{mea}.
 #'
 #' @seealso
 #' \code{\link{mdgc_fit}}
@@ -478,8 +491,9 @@ mdgc_start_value.default <- function(object, lower, upper, code,
 #' Estimate the Covariance Matrix
 #'
 #' @description
-#' Estimates the covariance matrix. The \code{lr} parameter
-#' and the \code{batch_size} parameter is likely data dependent.
+#' Estimates the covariance matrix and the non-zero mean terms.
+#' The \code{lr} parameter and the \code{batch_size} parameter is likely
+#' data dependent.
 #' Convergence should be monitored e.g. by using \code{verbose = TRUE}
 #' with \code{method = "svrg"}.
 #'
@@ -579,33 +593,38 @@ mdgc_fit <- function(ptr, vcov, mea, lr = 1e-3, rel_eps = 1e-3,
   # computes the approximate log marginal likelihood.
   #
   # Args:
-  #   par: log-Cholesky decomposition.
+  #   par_vcov: log-Cholesky decomposition.
+  #   par_mea: non-zero mean terms
   #   comp_derivs: logical for whether to approximate the gradient.
   #   indices: indices to use.
   #   maxpts: maximum number of samples to draw.
-  par_fn <- function(par, comp_derivs = FALSE, indices,
+  par_fn <- function(par_vcov, par_mea, comp_derivs = FALSE, indices,
                      maxpts){
     if(!is.null(seed))
       set.seed(seed)
-    Arg <- .get_lchol_inv(par)
+    Arg <- .get_lchol_inv(par_vcov)
 
     res <- .mdgc_log_ml(
-      ptr = ptr, Arg, mu = mea, comp_derivs = comp_derivs,
+      ptr = ptr, Arg, mu = par_mea, comp_derivs = comp_derivs,
       indices = indices, n_threads = n_threads, rel_eps = rel_eps,
       do_reorder = do_reorder, abs_eps = abs_eps, maxpts = maxpts,
       minvls = minvls, use_aprx = use_aprx)
     log_ml <- c(res)
     if(comp_derivs){
-      gr <- attr(res, "grad")
+      # handle dervatives wrt vcov
+      gr_vcov <- attr(res, "grad_vcov")
       tmp <- matrix(0, nvars, nvars)
-      tmp[lower.tri(tmp, TRUE)] <- par
+      tmp[lower.tri(tmp, TRUE)] <- par_vcov
       diag(tmp) <- exp(diag(tmp))
-      gr <- gr[com_vec] + c(gr)
-      gr <- x_dot_X_kron_I(x = gr, X = tmp, l = nvars)
-      gr <- gr[, lower.tri(tmp, TRUE)]
-      gr[idx_diag] <- gr[idx_diag] * diag(tmp)
+      gr_vcov <- gr_vcov[com_vec] + c(gr_vcov)
+      gr_vcov <- x_dot_X_kron_I(x = gr_vcov, X = tmp, l = nvars)
+      gr_vcov <- gr_vcov[, lower.tri(tmp, TRUE)]
+      gr_vcov[idx_diag] <- gr_vcov[idx_diag] * diag(tmp)
 
-      attr(log_ml, "grad") <- gr
+      attr(log_ml, "grad_vcov") <- gr_vcov
+
+      # handle dervatives wrt par_mea
+      attr(log_ml, "grad_mea") <- drop(attr(res, "grad_mea"))
 
     }
 
@@ -619,13 +638,15 @@ mdgc_fit <- function(ptr, vcov, mea, lr = 1e-3, rel_eps = 1e-3,
 
   if(method == "adam")
     return(adam(
-      par_fn = par_fn, nobs = nobs, val = .get_lchol(vcov),
+      par_fn = par_fn, nobs = nobs, val_vcov = .get_lchol(vcov),
+      val_mea = mea,
       batch_size = batch_size, maxit = maxit, seed = seed,
       epsilon = epsilon, alpha = lr, beta_1 = beta_1, beta_2 = beta_2,
       maxpts = maxpts_use))
   else if(method == "svrg")
     return(svrg(
-      par_fn = par_fn, nobs = nobs, val = .get_lchol(vcov),
+      par_fn = par_fn, nobs = nobs, val_vcov = .get_lchol(vcov),
+      val_mea = mea,
       batch_size = batch_size, maxit = maxit, seed = seed, lr = lr,
       verbose = verbose, maxpts = maxpts_use, decay = decay,
       conv_crit = conv_crit, rel_eps = rel_eps))
@@ -672,9 +693,17 @@ mdgc_fit <- function(ptr, vcov, mea, lr = 1e-3, rel_eps = 1e-3,
     out
   }
 
+  # functions to return the parameters for the mean and the covariance
+  # matrix
+  get_par_vcov <- function(par)
+    head(par, -length(idx_non_zero_mean))
+  get_par_mea <- function(par)
+    tail(par,  length(idx_non_zero_mean))
+
   # assign function for the augmented problem
   indices <- 0:(nobs - 1L)
   is_ok <- function(par){
+    par <- get_par_vcov(par)
     egs <- try(eigen(.get_lchol_inv(par))$values, silent = TRUE)
     if(inherits(egs, "try-error"))
       return(FALSE)
@@ -683,17 +712,25 @@ mdgc_fit <- function(ptr, vcov, mea, lr = 1e-3, rel_eps = 1e-3,
   fn <- function(par, mu, lambda){
     if(!is_ok(par))
       return(NA_real_)
-    -par_fn(par = par, comp_derivs = FALSE, indices = indices,
+    par_vcov <- get_par_vcov(par)
+    -par_fn(par_vcov = par_vcov, par_mea = get_par_mea(par),
+            comp_derivs = FALSE, indices = indices,
             maxpts = maxpts) + c_func(
-              par = par, derivs = FALSE, lambda = lambda, mu = mu)
+              par = par_vcov, derivs = FALSE, lambda = lambda, mu = mu)
   }
   gr <- function(par, mu, lambda){
     if(!is_ok(par))
       stop("invalid 'par' in 'gr'")
-    -attr(par_fn(
-      par = par, comp_derivs = TRUE, indices = indices,
-      maxpts = maxpts), "grad") + c_func(
-              par = par, derivs = TRUE, lambda = lambda, mu = mu)
+
+    par_vcov <- get_par_vcov(par)
+    t1 <- par_fn(
+      par_vcov = par_vcov, par_mea = get_par_mea(par),
+      comp_derivs = TRUE, indices = indices,
+      maxpts = maxpts)
+    t2 <- c_func(par = par_vcov, derivs = TRUE, lambda = lambda, mu = mu)
+
+
+    c(-attr(t1, "grad_vcov") + t2, -attr(t1, "grad_mea"))
   }
 
   # perform the augmented Lagrangian method
@@ -701,7 +738,7 @@ mdgc_fit <- function(ptr, vcov, mea, lr = 1e-3, rel_eps = 1e-3,
     lambda <- numeric(length(constraints_val))
   stopifnot(length(lambda) == length(constraints_val),
             all(is.finite(lambda)))
-  par <- .get_lchol(vcov)
+  par <- c(.get_lchol(vcov), mea)
   const_norm <- Inf
   for(i in 1:maxit){
     if(verbose)
@@ -712,7 +749,7 @@ mdgc_fit <- function(ptr, vcov, mea, lr = 1e-3, rel_eps = 1e-3,
     par <- opt_res$par
 
     # check constraints
-    const <- get_cons(par)
+    const <- get_cons(get_par_vcov(par))
     all_ok <- all(abs(const) < 1e-4)
     if(all_ok)
       break
@@ -730,8 +767,10 @@ mdgc_fit <- function(ptr, vcov, mea, lr = 1e-3, rel_eps = 1e-3,
     const_norm <- new_norm
   }
 
-  list(result = cov2cor(.get_lchol_inv(par)), mu = mu,
-       lambda = lambda)
+  list(result = list(
+    # TODO: the cov2cor has to removed for the multinomial variables
+    vcov = cov2cor(.get_lchol_inv(get_par_vcov(par))),
+    mea = get_par_mea(par)), mu = mu, lambda = lambda)
 }
 
 #####
@@ -740,18 +779,39 @@ mdgc_fit <- function(ptr, vcov, mea, lr = 1e-3, rel_eps = 1e-3,
 # Args:
 #   par_fn: function to evaluate the log marginal likelihood.
 #   nobs: number of observation.
-#   val: starting value.
+#   val_vcov,val_mea: starting value for the covariance matrix and the
+#                     mean.
 #   batch_size: number of observations in each batch.
 #   maxit: maximum number of iteration.
 #   seed: seed to use.
 #   epsilon, alpha, beta_1, beta_2: ADAM parameters.
 #   maxpts: maximum number of samples to draw.
-adam <- function(par_fn, nobs, val, batch_size, maxit = 10L,
+adam <- function(par_fn, nobs, val_vcov, val_mea, batch_size, maxit = 10L,
                  seed = 1L, epsilon = 1e-8, alpha = .001, beta_1 = .9,
                  beta_2 = .999, maxpts){
   indices <- sample.int(nobs, replace = FALSE) - 1L
   blocks <- tapply(indices, (seq_along(indices) - 1L) %/% batch_size,
                    identity, simplify = FALSE)
+
+  # assign function to get the mean and covariance matrix parameters
+  n_mea <- length(val_mea)
+  get_par_vcov <- function(par)
+    head(par, -n_mea)
+  get_par_mea <- function(par)
+    tail(par,  n_mea)
+
+  # assign wrapper for par_fn
+  par_fn_wrap <- function(val, comp_derivs, ...){
+    out <- par_fn(par_vcov = get_par_vcov(val), par_mea = get_par_mea(val),
+                  comp_derivs = comp_derivs, ...)
+    if(comp_derivs)
+      attr(out, "grad") <- c(attr(out, "grad_vcov"), attr(out, "grad_mea"))
+    out
+  }
+
+  # assign parameter vector and other needed quantites
+  val <- c(val_vcov, val_mea)
+  is_vcov <- seq_along(val_vcov)
 
   n_blocks <- length(blocks)
   n_par <- length(val)
@@ -766,8 +826,8 @@ adam <- function(par_fn, nobs, val, batch_size, maxit = 10L,
       idx_b <- (i %% n_blocks) + 1L
       m_old <- m
       v_old <- v
-      res <- par_fn(val, comp_derivs = TRUE, indices = blocks[[idx_b]],
-                    maxpts[k])
+      res <- par_fn_wrap(val, comp_derivs = TRUE, indices = blocks[[idx_b]],
+                         maxpts[k])
       fun_vals[(i %/% n_blocks) + 1L] <-
         fun_vals[(i %/% n_blocks) + 1L] + c(res)
 
@@ -780,13 +840,18 @@ adam <- function(par_fn, nobs, val, batch_size, maxit = 10L,
       v_hat <- v / (1 - beta_2^(i + 1))
 
       val <- val + alpha * m_hat / (sqrt(v_hat) + epsilon)
-      val <- .get_lchol(cov2cor(.get_lchol_inv(val)))
+
+      # alter the covariance matrix part
+      # TODO: this has to change with multinomial variables
+      val[is_vcov] <- .get_lchol(cov2cor(.get_lchol_inv(val[is_vcov])))
     }
 
     estimates[, k] <- val
   }
 
-  list(result = .get_lchol_inv(val), estimates = estimates)
+  list(result = list(
+    vcov = .get_lchol_inv(get_par_vcov(val)),
+    mea = get_par_mea(val)), estimates = estimates)
 }
 
 #####
@@ -795,7 +860,8 @@ adam <- function(par_fn, nobs, val, batch_size, maxit = 10L,
 # Args:
 #   par_fn: function to evaluate the log marginal likelihood.
 #   nobs: number of observation.
-#   val: starting value.
+#   val_vcov,val_mea: starting value for the covariance matrix and the
+#                     mean.
 #   batch_size: number of observations in each batch.
 #   n_threads: number of threads to use.
 #   maxit: maximum number of iteration.
@@ -806,11 +872,32 @@ adam <- function(par_fn, nobs, val, batch_size, maxit = 10L,
 #   decay: numeric scalar used to decrease the learning rate.
 #   conv_crit: relative convergence threshold.
 #   rel_eps: relative error for each term.
-svrg <- function(par_fn, nobs, val, batch_size, maxit = 10L, seed = 1L, lr,
-                 verbose = FALSE, maxpts, decay, conv_crit, rel_eps){
+svrg <- function(par_fn, nobs, val_vcov, val_mea, batch_size, maxit = 10L,
+                 seed = 1L, lr, verbose = FALSE, maxpts, decay,
+                 conv_crit, rel_eps){
   indices <- sample.int(nobs, replace = FALSE) - 1L
   blocks <- tapply(indices, (seq_along(indices) - 1L) %/% batch_size,
                    identity, simplify = FALSE)
+
+  # assign function to get the mean and covariance matrix parameters
+  n_mea <- length(val_mea)
+  get_par_vcov <- function(par)
+    head(par, -n_mea)
+  get_par_mea <- function(par)
+    tail(par,  n_mea)
+
+  # assign wrapper for par_fn
+  par_fn_wrap <- function(val, comp_derivs, ...){
+    out <- par_fn(par_vcov = get_par_vcov(val), par_mea = get_par_mea(val),
+                  comp_derivs = comp_derivs, ...)
+    if(comp_derivs)
+      attr(out, "grad") <- c(attr(out, "grad_vcov"), attr(out, "grad_mea"))
+    out
+  }
+
+  # assign parameter vector and other needed quantites
+  val <- c(val_vcov, val_mea)
+  is_vcov <- seq_along(val_vcov)
 
   n_blocks <- length(blocks)
   n_par <- length(val)
@@ -820,11 +907,12 @@ svrg <- function(par_fn, nobs, val, batch_size, maxit = 10L, seed = 1L, lr,
 
   lr_use <- lr / decay
   V_mult <- qnorm(1 - .99 / maxit)
+
   for(k in 1:maxit + 1L){
     old_val <- estimates[, k - 1L]
     old_grs <- sapply(1:n_blocks - 1L, function(ii){
       idx_b <- (ii %% n_blocks) + 1L
-      res_old <- par_fn(
+      res_old <- par_fn_wrap(
         old_val, comp_derivs = TRUE, indices = blocks[[idx_b]],
         maxpts[k - 1L])
       c(res_old, attr(res_old, "grad"))
@@ -837,13 +925,16 @@ svrg <- function(par_fn, nobs, val, batch_size, maxit = 10L, seed = 1L, lr,
     lr_use <- lr_use * decay
     for(ii in 1:n_blocks - 1L){
       idx_b <- (ii %% n_blocks) + 1L
-      res <- par_fn(val, comp_derivs = TRUE, indices = blocks[[idx_b]],
-                    maxpts[k - 1L])
+      res <- par_fn_wrap(val, comp_derivs = TRUE, indices = blocks[[idx_b]],
+                         maxpts[k - 1L])
       fun_vals[k] <- fun_vals[k] + c(res)
       dir <- attr(res, "grad") - old_grs[, ii + 1L] + old_gr
 
       val <- val + lr_use * dir
-      val <- .get_lchol(cov2cor(.get_lchol_inv(val)))
+
+      # alter the covariance matrix part
+      # TODO: this has to change with multinomial variables
+      val[is_vcov] <- .get_lchol(cov2cor(.get_lchol_inv(val[is_vcov])))
     }
 
     estimates[, k] <- val
@@ -863,8 +954,10 @@ svrg <- function(par_fn, nobs, val, batch_size, maxit = 10L, seed = 1L, lr,
       break
   }
 
-  list(result = .get_lchol_inv(val), fun_vals = fun_vals[2:k],
-       estimates = estimates[, 2:k, drop = FALSE])
+  list(result = list(
+    vcov = .get_lchol_inv(get_par_vcov(val)),
+    mea = get_par_mea(val)), fun_vals = fun_vals[2:k],
+    estimates = estimates[, 2:k, drop = FALSE])
 }
 
 # creates a matrix from a log-Cholesky decomposition.
@@ -1076,20 +1169,21 @@ mdgc <- function(dat, lr = 1e-3, maxit = 10L, batch_size = NULL,
     beta_2 = beta_2, n_threads = n_threads, do_reorder = do_reorder,
     abs_eps = abs_eps, maxpts = maxpts, minvls = minvls, verbose = verbose,
     decay = decay, conv_crit = conv_crit, use_aprx = use_aprx)
-  vcov <- fit$result
+  vcov <- fit$result$vcov
+  mea <- fit$result$mea
   colnames(vcov) <- rownames(vcov) <- rownames(mdgc_obj$lower)
 
   if(verbose)
     cat("Performing imputation...\n")
-  impu <- mdgc_impute(mdgc_obj, fit$result,
+  impu <- mdgc_impute(mdgc_obj, vcov,
                       # TODO: this has to change when the means are estimated
-                      mea = mdgc_obj$means,
+                      mea = mea,
                       rel_eps = irel_eps,
                       maxit = imaxit, abs_eps = iabs_eps,
                       n_threads = n_threads, do_reorder = do_reorder,
                       minvls = iminvls, use_aprx = use_aprx)
   out <- list(ximp = .threshold(dat, impu), imputed = impu,
-              vcov = vcov)
+              vcov = vcov, mea = mea)
   if(!is.null(fit$fun_vals))
     out$logLik <- fit$fun_vals
   out

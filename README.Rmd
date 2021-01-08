@@ -187,7 +187,8 @@ system.time(
     maxpts = 200L))
 system.time(
   fit_Lagran <- mdgc_fit(
-    ptr = log_ml_ptr, vcov = fit_Lagran_start$result, mea = mdgc_obj$means, 
+    ptr = log_ml_ptr, vcov = fit_Lagran_start$result$vcov, 
+    mea = fit_Lagran_start$result$mea, 
     n_threads = 4L, maxit = 100L, method = "aug_Lagran", rel_eps = 1e-3, 
     maxpts = 5000L, mu = fit_Lagran_start$mu, 
     lambda = fit_Lagran_start$lambda))
@@ -208,13 +209,13 @@ system.time(
 # compare the log marginal likelihood 
 print(rbind(
   `Augmented Lagrangian` = 
-    mdgc_log_ml(vcov = fit_Lagran$result, mea = mdgc_obj$means, 
+    mdgc_log_ml(vcov = fit_Lagran$result$vcov, mea = fit_Lagran$result$mea, 
                 ptr = log_ml_ptr, rel_eps = 1e-3),
   ADAM = 
-    mdgc_log_ml(vcov = fit_adam$result  , mea = mdgc_obj$means, 
+    mdgc_log_ml(vcov = fit_adam$result$vcov  , mea = fit_adam$result$mea, 
                 ptr = log_ml_ptr, rel_eps = 1e-3),
   SVRG =
-    mdgc_log_ml(vcov = fit_svrg$result  , mea = mdgc_obj$means, 
+    mdgc_log_ml(vcov = fit_svrg$result$vcov  , mea = fit_svrg$result$mea, 
                 ptr = log_ml_ptr, rel_eps = 1e-3)), 
   digits = 10)
 
@@ -225,7 +226,10 @@ system.time(
     ptr = log_ml_ptr, vcov = start_val, mea = mdgc_obj$means, 
     n_threads = 4L, lr = 1e-3, maxit = 25L, batch_size = 100L, 
     method = "svrg", rel_eps = 1e-3, maxpts = 5000L, use_aprx = TRUE))
-norm(fit_svrg_aprx$result - fit_svrg$result, "F") # essentially the same
+
+# essentially the same estimates
+norm(fit_svrg_aprx$result$vcov - fit_svrg$result$vcov, "F") 
+sd(fit_svrg_aprx$result$mea - fit_svrg$result$mea)
 
 # compare the estimated correlation matrix with the true value
 do_plot <- function(est, truth, main){
@@ -241,17 +245,17 @@ do_plot <- function(est, truth, main){
   f(est - truth, "Difference")
 }
 
-do_plot(fit_Lagran$result, dat$Sigma, "Estimates (Aug. Lagrangian)")
-do_plot(fit_adam  $result, dat$Sigma, "Estimates (ADAM)")
-do_plot(fit_svrg  $result, dat$Sigma, "Estimates (SVRG)")
+do_plot(fit_Lagran$result$vcov, dat$Sigma, "Estimates (Aug. Lagrangian)")
+do_plot(fit_adam  $result$vcov, dat$Sigma, "Estimates (ADAM)")
+do_plot(fit_svrg  $result$vcov, dat$Sigma, "Estimates (SVRG)")
 
-norm(fit_Lagran$result - dat$Sigma, "F")
-norm(fit_adam  $result - dat$Sigma, "F")
-norm(fit_svrg  $result - dat$Sigma, "F")
+norm(fit_Lagran$result$vcov - dat$Sigma, "F")
+norm(fit_adam  $result$vcov - dat$Sigma, "F")
+norm(fit_svrg  $result$vcov - dat$Sigma, "F")
 
 # perform the imputation
 system.time(imp_res <- mdgc_impute(
-  mdgc_obj, fit_svrg$result, mea = mdgc_obj$means, rel_eps = 1e-3, 
+  mdgc_obj, fit_svrg$result$vcov, mea = fit_svrg$result$mea, rel_eps = 1e-3, 
   maxit = 10000L, n_threads = 4L))
 
 # look at the result for one of the observations
@@ -458,7 +462,7 @@ res <- lapply(seeds, function(s){
     
     # impute using the other estimate
     mdgc_obj <- get_mdgc(dat$seen_obs)
-    impu_mixedgc_est <- mdgc_impute(mdgc_obj, mixedgc_res$R)
+    impu_mixedgc_est <- mdgc_impute(mdgc_obj, mixedgc_res$R, mdgc_obj$means)
     impu_mixedgc_est <- threshold(dat$seen_obs, impu_mixedgc_est)
     
     # gather output for the correlation matrix estimates
@@ -471,6 +475,10 @@ res <- lapply(seeds, function(s){
       mdgc_rel_err    = get_rel_err(mdgc   , truth)
       mixedgc_rel_err = get_rel_err(mixedgc, truth)
     })
+    
+    # gather the estimated means
+    mea_ests <- list(marginal = mdgc_obj$means, 
+                     joint    = mdgc_res$mea)
     
     # gather output for the imputation 
     mixedgc_imp_res <- as.data.frame(mixedgc_res$Ximp)
@@ -524,7 +532,7 @@ res <- lapply(seeds, function(s){
     
     # save output 
     out <- list(vcov_res = vcov_res, err = err, times = times, 
-                conv_stats = conv_stats)
+                conv_stats = conv_stats, mea_ests = mea_ests)
     saveRDS(out, file_name)
   }
   
@@ -825,7 +833,8 @@ system.time(
 
 # refine the estimates
 system.time(
-  ests <- mdgc_fit(ptr, vcov = ests$result, mea = obj$means, 
+  ests <- mdgc_fit(ptr, vcov = ests$result$vcov, 
+                   mea = ests$result$mea, 
                    method = "aug_Lagran",
                    n_threads = 4L, rel_eps = 1e-3, maxpts = 10000L, 
                    minvls = 1000L, mu = ests$mu, lambda = ests$lambda, 
@@ -833,14 +842,14 @@ system.time(
 
 # compare the estimated and the true values (should not match because of
 # overparameterization)
-image(ests$result[, NCOL(dat$Sigma):1], zlim = c(-1, 1), col = sc, 
+image(ests$result$vcov[, NCOL(dat$Sigma):1], zlim = c(-1, 1), col = sc, 
       main = "Estimates")
-image(dat$Sigma  [, NCOL(dat$Sigma):1], zlim = c(-1, 1), col = sc, 
+image(dat$Sigma       [, NCOL(dat$Sigma):1], zlim = c(-1, 1), col = sc, 
       main = "Truth")
 # perform the imputation
 system.time(
-  imp_res <- mdgc_impute(obj, ests$result, mea = obj$means, rel_eps = 1e-3,
-                         maxit = 10000L, n_threads = 4L))
+  imp_res <- mdgc_impute(obj, ests$result$vcov, mea = ests$result$mea, 
+                         rel_eps = 1e-3, maxit = 10000L, n_threads = 4L))
 
 # look at the result for one of the observations
 imp_res[1L]

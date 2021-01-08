@@ -35,7 +35,8 @@ using namespace restrictcdf;
 static double const log_2_pi = log(2 * M_PI);
 
 double log_ml_term::approximate
-(arma::mat const &vcov, arma::vec const &mu, arma::mat &derivs,
+(arma::mat const &vcov, arma::vec const &mu, arma::mat &derivs_vcov,
+ arma::vec &derivs_mea,
  int const maxpts, double const abs_eps, double const rel_eps,
  bool const comp_deriv,bool const do_reorder, size_t const minvls,
  bool const use_aprx) const {
@@ -50,8 +51,10 @@ double log_ml_term::approximate
     size_t const max_idx = std::max(i1, i2);
     if(vcov.n_rows < max_idx + 1L or vcov.n_cols < max_idx + 1L)
       throw std::invalid_argument("log_ml_term::approximate: invalid vcov");
-    if(comp_deriv and (vcov.n_cols != derivs.n_cols or vcov.n_rows != derivs.n_rows))
-      throw std::invalid_argument("log_ml_term::approximate: invalid derivs");
+    if(comp_deriv and (vcov.n_cols != derivs_vcov.n_cols or vcov.n_rows != derivs_vcov.n_rows))
+      throw std::invalid_argument("log_ml_term::approximate: invalid derivs_vcov");
+    if(comp_deriv and derivs_mea.n_elem != vcov.n_cols)
+      throw std::invalid_argument("log_ml_term::approximate: invalid derivs_mea");
   }
 #endif
   double out(.0);
@@ -106,7 +109,7 @@ double log_ml_term::approximate
         for(size_t i = 0; i < n_obs(); ++i){
           size_t const ii = idx_obs[i];
           // TODO: use that it is symmetric
-          derivs.at(ii, jj) +=
+          derivs_vcov.at(ii, jj) +=
             (obs_scaled[i] * obs_scaled[j] - S_00_inv.at(i , j)) / 2.;
         }
       }
@@ -215,13 +218,15 @@ double log_ml_term::approximate
       }
 
       /* handle the terms from the mean */
+      derivs_mea(idx_int) += d_mu_full;
+
       if(n_obs() > 0){
         {
           // TODO: memory allocation
           arma::mat inc = S_oo_inv_S_oi * d_mu_full * obs_scaled.t();
           inc /= 2.;
-          derivs(idx_obs, idx_obs) -= inc;
-          derivs(idx_obs, idx_obs) -= inc.t();
+          derivs_vcov(idx_obs, idx_obs) -= inc;
+          derivs_vcov(idx_obs, idx_obs) -= inc.t();
         }
 
         {
@@ -230,28 +235,28 @@ double log_ml_term::approximate
 
           inc /= 2.;
           inc.reshape(n_int(), n_obs());
-          derivs(idx_int, idx_obs) += inc;
-          derivs(idx_obs, idx_int) += inc.t();
+          derivs_vcov(idx_int, idx_obs) += inc;
+          derivs_vcov(idx_obs, idx_int) += inc.t();
         }
       }
 
       /* handle the terms from the covariance matrix */
-      derivs(idx_int, idx_int) += d_V_full;
+      derivs_vcov(idx_int, idx_int) += d_V_full;
 
       if(n_obs() > 0){
         {
           // TODO: memory allocation
           arma::mat const inc =
             S_oo_inv_S_oi * d_V_full * S_oo_inv_S_oi.t();
-          derivs(idx_obs, idx_obs) += inc;
+          derivs_vcov(idx_obs, idx_obs) += inc;
         }
 
         {
           // TODO: memory allocation
           arma::mat inc = d_V_full * S_oo_inv_S_oi.t();
 
-          derivs(idx_int, idx_obs) -= inc;
-          derivs(idx_obs, idx_int) -= inc.t();
+          derivs_vcov(idx_int, idx_obs) -= inc;
+          derivs_vcov(idx_obs, idx_int) -= inc.t();
         }
       }
 

@@ -186,7 +186,7 @@ mark(`Setup time` = {
 #> # A tibble: 1 x 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Setup time   22.5ms   23.9ms      41.5    9.65MB     13.8
+#> 1 Setup time   22.4ms     23ms      43.0    9.65MB     13.4
 
 # fit the model using three different methods
 set.seed(60941821)
@@ -196,15 +196,16 @@ system.time(
     n_threads = 4L, maxit = 100L, method = "aug_Lagran", rel_eps = 1e-3, 
     maxpts = 200L))
 #>    user  system elapsed 
-#>   178.6     0.0    44.7
+#> 171.736   0.043  43.004
 system.time(
   fit_Lagran <- mdgc_fit(
-    ptr = log_ml_ptr, vcov = fit_Lagran_start$result, mea = mdgc_obj$means, 
+    ptr = log_ml_ptr, vcov = fit_Lagran_start$result$vcov, 
+    mea = fit_Lagran_start$result$mea, 
     n_threads = 4L, maxit = 100L, method = "aug_Lagran", rel_eps = 1e-3, 
     maxpts = 5000L, mu = fit_Lagran_start$mu, 
     lambda = fit_Lagran_start$lambda))
 #>    user  system elapsed 
-#>   37.99    0.00    9.65
+#>  39.840   0.001  10.007
 
 system.time(
   fit_adam <- mdgc_fit(
@@ -212,7 +213,7 @@ system.time(
     n_threads = 4L, lr = 1e-3, maxit = 25L, batch_size = 100L, 
     method = "adam", rel_eps = 1e-3, maxpts = 5000L))
 #>    user  system elapsed 
-#>    40.2     0.0    10.1
+#>    40.7     0.0    10.2
 
 set.seed(fit_seed <- 19570958L)
 system.time(
@@ -221,123 +222,123 @@ system.time(
     n_threads = 4L, lr = 1e-3, maxit = 25L, batch_size = 100L, 
     method = "svrg", verbose = TRUE, rel_eps = 1e-3, maxpts = 5000L))
 #> End of iteration    1 with learning rate 0.00100000
-#> Log marginal likelihood approximation is    -23440.91
-#> Previous approximate gradient norm was        3399.64
+#> Log marginal likelihood approximation is    -23440.90
+#> Previous approximate gradient norm was        3448.44
 #> 
 #> End of iteration    2 with learning rate 0.00098000
-#> Log marginal likelihood approximation is    -23389.86
-#> Previous approximate gradient norm was        1701.56
+#> Log marginal likelihood approximation is    -23389.65
+#> Previous approximate gradient norm was        1728.53
 #> 
 #> End of iteration    3 with learning rate 0.00096040
-#> Log marginal likelihood approximation is    -23367.41
-#> Previous approximate gradient norm was        1146.69
+#> Log marginal likelihood approximation is    -23367.04
+#> Previous approximate gradient norm was        1163.49
 #> 
 #> End of iteration    4 with learning rate 0.00094119
-#> Log marginal likelihood approximation is    -23355.64
-#> Previous approximate gradient norm was         844.93
+#> Log marginal likelihood approximation is    -23355.12
+#> Previous approximate gradient norm was         853.92
 #> 
 #> End of iteration    5 with learning rate 0.00092237
-#> Log marginal likelihood approximation is    -23348.67
-#> Previous approximate gradient norm was         667.57
+#> Log marginal likelihood approximation is    -23348.09
+#> Previous approximate gradient norm was         675.05
 #> 
 #> End of iteration    6 with learning rate 0.00090392
-#> Log marginal likelihood approximation is    -23344.30
-#> Previous approximate gradient norm was         554.26
+#> Log marginal likelihood approximation is    -23343.66
+#> Previous approximate gradient norm was         560.86
 #> 
 #> End of iteration    7 with learning rate 0.00088584
-#> Log marginal likelihood approximation is    -23341.28
-#> Previous approximate gradient norm was         474.18
+#> Log marginal likelihood approximation is    -23340.64
+#> Previous approximate gradient norm was         478.72
 #> 
 #> End of iteration    8 with learning rate 0.00086813
-#> Log marginal likelihood approximation is    -23339.24
-#> Previous approximate gradient norm was         419.90
+#> Log marginal likelihood approximation is    -23338.56
+#> Previous approximate gradient norm was         422.60
 #> 
 #> End of iteration    9 with learning rate 0.00085076
-#> Log marginal likelihood approximation is    -23337.69
-#> Previous approximate gradient norm was         377.09
+#> Log marginal likelihood approximation is    -23337.02
+#> Previous approximate gradient norm was         379.01
 #> 
 #> End of iteration   10 with learning rate 0.00083375
-#> Log marginal likelihood approximation is    -23336.49
-#> Previous approximate gradient norm was         343.38
+#> Log marginal likelihood approximation is    -23335.80
+#> Previous approximate gradient norm was         345.57
 #> 
 #> End of iteration   11 with learning rate 0.00081707
-#> Log marginal likelihood approximation is    -23335.62
-#> Previous approximate gradient norm was         320.76
+#> Log marginal likelihood approximation is    -23334.92
+#> Previous approximate gradient norm was         323.14
 #> 
 #> End of iteration   12 with learning rate 0.00080073
-#> Log marginal likelihood approximation is    -23334.89
-#> Previous approximate gradient norm was         302.69
+#> Log marginal likelihood approximation is    -23334.21
+#> Previous approximate gradient norm was         304.19
 #> 
 #> End of iteration   13 with learning rate 0.00078472
-#> Log marginal likelihood approximation is    -23334.32
-#> Previous approximate gradient norm was         288.15
+#> Log marginal likelihood approximation is    -23333.61
+#> Previous approximate gradient norm was         289.58
 #> 
 #> End of iteration   14 with learning rate 0.00076902
-#> Log marginal likelihood approximation is    -23333.86
-#> Previous approximate gradient norm was         276.06
+#> Log marginal likelihood approximation is    -23333.12
+#> Previous approximate gradient norm was         275.60
 #> 
 #> End of iteration   15 with learning rate 0.00075364
-#> Log marginal likelihood approximation is    -23333.45
-#> Previous approximate gradient norm was         263.95
+#> Log marginal likelihood approximation is    -23332.70
+#> Previous approximate gradient norm was         264.18
 #> 
 #> End of iteration   16 with learning rate 0.00073857
-#> Log marginal likelihood approximation is    -23333.13
-#> Previous approximate gradient norm was         253.99
+#> Log marginal likelihood approximation is    -23332.37
+#> Previous approximate gradient norm was         253.95
 #> 
 #> End of iteration   17 with learning rate 0.00072380
-#> Log marginal likelihood approximation is    -23332.86
-#> Previous approximate gradient norm was         272.13
+#> Log marginal likelihood approximation is    -23332.09
+#> Previous approximate gradient norm was         273.96
 #> 
 #> End of iteration   18 with learning rate 0.00070932
-#> Log marginal likelihood approximation is    -23332.65
-#> Previous approximate gradient norm was         248.33
+#> Log marginal likelihood approximation is    -23331.87
+#> Previous approximate gradient norm was         249.60
 #> 
 #> End of iteration   19 with learning rate 0.00069514
-#> Log marginal likelihood approximation is    -23332.45
-#> Previous approximate gradient norm was         243.03
+#> Log marginal likelihood approximation is    -23331.67
+#> Previous approximate gradient norm was         243.70
 #> 
 #> End of iteration   20 with learning rate 0.00068123
-#> Log marginal likelihood approximation is    -23332.28
-#> Previous approximate gradient norm was         238.29
+#> Log marginal likelihood approximation is    -23331.49
+#> Previous approximate gradient norm was         239.11
 #> 
 #> End of iteration   21 with learning rate 0.00066761
-#> Log marginal likelihood approximation is    -23332.31
-#> Previous approximate gradient norm was         245.98
+#> Log marginal likelihood approximation is    -23331.46
+#> Previous approximate gradient norm was         248.30
 #> 
 #> End of iteration   22 with learning rate 0.00065426
-#> Log marginal likelihood approximation is    -23332.12
-#> Previous approximate gradient norm was         234.63
+#> Log marginal likelihood approximation is    -23331.29
+#> Previous approximate gradient norm was         233.47
 #> 
 #> End of iteration   23 with learning rate 0.00064117
-#> Log marginal likelihood approximation is    -23331.99
-#> Previous approximate gradient norm was         229.97
+#> Log marginal likelihood approximation is    -23331.15
+#> Previous approximate gradient norm was         228.26
 #> 
 #> End of iteration   24 with learning rate 0.00062835
-#> Log marginal likelihood approximation is    -23331.72
-#> Previous approximate gradient norm was         235.85
+#> Log marginal likelihood approximation is    -23330.90
+#> Previous approximate gradient norm was         235.00
 #> 
 #> End of iteration   25 with learning rate 0.00061578
-#> Log marginal likelihood approximation is    -23331.65
-#> Previous approximate gradient norm was         227.54
+#> Log marginal likelihood approximation is    -23330.83
+#> Previous approximate gradient norm was         226.77
 #>    user  system elapsed 
-#>  81.317   0.003  20.335
+#>    82.1     0.0    20.5
 
 # compare the log marginal likelihood 
 print(rbind(
   `Augmented Lagrangian` = 
-    mdgc_log_ml(vcov = fit_Lagran$result, mea = mdgc_obj$means, 
+    mdgc_log_ml(vcov = fit_Lagran$result$vcov, mea = fit_Lagran$result$mea, 
                 ptr = log_ml_ptr, rel_eps = 1e-3),
   ADAM = 
-    mdgc_log_ml(vcov = fit_adam$result  , mea = mdgc_obj$means, 
+    mdgc_log_ml(vcov = fit_adam$result$vcov  , mea = fit_adam$result$mea, 
                 ptr = log_ml_ptr, rel_eps = 1e-3),
   SVRG =
-    mdgc_log_ml(vcov = fit_svrg$result  , mea = mdgc_obj$means, 
+    mdgc_log_ml(vcov = fit_svrg$result$vcov  , mea = fit_svrg$result$mea, 
                 ptr = log_ml_ptr, rel_eps = 1e-3)), 
   digits = 10)
 #>                              [,1]
-#> Augmented Lagrangian -23331.18987
-#> ADAM                 -23350.31261
-#> SVRG                 -23331.61267
+#> Augmented Lagrangian -23330.35309
+#> ADAM                 -23349.73214
+#> SVRG                 -23330.80260
 
 # we can use an approximation in the method
 set.seed(fit_seed)
@@ -347,9 +348,13 @@ system.time(
     n_threads = 4L, lr = 1e-3, maxit = 25L, batch_size = 100L, 
     method = "svrg", rel_eps = 1e-3, maxpts = 5000L, use_aprx = TRUE))
 #>    user  system elapsed 
-#>    55.2     0.0    13.8
-norm(fit_svrg_aprx$result - fit_svrg$result, "F") # essentially the same
-#> [1] 9.54e-08
+#>      56       0      14
+
+# essentially the same estimates
+norm(fit_svrg_aprx$result$vcov - fit_svrg$result$vcov, "F") 
+#> [1] 9.22e-08
+sd(fit_svrg_aprx$result$mea - fit_svrg$result$mea)
+#> [1] 1.1e-09
 
 # compare the estimated correlation matrix with the true value
 do_plot <- function(est, truth, main){
@@ -365,38 +370,38 @@ do_plot <- function(est, truth, main){
   f(est - truth, "Difference")
 }
 
-do_plot(fit_Lagran$result, dat$Sigma, "Estimates (Aug. Lagrangian)")
+do_plot(fit_Lagran$result$vcov, dat$Sigma, "Estimates (Aug. Lagrangian)")
 ```
 
 <img src="man/figures/README-sim_dat-1.png" width="100%" />
 
 ``` r
-do_plot(fit_adam  $result, dat$Sigma, "Estimates (ADAM)")
+do_plot(fit_adam  $result$vcov, dat$Sigma, "Estimates (ADAM)")
 ```
 
 <img src="man/figures/README-sim_dat-2.png" width="100%" />
 
 ``` r
-do_plot(fit_svrg  $result, dat$Sigma, "Estimates (SVRG)")
+do_plot(fit_svrg  $result$vcov, dat$Sigma, "Estimates (SVRG)")
 ```
 
 <img src="man/figures/README-sim_dat-3.png" width="100%" />
 
 ``` r
 
-norm(fit_Lagran$result - dat$Sigma, "F")
+norm(fit_Lagran$result$vcov - dat$Sigma, "F")
 #> [1] 0.486
-norm(fit_adam  $result - dat$Sigma, "F")
+norm(fit_adam  $result$vcov - dat$Sigma, "F")
 #> [1] 0.501
-norm(fit_svrg  $result - dat$Sigma, "F")
+norm(fit_svrg  $result$vcov - dat$Sigma, "F")
 #> [1] 0.488
 
 # perform the imputation
 system.time(imp_res <- mdgc_impute(
-  mdgc_obj, fit_svrg$result, mea = mdgc_obj$means, rel_eps = 1e-3, 
+  mdgc_obj, fit_svrg$result$vcov, mea = fit_svrg$result$mea, rel_eps = 1e-3, 
   maxit = 10000L, n_threads = 4L))
 #>    user  system elapsed 
-#>   17.22    0.00    4.72
+#>   17.51    0.00    4.79
 
 # look at the result for one of the observations
 imp_res[2L]
@@ -422,7 +427,7 @@ imp_res[2L]
 #> 
 #> [[1]]$B2
 #> FALSE  TRUE 
-#> 0.194 0.806 
+#> 0.192 0.808 
 #> 
 #> [[1]]$B3
 #> FALSE  TRUE 
@@ -430,11 +435,11 @@ imp_res[2L]
 #> 
 #> [[1]]$B4
 #> FALSE  TRUE 
-#> 0.805 0.195 
+#>  0.81  0.19 
 #> 
 #> [[1]]$B5
 #> FALSE  TRUE 
-#> 0.248 0.752 
+#> 0.251 0.749 
 #> 
 #> [[1]]$O1
 #> A B C D E 
@@ -508,12 +513,12 @@ thresh_dat <- threshold(dat$seen_obs, imp_res)
 # compare thresholded data with observed and true data
 head(thresh_dat)
 #>      C1    C2    C3     C4       C5    B1    B2    B3    B4    B5 O1 O2 O3 O4
-#> 1 0.237 0.693 0.798 0.0666 1.210369 FALSE FALSE FALSE FALSE  TRUE  E  C  B  B
-#> 2 0.142 2.085 0.249 0.0927 0.000152 FALSE  TRUE  TRUE FALSE  TRUE  E  B  A  A
-#> 3 1.301 0.748 0.629 0.4280 0.571830 FALSE  TRUE  TRUE  TRUE  TRUE  E  A  E  C
-#> 4 2.702 0.779 1.137 2.1776 1.700870 FALSE  TRUE  TRUE  TRUE  TRUE  A  B  D  B
-#> 5 0.925 0.913 0.205 0.6046 0.171311  TRUE  TRUE FALSE FALSE FALSE  E  B  D  D
-#> 6 0.115 1.069 1.341 0.2374 0.233156 FALSE  TRUE  TRUE FALSE  TRUE  E  A  A  B
+#> 1 0.237 0.693 0.798 0.0666 1.217227 FALSE FALSE FALSE FALSE  TRUE  E  C  B  B
+#> 2 0.142 2.083 0.249 0.0927 0.000152 FALSE  TRUE  TRUE FALSE  TRUE  E  B  A  A
+#> 3 1.301 0.748 0.629 0.4280 0.572318 FALSE  TRUE  TRUE  TRUE  TRUE  E  A  E  C
+#> 4 2.702 0.775 1.129 2.1776 1.700870 FALSE  TRUE  TRUE  TRUE  TRUE  A  B  D  B
+#> 5 0.925 0.907 0.205 0.6046 0.171311  TRUE  TRUE FALSE FALSE FALSE  E  B  D  D
+#> 6 0.115 1.063 1.341 0.2397 0.238344 FALSE  TRUE  TRUE FALSE  TRUE  E  A  A  B
 #>   O5
 #> 1  D
 #> 2  C
@@ -563,7 +568,7 @@ get_classif_error <- function(impu_dat, truth = dat$truth_obs,
 }
 get_classif_error(thresh_dat)
 #>    B1    B2    B3    B4    B5    O1    O2    O3    O4    O5 
-#> 0.276 0.292 0.225 0.318 0.288 0.563 0.640 0.623 0.599 0.548
+#> 0.274 0.297 0.226 0.320 0.288 0.566 0.640 0.616 0.599 0.548
 
 # compute RMSE
 get_rmse <- function(impu_dat, truth = dat$truth_obs,
@@ -575,7 +580,7 @@ get_rmse <- function(impu_dat, truth = dat$truth_obs,
 }
 get_rmse(thresh_dat)
 #>    C1    C2    C3    C4    C5 
-#> 0.644 0.783 0.651 0.796 0.746
+#> 0.644 0.784 0.652 0.795 0.746
 
 # we can compare this with missForest
 miss_forest_arg <- dat$seen_obs
@@ -593,7 +598,7 @@ system.time(miss_res <- missForest(miss_forest_arg))
 #>   missForest iteration 8 in progress...done!
 #>   missForest iteration 9 in progress...done!
 #>    user  system elapsed 
-#>   44.78    0.04   44.82
+#>  45.805   0.036  45.841
 
 # turn binary variables back to logicals
 miss_res$ximp[, is_log] <- lapply(
@@ -602,12 +607,12 @@ miss_res$ximp[, is_log] <- lapply(
 rbind(mdgc       = get_classif_error(thresh_dat),
       missForest = get_classif_error(miss_res$ximp))
 #>               B1    B2    B3    B4    B5    O1    O2    O3    O4    O5
-#> mdgc       0.276 0.292 0.225 0.318 0.288 0.563 0.640 0.623 0.599 0.548
+#> mdgc       0.274 0.297 0.226 0.320 0.288 0.566 0.640 0.616 0.599 0.548
 #> missForest 0.315 0.340 0.304 0.371 0.319 0.651 0.726 0.680 0.673 0.612
 rbind(mdgc       = get_rmse(thresh_dat),
       missForest = get_rmse(miss_res$ximp))
 #>               C1    C2    C3    C4    C5
-#> mdgc       0.644 0.783 0.651 0.796 0.746
+#> mdgc       0.644 0.784 0.652 0.795 0.746
 #> missForest 0.806 0.848 0.755 0.845 0.842
 ```
 
@@ -640,64 +645,68 @@ system.time(res <- mdgc(dat$seen_obs, verbose = TRUE, maxpts = 5000L,
                         n_threads = 4L, maxit = 25L, use_aprx = TRUE))
 #> Estimating the model...
 #> End of iteration    1 with learning rate 0.00100000
-#> Log marginal likelihood approximation is    -23442.63
-#> Previous approximate gradient norm was        3393.96
+#> Log marginal likelihood approximation is    -23442.36
+#> Previous approximate gradient norm was        3442.57
 #> 
 #> End of iteration    2 with learning rate 0.00098000
-#> Log marginal likelihood approximation is    -23390.91
-#> Previous approximate gradient norm was        1694.62
+#> Log marginal likelihood approximation is    -23390.44
+#> Previous approximate gradient norm was        1714.26
 #> 
 #> End of iteration    3 with learning rate 0.00096040
-#> Log marginal likelihood approximation is    -23368.15
-#> Previous approximate gradient norm was        1138.76
+#> Log marginal likelihood approximation is    -23367.67
+#> Previous approximate gradient norm was        1150.81
 #> 
 #> End of iteration    4 with learning rate 0.00094119
-#> Log marginal likelihood approximation is    -23356.07
-#> Previous approximate gradient norm was         841.78
+#> Log marginal likelihood approximation is    -23355.49
+#> Previous approximate gradient norm was         848.53
 #> 
 #> End of iteration    5 with learning rate 0.00092237
-#> Log marginal likelihood approximation is    -23348.94
-#> Previous approximate gradient norm was         658.80
+#> Log marginal likelihood approximation is    -23348.33
+#> Previous approximate gradient norm was         661.09
 #> 
 #> End of iteration    6 with learning rate 0.00090392
-#> Log marginal likelihood approximation is    -23344.40
-#> Previous approximate gradient norm was         543.07
+#> Log marginal likelihood approximation is    -23343.81
+#> Previous approximate gradient norm was         549.48
 #> 
 #> End of iteration    7 with learning rate 0.00088584
-#> Log marginal likelihood approximation is    -23341.44
-#> Previous approximate gradient norm was         466.07
+#> Log marginal likelihood approximation is    -23340.76
+#> Previous approximate gradient norm was         469.18
 #> 
 #> End of iteration    8 with learning rate 0.00086813
-#> Log marginal likelihood approximation is    -23339.27
-#> Previous approximate gradient norm was         411.44
+#> Log marginal likelihood approximation is    -23338.57
+#> Previous approximate gradient norm was         411.35
 #> 
 #> End of iteration    9 with learning rate 0.00085076
-#> Log marginal likelihood approximation is    -23337.75
-#> Previous approximate gradient norm was         370.94
+#> Log marginal likelihood approximation is    -23337.01
+#> Previous approximate gradient norm was         372.60
 #> 
 #> End of iteration   10 with learning rate 0.00083375
-#> Log marginal likelihood approximation is    -23336.53
-#> Previous approximate gradient norm was         338.69
+#> Log marginal likelihood approximation is    -23335.82
+#> Previous approximate gradient norm was         342.23
 #> 
 #> End of iteration   11 with learning rate 0.00081707
-#> Log marginal likelihood approximation is    -23335.66
-#> Previous approximate gradient norm was         316.54
+#> Log marginal likelihood approximation is    -23334.88
+#> Previous approximate gradient norm was         318.26
+#> 
+#> End of iteration   12 with learning rate 0.00080073
+#> Log marginal likelihood approximation is    -23334.18
+#> Previous approximate gradient norm was         298.63
 #> 
 #> Performing imputation...
 #>    user  system elapsed 
-#>   15.44    0.00    4.33
+#>   16.56    0.00    4.61
 
 # compare the estimated correlation matrix with the truth
 norm(dat$Sigma - res$vcov, "F") / norm(dat$Sigma, "F")
-#> [1] 0.0956
+#> [1] 0.0955
 
 # compute the classifcation error and RMSE
 get_classif_error(res$ximp)
 #>    B1    B2    B3    B4    B5    O1    O2    O3    O4    O5 
-#> 0.274 0.285 0.226 0.314 0.288 0.574 0.638 0.626 0.605 0.543
+#> 0.274 0.290 0.225 0.318 0.291 0.576 0.638 0.629 0.600 0.548
 get_rmse(res$ximp)
 #>    C1    C2    C3    C4    C5 
-#> 0.644 0.783 0.651 0.796 0.747
+#> 0.644 0.784 0.652 0.795 0.746
 ```
 
 We can compare this with the `mixedgcImp` which uses the method
@@ -711,7 +720,7 @@ dat_pass[, is_cat] <- lapply(dat_pass[, is_cat], as.integer)
 
 system.time(imp_apr_em <- impute_mixedgc(dat_pass, eps = 1e-4))
 #>    user  system elapsed 
-#>   2e+01   4e-03   2e+01
+#>    19.8     0.0    19.8
 
 # compare the estimated correlation matrix with the truth
 get_rel_err <- function(est, keep = seq_len(NROW(truth)), truth = dat$Sigma)
@@ -725,9 +734,9 @@ c(mdgc                     = get_rel_err(res$vcov),
   `mdgc continuous`        = get_rel_err(res$vcov    , !is_cat),
   `mixedgcImp continuous`  = get_rel_err(imp_apr_em$R, !is_cat))
 #>                   mdgc             mixedgcImp       mdgc bin/ordered 
-#>                 0.0956                 0.1243                 0.0742 
+#>                 0.0955                 0.1243                 0.0742 
 #> mixedgcImp bin/ordered        mdgc continuous  mixedgcImp continuous 
-#>                 0.1083                 0.0241                 0.0257
+#>                 0.1083                 0.0242                 0.0257
 
 # compare the classifcation error and RMSE
 imp_apr_res <- as.data.frame(imp_apr_em$Ximp)
@@ -741,12 +750,12 @@ imp_apr_res[, is_ord] <- mapply(function(x, idx)
 rbind(mdgc       = get_classif_error(res$ximp),
       mixedgcImp = get_classif_error(imp_apr_res))
 #>               B1    B2    B3    B4    B5    O1    O2    O3    O4    O5
-#> mdgc       0.274 0.285 0.226 0.314 0.288 0.574 0.638 0.626 0.605 0.543
+#> mdgc       0.274 0.290 0.225 0.318 0.291 0.576 0.638 0.629 0.600 0.548
 #> mixedgcImp 0.281 0.328 0.232 0.320 0.288 0.626 0.694 0.688 0.609 0.556
 rbind(mdgc       = get_rmse(res$ximp),
       mixedgcImp = get_rmse(imp_apr_res))
 #>               C1    C2    C3    C4    C5
-#> mdgc       0.644 0.783 0.651 0.796 0.747
+#> mdgc       0.644 0.784 0.652 0.795 0.746
 #> mixedgcImp 0.645 0.789 0.655 0.810 0.755
 ```
 
@@ -799,7 +808,7 @@ res <- lapply(seeds, function(s){
     
     # impute using the other estimate
     mdgc_obj <- get_mdgc(dat$seen_obs)
-    impu_mixedgc_est <- mdgc_impute(mdgc_obj, mixedgc_res$R)
+    impu_mixedgc_est <- mdgc_impute(mdgc_obj, mixedgc_res$R, mdgc_obj$means)
     impu_mixedgc_est <- threshold(dat$seen_obs, impu_mixedgc_est)
     
     # gather output for the correlation matrix estimates
@@ -812,6 +821,10 @@ res <- lapply(seeds, function(s){
       mdgc_rel_err    = get_rel_err(mdgc   , truth)
       mixedgc_rel_err = get_rel_err(mixedgc, truth)
     })
+    
+    # gather the estimated means
+    mea_ests <- list(marginal = mdgc_obj$means, 
+                     joint    = mdgc_res$mea)
     
     # gather output for the imputation 
     mixedgc_imp_res <- as.data.frame(mixedgc_res$Ximp)
@@ -865,7 +878,7 @@ res <- lapply(seeds, function(s){
     
     # save output 
     out <- list(vcov_res = vcov_res, err = err, times = times, 
-                conv_stats = conv_stats)
+                conv_stats = conv_stats, mea_ests = mea_ests)
     saveRDS(out, file_name)
   }
   
@@ -936,14 +949,14 @@ show_sim_stats <- function(v1, v2, v3, what, sub_ele = NULL){
 show_sim_stats(1L, 2L, 3L, "times", "elapsed")
 #> Means and standard errors:
 #>             mean    SE
-#> mdgc        5.69 0.117
-#> mixedgc    21.45 0.164
-#> missForest 44.66 0.594
+#> mdgc        5.65 0.122
+#> mixedgc    21.25 0.146
+#> missForest 46.68 0.617
 #> 
 #> Difference:
 #>             mean    SE
-#> mixedgc    -15.8 0.195
-#> missForest -39.0 0.590
+#> mixedgc    -15.6 0.183
+#> missForest -41.0 0.608
 ```
 
 The summary stats for the relative Frobenius norm between the estimated
@@ -953,13 +966,13 @@ and true correlation matrix is given below:
 # relative norms
 show_sim_stats("mixedgc_rel_err", "mdgc_rel_err", NULL, "vcov_res")
 #> Means and standard errors:
-#>                   mean       SE
-#> mixedgc_rel_err 0.1187 0.001230
-#> mdgc_rel_err    0.0866 0.000969
+#>                   mean      SE
+#> mixedgc_rel_err 0.1187 0.00123
+#> mdgc_rel_err    0.0866 0.00097
 #> 
 #> Difference:
-#>                mean       SE
-#> mdgc_rel_err 0.0321 0.000909
+#>                mean      SE
+#> mdgc_rel_err 0.0321 0.00091
 ```
 
 Finally, here are the results for the classification error for the
@@ -975,22 +988,22 @@ show_sim_stats("mdgc_bin", "mixedgc_bin", "missForest_bin", "err")
 #> missForest_bin 0.294 0.00188
 #> 
 #> Difference:
-#>                   mean      SE
-#> mixedgc_bin    -0.0072 0.00255
-#> missForest_bin -0.0498 0.00255
+#>                    mean      SE
+#> mixedgc_bin    -0.00743 0.00255
+#> missForest_bin -0.05005 0.00255
 
 # the ordinal variables
 show_sim_stats("mdgc_class", "mixedgc_class", "missForest_class", "err")
 #> Means and standard errors:
 #>                   mean      SE
-#> mdgc_class       0.590 0.00215
+#> mdgc_class       0.590 0.00214
 #> mixedgc_class    0.623 0.00245
 #> missForest_class 0.658 0.00173
 #> 
 #> Difference:
 #>                     mean      SE
-#> mixedgc_class    -0.0331 0.00317
-#> missForest_class -0.0678 0.00273
+#> mixedgc_class    -0.0332 0.00316
+#> missForest_class -0.0679 0.00272
 
 # the continous variables
 show_sim_stats("mdgc_rmse", "mixedgc_rmse", "missForest_rmse", "err")
@@ -1001,9 +1014,9 @@ show_sim_stats("mdgc_rmse", "mixedgc_rmse", "missForest_rmse", "err")
 #> missForest_rmse 0.850 0.00340
 #> 
 #> Difference:
-#>                     mean      SE
-#> mixedgc_rmse    -0.00741 0.00576
-#> missForest_rmse -0.09019 0.00526
+#>                    mean      SE
+#> mixedgc_rmse    -0.0074 0.00575
+#> missForest_rmse -0.0902 0.00525
 ```
 
 It is important to emphasize that missForest is not estimating the true
@@ -1230,23 +1243,24 @@ system.time(
                    n_threads = 4L, rel_eps = 1e-2, maxpts = 1000L, 
                    minvls = 200L, use_aprx = TRUE))
 #>    user  system elapsed 
-#>    58.4     0.0    14.6
+#>    59.8     0.0    14.9
 
 # refine the estimates
 system.time(
-  ests <- mdgc_fit(ptr, vcov = ests$result, mea = obj$means, 
+  ests <- mdgc_fit(ptr, vcov = ests$result$vcov, 
+                   mea = ests$result$mea, 
                    method = "aug_Lagran",
                    n_threads = 4L, rel_eps = 1e-3, maxpts = 10000L, 
                    minvls = 1000L, mu = ests$mu, lambda = ests$lambda, 
                    use_aprx = TRUE))
 #>    user  system elapsed 
-#>   20.44    0.00    5.17
+#>   21.56    0.00    5.44
 
 # compare the estimated and the true values (should not match because of
 # overparameterization)
-image(ests$result[, NCOL(dat$Sigma):1], zlim = c(-1, 1), col = sc, 
+image(ests$result$vcov[, NCOL(dat$Sigma):1], zlim = c(-1, 1), col = sc, 
       main = "Estimates")
-image(dat$Sigma  [, NCOL(dat$Sigma):1], zlim = c(-1, 1), col = sc, 
+image(dat$Sigma       [, NCOL(dat$Sigma):1], zlim = c(-1, 1), col = sc, 
       main = "Truth")
 ```
 
@@ -1255,10 +1269,10 @@ image(dat$Sigma  [, NCOL(dat$Sigma):1], zlim = c(-1, 1), col = sc,
 ``` r
 # perform the imputation
 system.time(
-  imp_res <- mdgc_impute(obj, ests$result, mea = obj$means, rel_eps = 1e-3,
-                         maxit = 10000L, n_threads = 4L))
+  imp_res <- mdgc_impute(obj, ests$result$vcov, mea = ests$result$mea, 
+                         rel_eps = 1e-3, maxit = 10000L, n_threads = 4L))
 #>    user  system elapsed 
-#>  10.830   0.004   2.886
+#>  11.550   0.004   3.097
 
 # look at the result for one of the observations
 imp_res[1L]
@@ -1272,7 +1286,7 @@ imp_res[1L]
 #> 
 #> [[1]]$O1
 #>     A     B     C 
-#> 0.457 0.331 0.212 
+#> 0.457 0.332 0.211 
 #> 
 #> [[1]]$M1
 #> T1 T2 T3 
@@ -1291,7 +1305,7 @@ imp_res[1L]
 #> 
 #> [[1]]$M2
 #>    T1    T2    T3 
-#> 0.572 0.127 0.301
+#> 0.571 0.128 0.302
 
 # compare with the observed and true data
 rbind(truth = dat$truth_obs[1L, ], observed = dat$seen_obs[1L, ])
@@ -1352,7 +1366,7 @@ head(thresh_dat)
 #> 1 2.255  TRUE  A T1 0.752  TRUE  C T1
 #> 2 1.514 FALSE  B T2 0.722  TRUE  C T2
 #> 3 0.533 FALSE  C T2 0.612  TRUE  B T1
-#> 4 0.409  TRUE  A T1 0.735 FALSE  A T1
+#> 4 0.409  TRUE  A T1 0.736 FALSE  A T1
 #> 5 1.050  TRUE  A T3 0.510 FALSE  C T2
 #> 6 1.836 FALSE  C T1 1.973 FALSE  B T3
 head(dat$seen_obs)  # observed data
@@ -1385,7 +1399,7 @@ get_classif_error <- function(impu_dat, truth = dat$truth_obs,
 }
 get_classif_error(thresh_dat)
 #>    B1    O1    M1    B2    O2    M2 
-#> 0.413 0.544 0.592 0.385 0.605 0.540
+#> 0.413 0.539 0.589 0.388 0.607 0.545
 
 # compute RMSE
 get_rmse <- function(impu_dat, truth = dat$truth_obs,
@@ -1416,7 +1430,7 @@ system.time(miss_res <- missForest(miss_forest_arg))
 #>   missForest iteration 9 in progress...done!
 #>   missForest iteration 10 in progress...done!
 #>    user  system elapsed 
-#>   9.303   0.008   9.312
+#>    9.41    0.04    9.45
 
 # turn binary variables back to logicals
 miss_res$ximp[, is_log] <- lapply(
@@ -1426,7 +1440,7 @@ miss_res$ximp[, is_log] <- lapply(
 rbind(mdgc       = get_classif_error(thresh_dat),
       missForest = get_classif_error(miss_res$ximp))
 #>               B1    O1    M1    B2    O2    M2
-#> mdgc       0.413 0.544 0.592 0.385 0.605 0.540
+#> mdgc       0.413 0.539 0.589 0.388 0.607 0.545
 #> missForest 0.470 0.607 0.602 0.417 0.639 0.558
 rbind(mdgc       = get_rmse(thresh_dat),
       missForest = get_rmse(miss_res$ximp))
@@ -1472,7 +1486,7 @@ system.time(
                    use_aprx = TRUE, method = "aug_Lagran", 
                    minvls = 1000L, iminvls = 1000L))
 #>    user  system elapsed 
-#>    4.77    0.00    1.21
+#>    5.17    0.00    1.31
 
 # some of the impuated values
 head(mdgc_res$ximp)
@@ -1488,10 +1502,10 @@ head(mdgc_res$ximp)
 get_classif_error(impu_dat = mdgc_res$ximp, truth = iris, 
                   observed = dat)
 #> Species 
-#>   0.167
+#>   0.208
 get_rmse(impu_dat = mdgc_res$ximp, truth = iris, observed = dat)
 #> Sepal.Length  Sepal.Width Petal.Length  Petal.Width 
-#>        0.378        0.299        0.286        0.310
+#>        0.378        0.356        0.287        0.324
 
 # compare with missForest
 system.time(miss_res <- missForest(dat))
@@ -1501,7 +1515,7 @@ system.time(miss_res <- missForest(dat))
 #>   missForest iteration 4 in progress...done!
 #>   missForest iteration 5 in progress...done!
 #>    user  system elapsed 
-#>   0.363   0.004   0.367
+#>   0.360   0.000   0.359
 
 # the errors
 get_classif_error(impu_dat = miss_res$ximp, truth = iris, 
@@ -1552,7 +1566,7 @@ system.time(
                    use_aprx = TRUE, method = "aug_Lagran", 
                    minvls = 1000L, iminvls = 5000L))
 #>    user  system elapsed 
-#> 563.868   0.007 142.488
+#>  515.73    0.16  130.61
 
 # some of the impuated values
 head(mdgc_res$ximp)
@@ -1580,7 +1594,7 @@ system.time(miss_res <- missForest(miss_forest_arg))
 #>   missForest iteration 9 in progress...done!
 #>   missForest iteration 10 in progress...done!
 #>    user  system elapsed 
-#>   18.01    0.02   18.03
+#>  17.637   0.004  17.642
 
 # turn binary variables back to logicals
 miss_res$ximp[, is_log] <- lapply(
@@ -1593,7 +1607,7 @@ rbind(
   missForest = get_classif_error(
     impu_dat = miss_res$ximp, truth = colon_use, observed = dat))
 #>               rx   sex obstruct perfor adhere differ extent  surg
-#> mdgc       0.665 0.483    0.193 0.0296  0.149  0.311  0.213 0.267
+#> mdgc       0.675 0.483    0.193 0.0296  0.149  0.311  0.213 0.267
 #> missForest 0.470 0.393    0.172 0.0296  0.138  0.281  0.319 0.251
 
 rbind(

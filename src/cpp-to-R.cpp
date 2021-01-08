@@ -160,7 +160,11 @@ Rcpp::NumericVector eval_log_lm_terms(
   arma::vec mu_arg(p, arma::fill::zeros);
   mu_arg(idx_non_zero_mean) = mu;
 
-  arma::mat derivs = comp_derivs ? mat(p, p, arma::fill::zeros) : mat();
+  mat derivs_vcov =
+    comp_derivs ? mat(p, p, arma::fill::zeros) : mat();
+  arma::vec derivs_mea =
+    comp_derivs ? vec(p   , arma::fill::zeros) : vec();
+
 #ifdef _OPENMP
   omp_set_num_threads(n_threads);
 #endif
@@ -172,8 +176,9 @@ Rcpp::NumericVector eval_log_lm_terms(
 #pragma omp parallel
 #endif
   {
-    arma::mat my_derivs(comp_derivs ? p : 0L, comp_derivs ? p : 0L,
-                        arma::fill::zeros);
+    arma::mat my_derivs_vcov(comp_derivs ? p : 0L, comp_derivs ? p : 0L,
+                             arma::fill::zeros);
+    arma::vec my_derivs_mea(comp_derivs ? p : 0L, arma::fill::zeros);
 
 #ifdef _OPENMP
 #pragma omp for schedule(static) reduction(+:out) nowait
@@ -182,21 +187,29 @@ Rcpp::NumericVector eval_log_lm_terms(
       if(static_cast<size_t>(indices[i]) >= terms.size())
         continue;
       out += terms[indices[i]].approximate(
-        vcov, mu_arg, my_derivs, maxpts, abs_eps, rel_eps, comp_derivs,
-        do_reorder, minvls, use_aprx);
+        vcov, mu_arg, my_derivs_vcov, my_derivs_mea, maxpts, abs_eps,
+        rel_eps, comp_derivs, do_reorder, minvls, use_aprx);
     }
 
-    if(comp_derivs)
+    if(comp_derivs){
 #ifdef _OPENMP
 #pragma omp critical(add_derivs)
+{
 #endif
-      derivs += my_derivs;
+      derivs_vcov += my_derivs_vcov;
+      derivs_mea  += my_derivs_mea;
+#ifdef _OPENMP
+}
+#endif
+    }
   }
 
   Rcpp::NumericVector res(1);
   res[0] = out;
-  if(comp_derivs)
-    res.attr("grad") = derivs;
+  if(comp_derivs){
+    res.attr("grad_vcov") = derivs_vcov;
+    res.attr("grad_mea")  = vec(derivs_mea(idx_non_zero_mean));
+  }
 
   return res;
 }

@@ -191,7 +191,10 @@ public:
    * likelihood term.
    * @param mu Mean vector at which to evaluate the log marginal likelihood
    * term. Does not have any effect for continous variables.
-   * @param derivs Matrix with derivatives to increament.
+   * @param derivs_vcov Matrix with derivatives to increament for the
+   * covariance matrix.
+   * @param derivs_mea Vector with derivatives to increament for the
+   * mean vector.
    * @param maxpts Maximum number of integrand evaluations.
    * @param abs_eps Absolute convergence threshold.
    * @param rel_eps Relative convergence threshold.
@@ -201,11 +204,14 @@ public:
    * @param use_aprx logical for whether to use an approximation of
    * the normal CDF.
    *
+   * Mean terms for observed variables are always assumed to be zero. The
+   * corresponding derivatives are set to zero.
+   *
    * @return the log marginal likelihood approximation.
    *
    */
   double approximate(arma::mat const &vcov, arma::vec const &mu,
-                     arma::mat &derivs,
+                     arma::mat &derivs_vcov, arma::vec &derivs_mea,
                      int const maxpts, double const abs_eps,
                      double const rel_eps, bool const comp_deriv,
                      bool const do_reorder, size_t const minvls,
