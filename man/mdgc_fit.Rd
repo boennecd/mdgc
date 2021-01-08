@@ -7,6 +7,7 @@
 mdgc_fit(
   ptr,
   vcov,
+  mea,
   lr = 0.001,
   rel_eps = 0.001,
   maxit = 10L,
@@ -32,7 +33,8 @@ mdgc_fit(
 \arguments{
 \item{ptr}{returned object from \code{\link{get_mdgc_log_ml}}.}
 
-\item{vcov}{starting value.}
+\item{vcov, mea}{starting value for the covariance matrix and the
+non-zero mean entries.}
 
 \item{lr}{learning rate.}
 

@@ -15,6 +15,8 @@ mdgc_start_value.default(
   upper,
   code,
   multinomial,
+  idx_non_zero_mean,
+  mea,
   n_threads = 1L,
   ...
 )
@@ -41,6 +43,11 @@ interval.}
 multinomial outcomes. The first index is the outcome as an integer code,
 the second index is the number of categories, and the third index is the
 index of each multinomial variable (this is zero-based).}
+
+\item{idx_non_zero_mean}{indices for non-zero mean variables. Indices
+should be sorted.}
+
+\item{mea}{vector with non-zero mean entries.}
 
 \item{n_threads}{number of threads to use.}
 }

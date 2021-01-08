@@ -49,11 +49,8 @@ class log_ml_term {
   /** stores lower bounds for the CDF. Notice that multinomial add the
    *  number of levels less one with negative infinity. */
   arma::vec const lower;
-  /** stores upper bounds for the CDF. Notice that multinomial variables
-   *  should have the difference between the mean of the observed level and
-   *  the means of the other levels. Parts of this is handled by the
-   *  constructor and the user needs to pass the negative mean as the
-   *  upper bound. */
+  /** stores upper bounds for the CDF. Notice that multinomial add the
+   *  number of levels less one with zeros. */
   arma::vec const upper;
 
 public:
@@ -192,6 +189,8 @@ public:
    *
    * @param vcov Covariance matrix at which to evalute the log marginal
    * likelihood term.
+   * @param mu Mean vector at which to evaluate the log marginal likelihood
+   * term. Does not have any effect for continous variables.
    * @param derivs Matrix with derivatives to increament.
    * @param maxpts Maximum number of integrand evaluations.
    * @param abs_eps Absolute convergence threshold.
@@ -205,7 +204,8 @@ public:
    * @return the log marginal likelihood approximation.
    *
    */
-  double approximate(arma::mat const &vcov, arma::mat &derivs,
+  double approximate(arma::mat const &vcov, arma::vec const &mu,
+                     arma::mat &derivs,
                      int const maxpts, double const abs_eps,
                      double const rel_eps, bool const comp_deriv,
                      bool const do_reorder, size_t const minvls,

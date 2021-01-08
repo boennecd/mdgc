@@ -7,6 +7,7 @@
 mdgc_impute(
   object,
   vcov,
+  mea,
   rel_eps = 0.001,
   maxit = 10000L,
   abs_eps = -1,
@@ -20,6 +21,8 @@ mdgc_impute(
 \item{object}{returned object from \code{\link{get_mdgc}}.}
 
 \item{vcov}{covariance matrix to condition on in the imputation.}
+
+\item{mea}{vector with non-zero mean entries.}
 
 \item{rel_eps}{relative error for each term.}
 

@@ -56,24 +56,24 @@ test_that("ADAM gives the same", {
 
   set.seed(1L)
   fit_adam <- mdgc_fit(
-    ptr = log_ml_ptr, vcov = start_val, n_threads = 1L,
-    lr = 1e-2, maxit = 5L, batch_size = 10L, method = "adam",
-    minvls = 1000L)
+    ptr = log_ml_ptr, vcov = start_val, mea = mdgc_obj$means,
+    n_threads = 1L, lr = 1e-2, maxit = 5L, batch_size = 10L,
+    method = "adam", minvls = 1000L)
   expect_known_value(fit_adam, file = "mdgc_fit-ADAM-res.RDS",
                      tolerance = 1e-6, update = FALSE)
 
   set.seed(1L)
   fit_adam_2 <- mdgc_fit(
-    ptr = log_ml_ptr, vcov = start_val, n_threads = 2L,
-    lr = 1e-2, maxit = 5L, batch_size = 10L, method = "adam",
-    minvls = 1000L)
+    ptr = log_ml_ptr, vcov = start_val, mea = mdgc_obj$means,
+    n_threads = 2L, lr = 1e-2, maxit = 5L, batch_size = 10L,
+    method = "adam", minvls = 1000L)
   expect_equal(fit_adam, fit_adam_2, tolerance = 1e-3)
 
   set.seed(1L)
   fit_adam_3 <- mdgc_fit(
-    ptr = log_ml_ptr, vcov = start_val, n_threads = 1L,
-    lr = 1e-2, maxit = 5L, batch_size = 10L, method = "adam",
-    minvls = 1000L, use_aprx = TRUE)
+    ptr = log_ml_ptr, vcov = start_val, mea = mdgc_obj$means,
+    n_threads = 1L, lr = 1e-2, maxit = 5L, batch_size = 10L,
+    method = "adam", minvls = 1000L, use_aprx = TRUE)
   expect_equal(fit_adam, fit_adam_3, tolerance = 1e-6)
 })
 
@@ -84,23 +84,23 @@ test_that("svrg gives the same", {
 
   set.seed(1L)
   fit_svrg <- mdgc_fit(
-    ptr = log_ml_ptr, vcov = start_val, n_threads = 1L,
-    lr = 1e-2, maxit = 5L, batch_size = 10L, method = "svrg",
-    minvls = 1000L)
+    ptr = log_ml_ptr, vcov = start_val, mea = mdgc_obj$means,
+    n_threads = 1L, lr = 1e-2, maxit = 5L, batch_size = 10L,
+    method = "svrg", minvls = 1000L)
   expect_known_value(fit_svrg, file = "mdgc_fit-SVRG-res.RDS",
                      tolerance = 1e-6, udpate = FALSE)
 
   set.seed(1L)
   fit_svrg_2 <- mdgc_fit(
-    ptr = log_ml_ptr, vcov = start_val, n_threads = 2L,
-    lr = 1e-2, maxit = 5L, batch_size = 10L, method = "svrg",
-    minvls = 1000L)
+    ptr = log_ml_ptr, vcov = start_val, mea = mdgc_obj$means,
+    n_threads = 2L, lr = 1e-2, maxit = 5L, batch_size = 10L,
+    method = "svrg", minvls = 1000L)
   expect_equal(fit_svrg, fit_svrg_2, tolerance = 1e-3)
 
   set.seed(1L)
   fit_svrg_3 <- mdgc_fit(
-    ptr = log_ml_ptr, vcov = start_val, n_threads = 1L,
-    lr = 1e-2, maxit = 5L, batch_size = 10L, method = "svrg",
-    minvls = 1000L, use_aprx = TRUE)
+    ptr = log_ml_ptr, vcov = start_val, mea = mdgc_obj$means,
+    n_threads = 1L, lr = 1e-2, maxit = 5L, batch_size = 10L,
+    method = "svrg", minvls = 1000L, use_aprx = TRUE)
   expect_equal(fit_svrg, fit_svrg_3, tolerance = 1e-6)
 })

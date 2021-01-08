@@ -7,6 +7,7 @@
 mdgc_log_ml(
   ptr,
   vcov,
+  mea,
   rel_eps = 0.01,
   n_threads = 1L,
   comp_derivs = FALSE,
@@ -22,6 +23,8 @@ mdgc_log_ml(
 \item{ptr}{object returned by \code{\link{get_mdgc_log_ml}}.}
 
 \item{vcov}{covariance matrix.}
+
+\item{mea}{vector with non-zero mean entries.}
 
 \item{rel_eps}{relative error for each term.}
 

@@ -135,10 +135,11 @@ if(require(catdata)){
                    n_threads = 1L, method = "aug_Lagran")
 
   # compare the log-likelihood estimate
-  obj <- get_mdgc_log_ml(retinopathy)
-  cat(sprintf("Maximum log likelihood with SVRG vs. augmented Lagrangian:\n  \%.2f vs. \%.2f\n",
-              mdgc_log_ml(obj, vcov = impu    $vcov, rel_eps = 1e-3),
-              mdgc_log_ml(obj, vcov = impu_aug$vcov, rel_eps = 1e-3)))
+  # TODO: add means
+  # obj <- get_mdgc_log_ml(retinopathy)
+  # cat(sprintf("Maximum log likelihood with SVRG vs. augmented Lagrangian:\n  \%.2f vs. \%.2f\n",
+  #             mdgc_log_ml(obj, vcov = impu    $vcov, rel_eps = 1e-3),
+  #             mdgc_log_ml(obj, vcov = impu_aug$vcov, rel_eps = 1e-3)))
 
   # show correlation matrix
   cat("\nEstimated correlation matrix (augmented Lagrangian)\n")

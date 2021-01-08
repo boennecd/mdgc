@@ -43,9 +43,15 @@ get_mdgc <- function(dat){
 
     } else if(is.logical(x) || is.ordered(x)){
       phat <- table(x) / length(x)
-      stopifnot(all(phat > 0))
+      stopifnot(all(phat > 0), length(phat) > 1)
       lb <- c(-Inf, qnorm(cumsum(head(phat, -1))))
       ub <- c(qnorm(cumsum(head(phat, -1))), Inf)
+
+      is_bin <- length(lb) < 3
+      if(is_bin){
+        mu <- qnorm(phat[2])
+        lb[2] <- ub[1] <- 0
+      }
 
       lvls <- if(is.logical(x))
         c(FALSE, TRUE) else levels(x)
@@ -62,6 +68,8 @@ get_mdgc <- function(dat){
         }
       attr(out, "levels") <- lvls
       attr(out, "borders") <- c(-Inf, ub)
+      if(is_bin)
+        attr(out, "mean") <- mu
       return(out)
 
     } else if(is.factor(x)){
@@ -69,14 +77,13 @@ get_mdgc <- function(dat){
       mu <- multinomial_find_means(phat)
       if(attr(mu, "info-code") != 0)
         warning("multinomial_find_means had non-zero convergence code")
-      mu_aug <- c(0., mu)
 
       out <- function(x){
         lv <- c(vapply(!is.na(x), function(x)
           rep(if(x) -Inf else NA_real_, length(phat)),
           numeric(length(phat))))
         ub <- c(vapply(!is.na(x), function(x)
-          if(x) -mu_aug else rep(NA_real_, length(phat)),
+          rep(if(x) 0 else NA_real_, length(phat)),
           numeric(length(phat))))
 
         n <- length(x)
@@ -122,17 +129,41 @@ get_mdgc <- function(dat){
             n_lvls,
             idx[mults]))
 
-  } else
+  } else {
+    idx <- seq_along(margs) - 1
     multinomial <- replicate(NROW(dat), matrix(0L, 0L, 0L))
+  }
 
   # get the true values (needed for imputation)
   truth <- t(matrix(as.numeric(unlist(dat)), NROW(dat), NCOL(dat),
                     dimnames = dimnames(dat)))
 
+  # get the non-zero means
+  means <- sapply(
+    margs, function(x){
+      out <- attr(x, "mean")
+      if(!is.null(out))
+        return(out)
+      attr(x, "means")
+  })
+  idx_non_zero_mean <- mapply(function(meas, idx){
+    if(length(meas) == 0L)
+      return(NULL)
+    else if(length(meas) == 1L)
+      # a binary variable
+      return(idx)
+
+    # a multinomial variable
+    idx + seq_along(meas)
+  }, meas = means, idx = idx, SIMPLIFY = FALSE)
+  means <- unlist(means)
+  idx_non_zero_mean <- unlist(idx_non_zero_mean)
+
   structure(list(
     lower = lower, upper = upper, code = code, margs = margs,
     reals = reals, bins = bins, ords = ords, truth = truth,
-    multinomial = multinomial), class = "mdgc")
+    multinomial = multinomial, means = means,
+    idx_non_zero_mean = idx_non_zero_mean), class = "mdgc")
 }
 
 #' Get Pointer to C++ Object to Approximate the Log Marginal Likelihood
@@ -155,7 +186,13 @@ get_mdgc <- function(dat){
 #' multinomial outcomes. The first index is the outcome as an integer code,
 #' the second index is the number of categories, and the third index is the
 #' index of each multinomial variable (this is zero-based).
+#' @param idx_non_zero_mean indices for non-zero mean variables. Indices
+#' should be sorted.
 #' @param ... used to pass arguments to S3 methods.
+#'
+#' @details
+#' Indices are zero-based except the outcome index for multinomial
+#' variables.
 #'
 #' @seealso
 #' \code{\link{mdgc_fit}}, \code{\link{mdgc_log_ml}}
@@ -169,7 +206,8 @@ get_mdgc_log_ml <- function(object, ...)
 get_mdgc_log_ml.mdgc <- function(object, ...)
   get_mdgc_log_ml.default(lower = object$lower, upper = object$upper,
                           code = object$code,
-                          multinomial = object$multinomial)
+                          multinomial = object$multinomial,
+                          idx_non_zero_mean = object$idx_non_zero_mean)
 
 #' @rdname get_mdgc_log_ml
 #' @export
@@ -179,7 +217,7 @@ get_mdgc_log_ml.data.frame <- function(object, ...)
 #' @rdname get_mdgc_log_ml
 #' @export
 get_mdgc_log_ml.default <- function(object, lower, upper, code, multinomial,
-                                    ...){
+                                    idx_non_zero_mean, ...){
   # checks
   di <- dim(lower)
   stopifnot(
@@ -195,10 +233,12 @@ get_mdgc_log_ml.default <- function(object, lower, upper, code, multinomial,
   out <- get_log_lm_terms_cpp(lower = lower[, keep, drop = FALSE],
                               upper = upper[, keep, drop = FALSE],
                               code =  code [, keep, drop = FALSE],
-                              multinomial = multinomial[keep])
+                              multinomial = multinomial[keep],
+                              idx_non_zero_mean = idx_non_zero_mean)
   attr(out, "nobs") <- NCOL(upper)
   attr(out, "nvars") <- NROW(lower)
   attr(out, "multinomial") <- multinomial
+  attr(out, "idx_non_zero_mean") <- idx_non_zero_mean
   out
 }
 
@@ -214,6 +254,7 @@ get_mdgc_log_ml.default <- function(object, lower, upper, code, multinomial,
 #'
 #' @param ptr object returned by \code{\link{get_mdgc_log_ml}}.
 #' @param vcov covariance matrix.
+#' @param mea vector with non-zero mean entries.
 #' @param rel_eps relative error for each term.
 #' @param n_threads number of threads to use.
 #' @param comp_derivs logical for whether to approximate the gradient.
@@ -238,14 +279,15 @@ get_mdgc_log_ml.default <- function(object, lower, upper, code, multinomial,
 #' Springer-Verlag, Heidelberg.
 #'
 #' @export
-mdgc_log_ml <- function(ptr, vcov, rel_eps = 1e-2, n_threads = 1L,
+mdgc_log_ml <- function(ptr, vcov, mea, rel_eps = 1e-2, n_threads = 1L,
                         comp_derivs = FALSE, indices = NULL,
                         do_reorder = TRUE, maxpts = 100000L,
                         abs_eps = -1., minvls = 100L,
                         use_aprx = FALSE){
   nvars <- attr(ptr, "nvars")
   nobs <- attr(ptr, "nobs")
-  stopifnot(!is.null(nvars), !is.null(nobs))
+  idx_non_zero_mean <- attr(ptr, "idx_non_zero_mean")
+  stopifnot(!is.null(nvars), !is.null(nobs), !is.null(idx_non_zero_mean))
   if(is.null(indices))
     indices <- 0:(nobs - 1L)
 
@@ -261,20 +303,22 @@ mdgc_log_ml <- function(ptr, vcov, rel_eps = 1e-2, n_threads = 1L,
     is.integer(minvls), length(minvls) == 1L, minvls <= maxpts,
     minvls >= 0L,
     is.logical(use_aprx), length(use_aprx) == 1L,
-    is.finite(use_aprx))
+    is.finite(use_aprx),
+    length(mea) == length(idx_non_zero_mean), is.numeric(mea),
+    all(is.finite(mea)))
 
   .mdgc_log_ml(
-    ptr = ptr, vcov = vcov, indices = indices, maxpts = maxpts,
+    ptr = ptr, vcov = vcov, mu = mea, indices = indices, maxpts = maxpts,
     abs_eps = abs_eps, rel_eps = rel_eps, n_threads = n_threads,
     comp_derivs = comp_derivs, do_reorder = do_reorder, minvls = minvls,
     use_aprx = use_aprx)
 }
 
 .mdgc_log_ml <- function(
-  ptr, vcov, rel_eps, n_threads, comp_derivs, indices, do_reorder,
+  ptr, vcov, mu, rel_eps, n_threads, comp_derivs, indices, do_reorder,
   maxpts, abs_eps, minvls, use_aprx)
   eval_log_lm_terms(
-    ptr = ptr, vcov = vcov, indices = indices, maxpts = maxpts,
+    ptr = ptr, vcov = vcov, mu = mu, indices = indices, maxpts = maxpts,
     abs_eps = abs_eps, rel_eps = rel_eps, n_threads = n_threads,
     comp_derivs = comp_derivs, do_reorder = do_reorder, minvls = minvls,
     use_aprx = use_aprx)
@@ -286,6 +330,8 @@ mdgc_log_ml <- function(ptr, vcov, rel_eps = 1e-2, n_threads = 1L,
 #' can be passed e.g. to \code{\link{mdgc_fit}}.
 #'
 #' @inheritParams get_mdgc_log_ml
+#' @inheritParams mdgc_fit
+#' @param mea vector with non-zero mean entries.
 #' @param n_threads number of threads to use.
 #' @export
 mdgc_start_value <- function(...)
@@ -296,15 +342,27 @@ mdgc_start_value <- function(...)
 mdgc_start_value <- function(object, ...)
   mdgc_start_value.default(
     lower = object$lower, upper = object$upper, code = object$code,
-    multinomial = object$multinomial, ...)
+    multinomial = object$multinomial,
+    idx_non_zero_mean = object$idx_non_zero_mean, mea = object$means, ...)
 
 #' @rdname mdgc_start_value
 #' @importFrom stats cov cov2cor
 #' @export
 mdgc_start_value.default <- function(object, lower, upper, code,
-                                     multinomial, n_threads = 1L, ...){
-  Z <- get_z_hat(lower, upper, code, multinomial = multinomial,
-                 n_threads = n_threads)
+                                     multinomial, idx_non_zero_mean, mea,
+                                     n_threads = 1L, ...){
+  stopifnot(length(idx_non_zero_mean) == length(mea),
+            all(is.finite(mea)), is.numeric(mea),
+            !anyDuplicated(idx_non_zero_mean),
+            all(idx_non_zero_mean < NROW(lower)))
+
+  # get the mean vector to use
+  mea_use <- numeric(NROW(lower))
+  if(length(idx_non_zero_mean) > 0)
+    mea_use[idx_non_zero_mean + 1L] <- mea
+
+  Z <- get_z_hat(lower - mea_use, upper - mea_use,
+                 code, multinomial = multinomial, n_threads = n_threads)
   out <- cov(t(Z), use = "pairwise.complete.obs")
 
   # handle non-postive definite estimates
@@ -432,7 +490,8 @@ mdgc_start_value.default <- function(object, lower, upper, code,
 #' \code{\link{mdgc_impute}}.
 #'
 #' @param ptr returned object from \code{\link{get_mdgc_log_ml}}.
-#' @param vcov starting value.
+#' @param vcov,mea starting value for the covariance matrix and the
+#' non-zero mean entries.
 #' @param batch_size number of observations in each batch.
 #' @param lr learning rate.
 #' @param decay the learning rate used by SVRG is given by \code{lr * decay^iteration_number}.
@@ -456,7 +515,7 @@ mdgc_start_value.default <- function(object, lower, upper, code,
 #'
 #' @importFrom stats optim
 #' @export
-mdgc_fit <- function(ptr, vcov, lr = 1e-3, rel_eps = 1e-3,
+mdgc_fit <- function(ptr, vcov, mea, lr = 1e-3, rel_eps = 1e-3,
                      maxit = 10L, batch_size = NULL,
                      method = c("svrg", "adam", "aug_Lagran"), seed = 1L,
                      epsilon = 1e-8,
@@ -469,6 +528,7 @@ mdgc_fit <- function(ptr, vcov, lr = 1e-3, rel_eps = 1e-3,
   # checks
   nvars <- attr(ptr, "nvars")
   nobs <- attr(ptr, "nobs")
+  idx_non_zero_mean <- attr(ptr, "idx_non_zero_mean")
   stopifnot(!is.null(nvars), !is.null(nobs))
 
   if(is.null(batch_size))
@@ -499,7 +559,9 @@ mdgc_fit <- function(ptr, vcov, lr = 1e-3, rel_eps = 1e-3,
     is.logical(use_aprx), length(use_aprx) == 1L,
     is.finite(use_aprx),
     is.numeric(mu), length(mu) == 1L, mu > 0,
-    is.null(lambda) || is.numeric(lambda))
+    is.null(lambda) || is.numeric(lambda),
+    length(mea) == length(idx_non_zero_mean),
+    all(is.finite(mea)), is.numeric(mea))
 
   multinomial <- attr(ptr, "multinomial")
   any_multinomial <- length(multinomial[[1L]]) > 0
@@ -528,10 +590,10 @@ mdgc_fit <- function(ptr, vcov, lr = 1e-3, rel_eps = 1e-3,
     Arg <- .get_lchol_inv(par)
 
     res <- .mdgc_log_ml(
-      ptr = ptr, Arg, comp_derivs = comp_derivs, indices = indices,
-      n_threads = n_threads, rel_eps = rel_eps, do_reorder = do_reorder,
-      abs_eps = abs_eps, maxpts = maxpts, minvls = minvls,
-      use_aprx = use_aprx)
+      ptr = ptr, Arg, mu = mea, comp_derivs = comp_derivs,
+      indices = indices, n_threads = n_threads, rel_eps = rel_eps,
+      do_reorder = do_reorder, abs_eps = abs_eps, maxpts = maxpts,
+      minvls = minvls, use_aprx = use_aprx)
     log_ml <- c(res)
     if(comp_derivs){
       gr <- attr(res, "grad")
@@ -836,6 +898,7 @@ svrg <- function(par_fn, nobs, val, batch_size, maxit = 10L, seed = 1L, lr,
 #'
 #' @param object returned object from \code{\link{get_mdgc}}.
 #' @param vcov covariance matrix to condition on in the imputation.
+#' @param mea vector with non-zero mean entries.
 #' @inheritParams mdgc_fit
 #' @inheritParams mdgc_log_ml
 #' @export
@@ -843,13 +906,14 @@ svrg <- function(par_fn, nobs, val, batch_size, maxit = 10L, seed = 1L, lr,
 #' @return
 #' A list with imputed values for the continuous variables and a vector with
 #' probabilities for each level for the ordinal variables.
-mdgc_impute <- function(object, vcov, rel_eps = 1e-3, maxit = 10000L,
+mdgc_impute <- function(object, vcov, mea, rel_eps = 1e-3, maxit = 10000L,
                         abs_eps = -1, n_threads = 1L, do_reorder = TRUE,
                         minvls = 1000L, use_aprx = FALSE){
   #####
   # checks
   margs <- object$margs
   multinomial <- object$multinomial
+  idx_non_zero_mean <- object$idx_non_zero_mean
   nvars <- length(margs)
   if(length(multinomial[[1L]]) > 0)
     nvars <- nvars + sum(multinomial[[1L]][2, ]) - NCOL(multinomial[[1L]])
@@ -865,7 +929,9 @@ mdgc_impute <- function(object, vcov, rel_eps = 1e-3, maxit = 10000L,
     is.integer(minvls), length(minvls) == 1L, minvls <= maxit,
     minvls >= 0L,
     is.logical(use_aprx), length(use_aprx) == 1L,
-    is.finite(use_aprx))
+    is.finite(use_aprx),
+    length(idx_non_zero_mean) == length(mea),
+    all(is.finite(mea)), is.numeric(mea))
 
   #####
   # perform the imputation
@@ -888,8 +954,11 @@ mdgc_impute <- function(object, vcov, rel_eps = 1e-3, maxit = 10000L,
       quantile(cdf_func, max(x, eps))
   })
 
+  mea_arg <- numeric(nvars)
+  mea_arg[idx_non_zero_mean + 1L] <- mea
+
   impute(lower = object$lower, upper = object$upper, code = object$code,
-         Sigma = vcov, truth = object$truth,
+         Sigma = vcov, mea = mea_arg, truth = object$truth,
          margs = margs_pass, rel_eps = rel_eps, abs_eps = abs_eps,
          maxit = maxit, passed_names = passed_names,
          outer_names = rownames(object$truth), n_threads = n_threads,
@@ -968,10 +1037,11 @@ mdgc_impute <- function(object, vcov, rel_eps = 1e-3, maxit = 10000L,
 #'                    n_threads = 1L, method = "aug_Lagran")
 #'
 #'   # compare the log-likelihood estimate
-#'   obj <- get_mdgc_log_ml(retinopathy)
-#'   cat(sprintf("Maximum log likelihood with SVRG vs. augmented Lagrangian:\n  %.2f vs. %.2f\n",
-#'               mdgc_log_ml(obj, vcov = impu    $vcov, rel_eps = 1e-3),
-#'               mdgc_log_ml(obj, vcov = impu_aug$vcov, rel_eps = 1e-3)))
+#'   # TODO: add means
+#'   # obj <- get_mdgc_log_ml(retinopathy)
+#'   # cat(sprintf("Maximum log likelihood with SVRG vs. augmented Lagrangian:\n  %.2f vs. %.2f\n",
+#'   #             mdgc_log_ml(obj, vcov = impu    $vcov, rel_eps = 1e-3),
+#'   #             mdgc_log_ml(obj, vcov = impu_aug$vcov, rel_eps = 1e-3)))
 #'
 #'   # show correlation matrix
 #'   cat("\nEstimated correlation matrix (augmented Lagrangian)\n")
@@ -1000,18 +1070,21 @@ mdgc <- function(dat, lr = 1e-3, maxit = 10L, batch_size = NULL,
   if(verbose)
     cat("Estimating the model...\n")
   fit <- mdgc_fit(
-    ptr = log_ml_ptr, vcov = start_val, lr = lr, rel_eps = rel_eps,
-    maxit = maxit, batch_size = batch_size, method = method, seed = seed,
-    epsilon = epsilon, beta_1 = beta_1, beta_2 = beta_2,
-    n_threads = n_threads, do_reorder = do_reorder, abs_eps = abs_eps,
-    maxpts = maxpts, minvls = minvls, verbose = verbose, decay = decay,
-    conv_crit = conv_crit, use_aprx = use_aprx)
+    ptr = log_ml_ptr, vcov = start_val, mea = mdgc_obj$means, lr = lr,
+    rel_eps = rel_eps, maxit = maxit, batch_size = batch_size,
+    method = method, seed = seed, epsilon = epsilon, beta_1 = beta_1,
+    beta_2 = beta_2, n_threads = n_threads, do_reorder = do_reorder,
+    abs_eps = abs_eps, maxpts = maxpts, minvls = minvls, verbose = verbose,
+    decay = decay, conv_crit = conv_crit, use_aprx = use_aprx)
   vcov <- fit$result
   colnames(vcov) <- rownames(vcov) <- rownames(mdgc_obj$lower)
 
   if(verbose)
     cat("Performing imputation...\n")
-  impu <- mdgc_impute(mdgc_obj, fit$result, rel_eps = irel_eps,
+  impu <- mdgc_impute(mdgc_obj, fit$result,
+                      # TODO: this has to change when the means are estimated
+                      mea = mdgc_obj$means,
+                      rel_eps = irel_eps,
                       maxit = imaxit, abs_eps = iabs_eps,
                       n_threads = n_threads, do_reorder = do_reorder,
                       minvls = iminvls, use_aprx = use_aprx)

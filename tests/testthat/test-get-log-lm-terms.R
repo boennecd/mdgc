@@ -44,7 +44,7 @@ test_that("'get_log_lm_terms' gives the correct result with and without gradient
                            matrix(0L, 0, 0), simplify = FALSE)
   ptr <- mdgc:::get_log_lm_terms_cpp(
     lower = dat$lower, upper = dat$upper, code = dat$code,
-    multinomial = multinomial)
+    multinomial = multinomial, idx_non_zero_mean = integer())
 
   lcov_to_mat <- function(par){
     p <- (sqrt(8 * length(par) + 1) - 1) / 2
@@ -61,7 +61,8 @@ test_that("'get_log_lm_terms' gives the correct result with and without gradient
     Arg <- lcov_to_mat(vcov_log_chol)
 
     mdgc:::eval_log_lm_terms(
-      ptr = ptr, vcov = Arg, indices = 0:(NCOL(dat$lower) - 1L),
+      ptr = ptr, vcov = Arg, mu = numeric(),
+      indices = 0:(NCOL(dat$lower) - 1L),
       maxpts = 1000000L, abs_eps = -1, rel_eps = rel_eps, n_threads = n_threads,
       comp_derivs = comp_derivs, minvls = 0L)
   }
@@ -114,6 +115,9 @@ test_that("'get_log_lm_terms' gives the correct result with and without gradient
                tolerance = 1e-3)
 })
 
+test_that("'get_log_lm_terms' gives the correct result with and without gradients with non-fixed means", {
+  expect_true(FALSE)
+})
 
 
 # sim_dat <- function(n, p = 4, n_lvls = 5L){
@@ -172,7 +176,7 @@ test_that("'get_log_lm_terms' gives the correct result with and without gradient
                            matrix(0L, 0, 0), simplify = FALSE)
   ptr <- mdgc:::get_log_lm_terms_cpp(
     lower = dat$lower, upper = dat$upper, code = dat$code,
-    multinomial = multinomial)
+    multinomial = multinomial, idx_non_zero_mean = integer())
 
   lcov_to_mat <- function(par){
     p <- (sqrt(8 * length(par) + 1) - 1) / 2
@@ -189,7 +193,7 @@ test_that("'get_log_lm_terms' gives the correct result with and without gradient
     Arg <- lcov_to_mat(vcov_log_chol)
 
     mdgc:::eval_log_lm_terms(
-      ptr = ptr, vcov = Arg, indices = 0:(NCOL(dat$lower) - 1L),
+      ptr = ptr, vcov = Arg, mu = numeric(), indices = 0:(NCOL(dat$lower) - 1L),
       maxpts = 1000000L, abs_eps = -1, rel_eps = rel_eps, n_threads = n_threads,
       comp_derivs = comp_derivs, minvls = 0L)
   }
@@ -389,10 +393,11 @@ test_that("mdgc_log_ml gives the correct result with a single log marginal likel
       lower = matrix(lower[indicies]),
       upper = matrix(upper[indicies]),
       code  = matrix(code [indicies]),
-      multinomial = cate_arg)
+      multinomial = cate_arg,
+      idx_non_zero_mean = integer())
 
     res <- mdgc_log_ml(cpp_obj, vcov = Sig[indicies, indicies],
-                       rel_eps = 1e-5, maxpts = 10000L)
+                       rel_eps = 1e-5, maxpts = 10000L, mea = numeric())
     expect_equal(res, f1 + f2, tolerance = 1e-4)
   }
 
@@ -462,10 +467,11 @@ test_that("mdgc_log_ml gives the correct result with a single log marginal likel
       lower = matrix(lower[indicies]),
       upper = matrix(upper[indicies]),
       code  = matrix(code [indicies]),
-      multinomial = cate_arg)
+      multinomial = cate_arg, idx_non_zero_mean = integer())
 
     res <- mdgc_log_ml(cpp_obj, vcov = Sig[indicies, indicies],
-                       rel_eps = 1e-5, maxpts = 10000L)
+                       rel_eps = 1e-5, maxpts = 10000L,
+                       mea = numeric())
     expect_equal(res, f1 + f2, tolerance = 1e-4)
   }
 })

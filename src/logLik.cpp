@@ -35,9 +35,9 @@ using namespace restrictcdf;
 static double const log_2_pi = log(2 * M_PI);
 
 double log_ml_term::approximate
-(arma::mat const &vcov, arma::mat &derivs, int const maxpts,
- double const abs_eps, double const rel_eps, bool const comp_deriv,
- bool const do_reorder, size_t const minvls,
+(arma::mat const &vcov, arma::vec const &mu, arma::mat &derivs,
+ int const maxpts, double const abs_eps, double const rel_eps,
+ bool const comp_deriv,bool const do_reorder, size_t const minvls,
  bool const use_aprx) const {
 #ifdef DO_CHECKS
   {
@@ -70,6 +70,7 @@ double log_ml_term::approximate
     return out;
   };
 
+  // lambda function to return working memory
   size_t tmp_cur = 0L;
   double * const wk_use = wk_mem + size_shared_mem;
   auto get_temp_mem = [&](size_t const siz, bool const reset){
@@ -117,7 +118,7 @@ double log_ml_term::approximate
     V = vcov(idx_int, idx_int);
 
     arma::vec mea(get_temp_mem(n_int(), false), n_int(), false);
-    mea.zeros();
+    mea = mu(idx_int);
     arma::mat S_oo_inv_S_oi(get_shared(n_obs() * n_int()), n_obs(), n_int(),
                             false, true);
 

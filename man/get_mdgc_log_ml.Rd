@@ -13,7 +13,15 @@ get_mdgc_log_ml(object, ...)
 
 \method{get_mdgc_log_ml}{data.frame}(object, ...)
 
-\method{get_mdgc_log_ml}{default}(object, lower, upper, code, multinomial, ...)
+\method{get_mdgc_log_ml}{default}(
+  object,
+  lower,
+  upper,
+  code,
+  multinomial,
+  idx_non_zero_mean,
+  ...
+)
 }
 \arguments{
 \item{object}{mdgc object from \code{\link{get_mdgc}} or a
@@ -37,10 +45,17 @@ interval.}
 multinomial outcomes. The first index is the outcome as an integer code,
 the second index is the number of categories, and the third index is the
 index of each multinomial variable (this is zero-based).}
+
+\item{idx_non_zero_mean}{indices for non-zero mean variables. Indices
+should be sorted.}
 }
 \description{
 Creates a C++ object which is needed to approximate the log marginal
 likelihood. The object cannot be saved.
+}
+\details{
+Indices are zero-based except the outcome index for multinomial
+variables.
 }
 \seealso{
 \code{\link{mdgc_fit}}, \code{\link{mdgc_log_ml}}

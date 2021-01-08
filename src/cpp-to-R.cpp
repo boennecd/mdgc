@@ -17,7 +17,11 @@ using namespace mdgc;
 using namespace arma;
 
 struct ml_terms {
+  // number of latent variables
   size_t n_variables;
+  // vector with zero-based indices of the non-zero mean terms.
+  arma::uvec idx_non_zero_mean;
+  // log marginal likelihood term objects
   std::vector<log_ml_term> terms;
 };
 
@@ -33,10 +37,16 @@ struct ml_terms {
  * @param multinomial list with 3xn matrix with multinomial outcomes. The
  * first index is the outcome, the second index is the number of categories,
  * and the third index is the index of the first latent variable.
+ * @param idx_non_zero_mean indices for non-zero mean variables. Indices
+ * should be sorted.
+ *
+ * Indices are zero-based except the outcome index for multinomial
+ * variables.
  */
 // [[Rcpp::export(rng = false)]]
 SEXP get_log_lm_terms_cpp(arma::mat const &lower, arma::mat const &upper,
-                          arma::imat const &code, Rcpp::List multinomial){
+                          arma::imat const &code, Rcpp::List multinomial,
+                          arma::uvec const idx_non_zero_mean){
   auto out = Rcpp::XPtr<ml_terms>(new ml_terms());
 
   size_t const n = lower.n_cols,
@@ -47,9 +57,18 @@ SEXP get_log_lm_terms_cpp(arma::mat const &lower, arma::mat const &upper,
     throw std::invalid_argument("get_log_lm_terms: invalid 'code'");
   if(static_cast<size_t>(multinomial.size()) != n)
     throw std::invalid_argument("get_log_lm_terms: invalid 'multinomial'");
+  if(idx_non_zero_mean.size() > 0 and idx_non_zero_mean[0] >= p)
+    throw std::invalid_argument("get_log_lm_terms: invalid 'idx_non_zero_mean'");
+  if(idx_non_zero_mean.size() > 1)
+    for(size_t i = 1; i < idx_non_zero_mean.size(); ++i)
+      if(idx_non_zero_mean[i] <= idx_non_zero_mean[i - 1] or
+           idx_non_zero_mean[i] >= p)
+        throw std::invalid_argument(
+            "get_log_lm_terms: invalid 'idx_non_zero_mean' (index is too large, duplicate, or not sorted)");
 
   /* fill in the log ml terms objects */
   std::vector<log_ml_term> &terms = out->terms;
+  out->idx_non_zero_mean = idx_non_zero_mean;
   out->n_variables = p;
   terms.reserve(n);
   uvec w_idx_int(p),
@@ -121,6 +140,7 @@ SEXP get_log_lm_terms_cpp(arma::mat const &lower, arma::mat const &upper,
 // [[Rcpp::export]]
 Rcpp::NumericVector eval_log_lm_terms(
     SEXP ptr, arma::ivec const &indices, arma::mat const &vcov,
+    arma::vec const &mu,
     int const maxpts, double const abs_eps, double const rel_eps,
     size_t const n_threads, bool const comp_derivs, unsigned const minvls,
     bool const do_reorder = true, bool const use_aprx = false){
@@ -128,12 +148,17 @@ Rcpp::NumericVector eval_log_lm_terms(
   std::vector<log_ml_term> const &terms = obj->terms;
 
   size_t const p = obj->n_variables;
+  arma::uvec const &idx_non_zero_mean = obj->idx_non_zero_mean;
   if(vcov.n_cols != p or vcov.n_rows != p)
     throw std::invalid_argument("eval_log_lm_terms: invalid vcov");
   if(n_threads < 1L)
     throw std::invalid_argument("eval_log_lm_terms: invalid n_threads");
+  if(mu.size() != idx_non_zero_mean.size())
+    throw std::invalid_argument("eval_log_lm_terms: invalid mu");
 
   log_ml_term::set_working_memory(terms, n_threads);
+  arma::vec mu_arg(p, arma::fill::zeros);
+  mu_arg(idx_non_zero_mean) = mu;
 
   arma::mat derivs = comp_derivs ? mat(p, p, arma::fill::zeros) : mat();
 #ifdef _OPENMP
@@ -157,7 +182,7 @@ Rcpp::NumericVector eval_log_lm_terms(
       if(static_cast<size_t>(indices[i]) >= terms.size())
         continue;
       out += terms[indices[i]].approximate(
-        vcov, my_derivs, maxpts, abs_eps, rel_eps, comp_derivs,
+        vcov, mu_arg, my_derivs, maxpts, abs_eps, rel_eps, comp_derivs,
         do_reorder, minvls, use_aprx);
     }
 
@@ -531,15 +556,13 @@ inline SEXP impute_set_val_R
 // [[Rcpp::export()]]
 Rcpp::List impute
   (arma::mat const &lower, arma::mat const &upper, arma::imat const &code,
-   arma::mat const &Sigma, arma::mat const &truth, Rcpp::List margs,
-   Rcpp::List multinomial,
+   arma::mat const &Sigma, arma::vec const &mea,
+   arma::mat const &truth, Rcpp::List margs, Rcpp::List multinomial,
    double const rel_eps, double const abs_eps, unsigned const maxit,
    Rcpp::List passed_names, Rcpp::CharacterVector outer_names,
    int const n_threads, bool const do_reorder, int const minvls,
    bool const use_aprx = false){
   // setup vector to pass to RQMC method
-  std::vector<vec> cate_means; // means of the multinomial variables
-
   std::vector<std::unique_ptr<impute_base> > const type_list = ([&](){
     std::vector<std::unique_ptr<impute_base> > out;
     out.reserve(margs.size());
@@ -547,18 +570,24 @@ Rcpp::List impute
       Rcpp::RObject ro(o),
                     bo(ro.attr("borders")),
                     mu(ro.attr("means"));
-      if(!mu.isNULL()){
-        cate_means.emplace_back(Rcpp::as<vec>(mu));
+
+      if(!mu.isNULL())
+        // the variable is multinomial
         out.emplace_back(new restrictcdf::imputation::multinomial(
-            cate_means.back().n_elem + 1));
-      } else if(bo.isNULL())
+            Rcpp::NumericVector(mu).size() + 1));
+      else if(bo.isNULL())
+        // the variable is continous and we just have to increament the
+        // pointer
         out.emplace_back(new restrictcdf::imputation::contin());
       else {
+        // the variable is ordinal or binary
         Rcpp::NumericVector bo_vec(bo);
         if(bo_vec.size() > 3L)
+          // the variable is ordinal
           out.emplace_back(new ordinal(&bo_vec[0], bo_vec.size()));
         else
-          out.emplace_back(new binary(bo_vec[1]));
+          // the variable is binary
+          out.emplace_back(new binary(0));
       }
     }
 
@@ -645,18 +674,12 @@ Rcpp::List impute
       if(static_cast<size_t>(k) < cate_mat_i.n_cols and
            j == cate_mat_i.at(2, k)){
         int const n_lvls = cate_mat_i.at(1, k);
-        arma::vec const &cat_mu = cate_means[k];
-        auto get_mu_ele = [&](int const idx) -> double {
-          if(idx < 1)
-            return 0;
-          return cat_mu[idx - 1];
-        };
 
         if(code.at(j, i) == 1L){
           // no information (missing and needs imputation)
           for(int l = 0; l < n_lvls; ++l, ++j){
             w_idx_int.at(n_i_all  ) = j;
-            mu       .at(n_i_all++) = get_mu_ele(l);
+            mu       .at(n_i_all++) = mea[j];
 
             w_idx_cat_not_obs.at(n_i  ) = j - n_o;
             w_lower          .at(n_i  ) = -inf;
@@ -670,7 +693,7 @@ Rcpp::List impute
 
           for(int l = 0; l < n_lvls; ++l, ++j){
             w_idx_int.at(n_i_all  ) = j;
-            mu       .at(n_i_all++) = 0;
+            mu       .at(n_i_all++) = mea[j];
 
             if(j != idx_obs_lvl){
               D                .at(n_i, n_D_col) = 1;
@@ -698,7 +721,7 @@ Rcpp::List impute
       } else if(code.at(j, i) == 1L) {
         /* no information (missing and needs imputation) */
         w_idx_int.at(n_i_all  ) = j;
-        mu       .at(n_i_all++) = 0;
+        mu       .at(n_i_all++) = mea[j];
 
         w_idx_cat_not_obs.at(n_i  ) = j - n_o;
         w_lower          .at(n_i  ) = -inf;
@@ -708,7 +731,7 @@ Rcpp::List impute
       } else if(code.at(j, i) == 2L){
         /* Z is in an interval */
         w_idx_int.at(n_i_all  ) = j;
-        mu       .at(n_i_all++) = 0;
+        mu       .at(n_i_all++) = mea[j];
 
         w_idx_cat_not_obs.at(n_i  ) = j - n_o;
         w_lower          .at(n_i  ) = lower.at(j, i);

@@ -7,27 +7,29 @@
 using namespace Rcpp;
 
 // get_log_lm_terms_cpp
-SEXP get_log_lm_terms_cpp(arma::mat const& lower, arma::mat const& upper, arma::imat const& code, Rcpp::List multinomial);
-RcppExport SEXP _mdgc_get_log_lm_terms_cpp(SEXP lowerSEXP, SEXP upperSEXP, SEXP codeSEXP, SEXP multinomialSEXP) {
+SEXP get_log_lm_terms_cpp(arma::mat const& lower, arma::mat const& upper, arma::imat const& code, Rcpp::List multinomial, arma::uvec const idx_non_zero_mean);
+RcppExport SEXP _mdgc_get_log_lm_terms_cpp(SEXP lowerSEXP, SEXP upperSEXP, SEXP codeSEXP, SEXP multinomialSEXP, SEXP idx_non_zero_meanSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::traits::input_parameter< arma::mat const& >::type lower(lowerSEXP);
     Rcpp::traits::input_parameter< arma::mat const& >::type upper(upperSEXP);
     Rcpp::traits::input_parameter< arma::imat const& >::type code(codeSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type multinomial(multinomialSEXP);
-    rcpp_result_gen = Rcpp::wrap(get_log_lm_terms_cpp(lower, upper, code, multinomial));
+    Rcpp::traits::input_parameter< arma::uvec const >::type idx_non_zero_mean(idx_non_zero_meanSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_log_lm_terms_cpp(lower, upper, code, multinomial, idx_non_zero_mean));
     return rcpp_result_gen;
 END_RCPP
 }
 // eval_log_lm_terms
-Rcpp::NumericVector eval_log_lm_terms(SEXP ptr, arma::ivec const& indices, arma::mat const& vcov, int const maxpts, double const abs_eps, double const rel_eps, size_t const n_threads, bool const comp_derivs, unsigned const minvls, bool const do_reorder, bool const use_aprx);
-RcppExport SEXP _mdgc_eval_log_lm_terms(SEXP ptrSEXP, SEXP indicesSEXP, SEXP vcovSEXP, SEXP maxptsSEXP, SEXP abs_epsSEXP, SEXP rel_epsSEXP, SEXP n_threadsSEXP, SEXP comp_derivsSEXP, SEXP minvlsSEXP, SEXP do_reorderSEXP, SEXP use_aprxSEXP) {
+Rcpp::NumericVector eval_log_lm_terms(SEXP ptr, arma::ivec const& indices, arma::mat const& vcov, arma::vec const& mu, int const maxpts, double const abs_eps, double const rel_eps, size_t const n_threads, bool const comp_derivs, unsigned const minvls, bool const do_reorder, bool const use_aprx);
+RcppExport SEXP _mdgc_eval_log_lm_terms(SEXP ptrSEXP, SEXP indicesSEXP, SEXP vcovSEXP, SEXP muSEXP, SEXP maxptsSEXP, SEXP abs_epsSEXP, SEXP rel_epsSEXP, SEXP n_threadsSEXP, SEXP comp_derivsSEXP, SEXP minvlsSEXP, SEXP do_reorderSEXP, SEXP use_aprxSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type ptr(ptrSEXP);
     Rcpp::traits::input_parameter< arma::ivec const& >::type indices(indicesSEXP);
     Rcpp::traits::input_parameter< arma::mat const& >::type vcov(vcovSEXP);
+    Rcpp::traits::input_parameter< arma::vec const& >::type mu(muSEXP);
     Rcpp::traits::input_parameter< int const >::type maxpts(maxptsSEXP);
     Rcpp::traits::input_parameter< double const >::type abs_eps(abs_epsSEXP);
     Rcpp::traits::input_parameter< double const >::type rel_eps(rel_epsSEXP);
@@ -36,7 +38,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< unsigned const >::type minvls(minvlsSEXP);
     Rcpp::traits::input_parameter< bool const >::type do_reorder(do_reorderSEXP);
     Rcpp::traits::input_parameter< bool const >::type use_aprx(use_aprxSEXP);
-    rcpp_result_gen = Rcpp::wrap(eval_log_lm_terms(ptr, indices, vcov, maxpts, abs_eps, rel_eps, n_threads, comp_derivs, minvls, do_reorder, use_aprx));
+    rcpp_result_gen = Rcpp::wrap(eval_log_lm_terms(ptr, indices, vcov, mu, maxpts, abs_eps, rel_eps, n_threads, comp_derivs, minvls, do_reorder, use_aprx));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -110,8 +112,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // impute
-Rcpp::List impute(arma::mat const& lower, arma::mat const& upper, arma::imat const& code, arma::mat const& Sigma, arma::mat const& truth, Rcpp::List margs, Rcpp::List multinomial, double const rel_eps, double const abs_eps, unsigned const maxit, Rcpp::List passed_names, Rcpp::CharacterVector outer_names, int const n_threads, bool const do_reorder, int const minvls, bool const use_aprx);
-RcppExport SEXP _mdgc_impute(SEXP lowerSEXP, SEXP upperSEXP, SEXP codeSEXP, SEXP SigmaSEXP, SEXP truthSEXP, SEXP margsSEXP, SEXP multinomialSEXP, SEXP rel_epsSEXP, SEXP abs_epsSEXP, SEXP maxitSEXP, SEXP passed_namesSEXP, SEXP outer_namesSEXP, SEXP n_threadsSEXP, SEXP do_reorderSEXP, SEXP minvlsSEXP, SEXP use_aprxSEXP) {
+Rcpp::List impute(arma::mat const& lower, arma::mat const& upper, arma::imat const& code, arma::mat const& Sigma, arma::vec const& mea, arma::mat const& truth, Rcpp::List margs, Rcpp::List multinomial, double const rel_eps, double const abs_eps, unsigned const maxit, Rcpp::List passed_names, Rcpp::CharacterVector outer_names, int const n_threads, bool const do_reorder, int const minvls, bool const use_aprx);
+RcppExport SEXP _mdgc_impute(SEXP lowerSEXP, SEXP upperSEXP, SEXP codeSEXP, SEXP SigmaSEXP, SEXP meaSEXP, SEXP truthSEXP, SEXP margsSEXP, SEXP multinomialSEXP, SEXP rel_epsSEXP, SEXP abs_epsSEXP, SEXP maxitSEXP, SEXP passed_namesSEXP, SEXP outer_namesSEXP, SEXP n_threadsSEXP, SEXP do_reorderSEXP, SEXP minvlsSEXP, SEXP use_aprxSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -119,6 +121,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< arma::mat const& >::type upper(upperSEXP);
     Rcpp::traits::input_parameter< arma::imat const& >::type code(codeSEXP);
     Rcpp::traits::input_parameter< arma::mat const& >::type Sigma(SigmaSEXP);
+    Rcpp::traits::input_parameter< arma::vec const& >::type mea(meaSEXP);
     Rcpp::traits::input_parameter< arma::mat const& >::type truth(truthSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type margs(margsSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type multinomial(multinomialSEXP);
@@ -131,7 +134,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< bool const >::type do_reorder(do_reorderSEXP);
     Rcpp::traits::input_parameter< int const >::type minvls(minvlsSEXP);
     Rcpp::traits::input_parameter< bool const >::type use_aprx(use_aprxSEXP);
-    rcpp_result_gen = Rcpp::wrap(impute(lower, upper, code, Sigma, truth, margs, multinomial, rel_eps, abs_eps, maxit, passed_names, outer_names, n_threads, do_reorder, minvls, use_aprx));
+    rcpp_result_gen = Rcpp::wrap(impute(lower, upper, code, Sigma, mea, truth, margs, multinomial, rel_eps, abs_eps, maxit, passed_names, outer_names, n_threads, do_reorder, minvls, use_aprx));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -177,14 +180,14 @@ END_RCPP
 RcppExport SEXP run_testthat_tests(SEXP);
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_mdgc_get_log_lm_terms_cpp", (DL_FUNC) &_mdgc_get_log_lm_terms_cpp, 4},
-    {"_mdgc_eval_log_lm_terms", (DL_FUNC) &_mdgc_eval_log_lm_terms, 11},
+    {"_mdgc_get_log_lm_terms_cpp", (DL_FUNC) &_mdgc_get_log_lm_terms_cpp, 5},
+    {"_mdgc_eval_log_lm_terms", (DL_FUNC) &_mdgc_eval_log_lm_terms, 12},
     {"_mdgc_get_z_hat", (DL_FUNC) &_mdgc_get_z_hat, 5},
     {"_mdgc_pmvnorm_to_R", (DL_FUNC) &_mdgc_pmvnorm_to_R, 10},
     {"_mdgc_get_commutation_to_R", (DL_FUNC) &_mdgc_get_commutation_to_R, 2},
     {"_mdgc_get_commutation_vec", (DL_FUNC) &_mdgc_get_commutation_vec, 3},
     {"_mdgc_x_dot_X_kron_I_wrap", (DL_FUNC) &_mdgc_x_dot_X_kron_I_wrap, 3},
-    {"_mdgc_impute", (DL_FUNC) &_mdgc_impute, 16},
+    {"_mdgc_impute", (DL_FUNC) &_mdgc_impute, 17},
     {"_mdgc_lower_tri_inner", (DL_FUNC) &_mdgc_lower_tri_inner, 4},
     {"_mdgc_eval_multinomial_prob", (DL_FUNC) &_mdgc_eval_multinomial_prob, 2},
     {"_mdgc_multinomial_find_means", (DL_FUNC) &_mdgc_multinomial_find_means, 5},

@@ -34,7 +34,7 @@ threshold <- function(org_data, imputed){
   out
 }
 
-test_that("mdgc_impute gives the same as before and with and withour reordering", {
+test_that("mdgc_impute gives the same as before and with and without reordering", {
   p <- 5L
   Sig <- diag(p)
   Sig[lower.tri(Sig)] <- Sig[upper.tri(Sig)] <- .5
@@ -43,24 +43,24 @@ test_that("mdgc_impute gives the same as before and with and withour reordering"
   mdgc_obj <- get_mdgc(dat)
   set.seed(1)
   imp_no_reorder <- mdgc_impute(
-    object = mdgc_obj, vcov = Sig, rel_eps = 1e-5, maxit = 1000000L,
-    do_reorder = FALSE, n_threads = 1L, minvls = 100000L)
+    object = mdgc_obj, vcov = Sig, mea = mdgc_obj$means, rel_eps = 1e-5,
+    maxit = 1000000L, do_reorder = FALSE, n_threads = 1L, minvls = 100000L)
 
   imp_reorder <- mdgc_impute(
-    object = mdgc_obj, vcov = Sig, rel_eps = 1e-5, maxit = 1000000L,
-    do_reorder = TRUE, n_threads = 1L, minvls = 100000L)
+    object = mdgc_obj, vcov = Sig, mea = mdgc_obj$means, rel_eps = 1e-5,
+    maxit = 1000000L, do_reorder = TRUE, n_threads = 1L, minvls = 100000L)
 
   imp_reorder_two <- mdgc_impute(
-    object = mdgc_obj, vcov = Sig, rel_eps = 1e-5, maxit = 1000000L,
-    do_reorder = TRUE, n_threads = 2L, minvls = 100000L)
+    object = mdgc_obj, vcov = Sig, mea = mdgc_obj$means, rel_eps = 1e-5,
+    maxit = 1000000L, do_reorder = TRUE, n_threads = 2L, minvls = 100000L)
 
   expect_equal(imp_no_reorder, imp_reorder, tolerance = 1e-2)
   expect_equal(imp_reorder_two, imp_reorder, tolerance = 1e-2)
 
   set.seed(1)
   imp_no_reorder_arpx <- mdgc_impute(
-    object = mdgc_obj, vcov = Sig, rel_eps = 1e-5, maxit = 1000000L,
-    do_reorder = FALSE, n_threads = 1L, minvls = 100000L,
+    object = mdgc_obj, vcov = Sig, mea = mdgc_obj$means, rel_eps = 1e-5,
+    maxit = 1000000L, do_reorder = FALSE, n_threads = 1L, minvls = 100000L,
     use_aprx = TRUE)
   expect_equal(imp_no_reorder, imp_no_reorder_arpx, tolerance = 1e-6)
 

@@ -182,46 +182,49 @@ mark(`Setup time` = {
 set.seed(60941821)
 system.time(
   fit_Lagran_start <- mdgc_fit(
-    ptr = log_ml_ptr, vcov = start_val, n_threads = 4L, 
-    maxit = 25L, method = "aug_Lagran", rel_eps = 1e-3, maxpts = 200L, 
-    verbose = FALSE))
+    ptr = log_ml_ptr, vcov = start_val, mea = mdgc_obj$means, 
+    n_threads = 4L, maxit = 100L, method = "aug_Lagran", rel_eps = 1e-3, 
+    maxpts = 200L))
 system.time(
   fit_Lagran <- mdgc_fit(
-    ptr = log_ml_ptr, vcov = fit_Lagran_start$result, n_threads = 4L, 
-    maxit = 25L, method = "aug_Lagran", rel_eps = 1e-3, maxpts = 5000L, 
-    verbose = FALSE, mu = fit_Lagran_start$mu, 
+    ptr = log_ml_ptr, vcov = fit_Lagran_start$result, mea = mdgc_obj$means, 
+    n_threads = 4L, maxit = 100L, method = "aug_Lagran", rel_eps = 1e-3, 
+    maxpts = 5000L, mu = fit_Lagran_start$mu, 
     lambda = fit_Lagran_start$lambda))
 
 system.time(
   fit_adam <- mdgc_fit(
-    ptr = log_ml_ptr, vcov = start_val, n_threads = 4L, 
-    lr = 1e-3, maxit = 25L, batch_size = 100L, method = "adam", 
-     rel_eps = 1e-3, maxpts = 5000L))
+    ptr = log_ml_ptr, vcov = start_val, mea = mdgc_obj$means, 
+    n_threads = 4L, lr = 1e-3, maxit = 25L, batch_size = 100L, 
+    method = "adam", rel_eps = 1e-3, maxpts = 5000L))
 
 set.seed(fit_seed <- 19570958L)
 system.time(
   fit_svrg <- mdgc_fit(
-    ptr = log_ml_ptr, vcov = start_val, n_threads = 4L, 
-    lr = 1e-3, maxit = 25L, batch_size = 100L, method = "svrg", 
-    verbose = TRUE, rel_eps = 1e-3, maxpts = 5000L))
+    ptr = log_ml_ptr, vcov = start_val, mea = mdgc_obj$means, 
+    n_threads = 4L, lr = 1e-3, maxit = 25L, batch_size = 100L, 
+    method = "svrg", verbose = TRUE, rel_eps = 1e-3, maxpts = 5000L))
 
 # compare the log marginal likelihood 
 print(rbind(
   `Augmented Lagrangian` = 
-    mdgc_log_ml(vcov = fit_Lagran$result, ptr = log_ml_ptr, rel_eps = 1e-3),
+    mdgc_log_ml(vcov = fit_Lagran$result, mea = mdgc_obj$means, 
+                ptr = log_ml_ptr, rel_eps = 1e-3),
   ADAM = 
-    mdgc_log_ml(vcov = fit_adam$result  , ptr = log_ml_ptr, rel_eps = 1e-3),
+    mdgc_log_ml(vcov = fit_adam$result  , mea = mdgc_obj$means, 
+                ptr = log_ml_ptr, rel_eps = 1e-3),
   SVRG =
-    mdgc_log_ml(vcov = fit_svrg$result  , ptr = log_ml_ptr, rel_eps = 1e-3)), digits = 10)
+    mdgc_log_ml(vcov = fit_svrg$result  , mea = mdgc_obj$means, 
+                ptr = log_ml_ptr, rel_eps = 1e-3)), 
+  digits = 10)
 
 # we can use an approximation in the method
 set.seed(fit_seed)
 system.time(
   fit_svrg_aprx <- mdgc_fit(
-    ptr = log_ml_ptr, vcov = start_val, n_threads = 4L, 
-    lr = 1e-3, maxit = 25L, batch_size = 100L, method = "svrg", 
-    verbose = TRUE, rel_eps = 1e-3, maxpts = 5000L, 
-    use_aprx = TRUE))
+    ptr = log_ml_ptr, vcov = start_val, mea = mdgc_obj$means, 
+    n_threads = 4L, lr = 1e-3, maxit = 25L, batch_size = 100L, 
+    method = "svrg", rel_eps = 1e-3, maxpts = 5000L, use_aprx = TRUE))
 norm(fit_svrg_aprx$result - fit_svrg$result, "F") # essentially the same
 
 # compare the estimated correlation matrix with the true value
@@ -247,9 +250,9 @@ norm(fit_adam  $result - dat$Sigma, "F")
 norm(fit_svrg  $result - dat$Sigma, "F")
 
 # perform the imputation
-system.time(
-  imp_res <- mdgc_impute(mdgc_obj, fit_svrg$result, rel_eps = 1e-3,
-                         maxit = 10000L, n_threads = 4L))
+system.time(imp_res <- mdgc_impute(
+  mdgc_obj, fit_svrg$result, mea = mdgc_obj$means, rel_eps = 1e-3, 
+  maxit = 10000L, n_threads = 4L))
 
 # look at the result for one of the observations
 imp_res[2L]
@@ -615,525 +618,7 @@ show_sim_stats("mdgc_rmse", "mixedgc_rmse", "missForest_rmse", "err")
 ```
 
 It is important to emphasize that missForest is not estimating the true 
-model. 
-
-### Detailed Example
-
-In this section, we show a more detailed example where we use some of the 
-non-exported functions package. This section is mainly included to give an 
-idea of what is going on under the hood and to illustrate how the methods 
-can be used in a user defined optimization function.
-
-```{r detailed, cache = 1, fig.height = 3, fig.width = 7}
-# assign function to evalute the log marginal likelihood
-log_ml <- function(..., maxpts = 10000L)
-  mdgc_log_ml(ptr = log_ml_ptr, ..., maxpts = maxpts)
-
-# print the approximate log marginal likelihood at the true parameters
-set.seed(1)
-print(log_ml(dat$Sigma, n_threads = 1L), digits = 7)
-print(log_ml(dat$Sigma, n_threads = 1L, use_aprx = TRUE), digits = 7)
-
-# check standard error
-sd(replicate(20, log_ml(dat$Sigma, n_threads = 4L)))
-sd(replicate(20, log_ml(dat$Sigma, n_threads = 4L, use_aprx = TRUE)))
-
-# without reordering
-print(log_ml(dat$Sigma, n_threads = 4L, do_reorder = FALSE), digits = 7)
-
-# check standard error
-sd(replicate(20, log_ml(dat$Sigma, n_threads = 4L, do_reorder = FALSE)))
-
-# check computation time
-mark(
-  `1 thread                  ` = 
-    log_ml(dat$Sigma                    , n_threads = 1L), 
-  `2 threads                 ` = 
-    log_ml(dat$Sigma                    , n_threads = 2L),
-  `4 threads                 ` = 
-    log_ml(dat$Sigma                    , n_threads = 4L), 
-  `4 threads (w/ approx)     ` = 
-    log_ml(dat$Sigma                    , n_threads = 4L, 
-           use_aprx = TRUE),
-  `4 threads (w/o reordering)` = 
-    log_ml(dat$Sigma, do_reorder = FALSE, n_threads = 4L), 
-  min_iterations = 5, check = FALSE)
-
-#####
-# we can also get an approximation of the gradient
-t1 <- log_ml(dat$Sigma, comp_derivs = TRUE, n_threads = 1L, rel_eps = 1e-3)
-t2 <- log_ml(dat$Sigma, comp_derivs = TRUE, n_threads = 4L, rel_eps = 1e-3)
-all.equal(t1, t2, tolerance = 1e-2)
-  
-mark(
-  `1 thread                  ` = 
-    log_ml(dat$Sigma, comp_derivs = TRUE                    , n_threads = 1L), 
-  `2 threads                 ` = 
-    log_ml(dat$Sigma, comp_derivs = TRUE                    , n_threads = 2L),
-  `4 threads                 ` = 
-    log_ml(dat$Sigma, comp_derivs = TRUE                    , n_threads = 4L), 
-  `4 threads (w/ approx)     ` = 
-    log_ml(dat$Sigma, comp_derivs = TRUE                    , n_threads = 4L, 
-           use_aprx = TRUE), 
-  `4 threads (w/o reordering)` = 
-    log_ml(dat$Sigma, comp_derivs = TRUE, do_reorder = FALSE, n_threads = 4L), 
-  min_iterations = 5, check = FALSE)
-
-#####
-# the main code in the packages provides an approximation to the CDF similar 
-# to the one in the mvtnorm package. We provide an example below to 
-# illustrate this. Feel free to skip this part of the README.
-library(mvtnorm)
-set.seed(1)
-p_ex <- 5L
-S_ex <- diag(p_ex)
-S_ex[lower.tri(S_ex)] <- S_ex[upper.tri(S_ex)] <- .25
-m_ex <- seq(-2, 2, length.out = p_ex)
-lower_ex <- m_ex + drop(rnorm(p_ex) %*% chol(S_ex)) - 1
-upper_ex <- lower_ex + 1
-
-use_mvtnorm <- function()
-  pmvnorm(
-    lower = lower_ex, upper = upper_ex, sigma = S_ex, mean = m_ex, 
-    algorithm = GenzBretz(maxpts = 100000L, abseps = -1, releps = 1e-5))
-use_this_pkg <- function(derivs = FALSE)
-  mdgc:::pmvnorm(lower = lower_ex, upper = upper_ex, mu = m_ex, 
-                 Sigma = S_ex, maxvls = 100000L, abs_eps = -1, 
-                 rel_eps = 1e-5, derivs = derivs)
-use_mvtnorm()
-use_this_pkg()
-all.equal(c(use_mvtnorm()), c(use_this_pkg()), tolerance = 1e-5)
-mark(mvtnorm = use_mvtnorm(), mdgc = use_this_pkg(), 
-     min_iterations = 25, check = FALSE)
-
-sd(replicate(25, use_mvtnorm()))
-sd(replicate(25, use_this_pkg()))
-
-# the latter function can also provide gradients with respect to the mean 
-# and covariance matrix
-library(numDeriv)
-gr_hat <- jacobian(function(a){
-  m <- a[1:p_ex]
-  S <- matrix(nr = p_ex, nc = p_ex)
-  S[upper.tri(S, TRUE)] <- a[-(1:p_ex)]
-  S[lower.tri(S)] <- t(S)[lower.tri(S)]
-  
-  set.seed(1L)
-  res <- pmvnorm(
-    lower = lower_ex, upper = upper_ex, sigma = S, mean = m, 
-    algorithm = GenzBretz(maxpts = 10000L, abseps = -1, releps = 1e-6))
-  c(res)
-}, c(m_ex, S_ex[upper.tri(S_ex, TRUE)]))
-gr <- use_this_pkg(TRUE)
-
-# the off diagonal elements of the covariance matrix are not scaled by 2
-gr_hat / gr[-1]
-
-# creates a matrix from a log-Cholesky decomposition.
-# 
-# Args:
-#   par: p (p + 1) / 2 elements in the log-Cholesky decomposition.
-get_lchol_inv <- function(par){
-  # use log-cholesky parametrization
-  p <- (sqrt(8 * length(par) + 1) - 1) / 2
-  L <- matrix(0, p, p)
-  L[lower.tri(L, TRUE)] <- par
-  diag(L) <- exp(diag(L))
-  tcrossprod(L)
-}
-
-# creates the log-Cholesky decomposition. 
-# 
-# Args: 
-#   par: positive definite matrix to decompose
-get_lchol <- function(par){
-  lSig <- t(chol(par))
-  diag(lSig) <- log(diag(lSig))
-  lSig[lower.tri(lSig, TRUE)]
-}
-
-# indices used to apply a matrix product with a get_commutation matrix
-com_vec <- mdgc:::get_commutation_vec(p, p, FALSE)
-
-# computes the approximate log marginal likelihood. 
-#
-# Args:
-#   par: log-Cholesky decomposition.
-#   seed: seed to use.  
-#   comp_derivs: logical for whether to approximate the gradient. 
-#   n_threads: number of threads. 
-#   rel_eps: relative error for each term.
-#   indices: integer vector with which terms to include. 
-par_fn <- function(par, seed = NULL, comp_derivs = FALSE, 
-                   n_threads = 1L, rel_eps = 1e-2, 
-                   indices = 0:(NROW(dat$seen_obs) - 1L)){
-  if(!is.null(seed))
-    set.seed(seed)
-  Arg <- get_lchol_inv(par)
-  
-  res <- log_ml(Arg, comp_derivs = comp_derivs, indices = indices,
-                n_threads = n_threads, rel_eps = rel_eps)
-  log_ml <- c(res)
-  if(comp_derivs){
-    gr <- attr(res, "grad")
-    tmp <- matrix(0, p, p)
-    tmp[lower.tri(tmp, TRUE)] <- par
-    diag(tmp) <- exp(diag(tmp))
-    gr <- gr[com_vec] + c(gr)
-    gr <- mdgc:::x_dot_X_kron_I(x = gr, X = tmp, l = p)
-    gr <- gr[, lower.tri(tmp, TRUE)]
-    idx_diag <- c(1L, 1L + cumsum(NCOL(tmp):2)) 
-    gr[idx_diag] <- gr[idx_diag] * diag(tmp)
-      
-    attr(log_ml, "grad") <- gr
-    
-  }
-  
-  log_ml
-}
-
-# check that the function gives the correct log marginal likelihood
-# approximation and gradient approximation.
-lSig <- get_lchol(dat$Sigma)
-r1 <- par_fn(lSig, comp_derivs = TRUE, n_threads = 4L, rel_eps = 1e-3, 
-             indices = 1:100)
-r2 <- numDeriv::jacobian(par_fn, lSig, seed = 1L, n_threads = 6L, 
-                         rel_eps = 1e-3, indices = 1:100)
-all.equal(attr(r1, "grad"), drop(r2), tolerance = 1e-2)
-
-#####
-# performs gradient descent. 
-# 
-# Args: 
-#   val: starting value. 
-#   step_start: starting value for the step length. 
-#   n_threads: number of threads to use. 
-#   maxit: maximum number of iteration. 
-#   eps: convergence threshold to use. 
-#   seed: seed to use.
-#   c1, c2: parameters for Wolfe condition.
-naiv_gradient_descent <- function(val, step_start, n_threads = 4L, 
-                                  maxit = 25L, eps = 1e-3, seed = 1L, 
-                                  c1 = 1e-3, c2 = .1){
-  fun_vals <- step_sizes <- rep(NA_real_, maxit)
-  
-  gr_new <- par_fn(val, comp_derivs = TRUE, n_threads = n_threads, 
-                   seed = seed)
-  for(i in 1:maxit){
-    gr <- gr_new
-    fun_vals[i] <- prev_fun <- c(gr)
-    dir <- attr(gr, "grad")
-    step <- step_start
-    m <- drop(dir %*% attr(gr, "grad"))
-    
-    max_j <- 11L
-    for(j in 1:max_j){
-      if(j == max_j)
-        warning("Failed to find a decrease")
-      new_val <- val + step * dir
-      new_val <- get_lchol(cov2cor(get_lchol_inv(new_val)))
-      new_fun <- par_fn(new_val, comp_derivs = FALSE, n_threads = n_threads, 
-                        seed = seed)
-      
-      # strong Wolfe conditions
-      if(-new_fun <= -prev_fun + c1 * step * m){
-        gr_new <- par_fn(new_val, comp_derivs = TRUE, n_threads = n_threads, 
-                         seed = seed)
-      
-        if(abs(drop(attr(gr_new, "grad") %*% dir)) >= c2 * m){
-          val <- new_val
-          break
-        }
-      }
-      
-      step <- step / 2
-    }
-    
-    step_sizes[i] <- step
-  }
-  
-  list(result = get_lchol_inv(val), logml = prev_fun, 
-       nit = i, step_sizes = step_sizes, fun_vals = fun_vals)
-}
-
-# estimate model parameters
-start_val <- numeric(p * (p + 1) / 2)
-system.time(res <- naiv_gradient_descent(val = start_val, step_start = .001, 
-                                         maxit = 25L, eps = 1e-2))
-
-# compare estimates with truth
-norm(res$result - dat$Sigma)
-res$result
-dat$Sigma
-
-# or plot both of them and compare
-do_plot(res$result, dat$Sigma, "Estimates")
-
-res$fun_vals # log marginal likelihood estimates at each iteration
-
-#####
-# performs stochastic gradient descent instead (using ADAM).
-# 
-# Args: 
-#   val: starting value. 
-#   batch_size: number of observations in each batch. 
-#   n_threads: number of threads to use. 
-#   maxit: maximum number of iteration. 
-#   seed: seed to use.
-#   epsilon, alpha, beta_1, beta_2: ADAM parameters.
-adam <- function(val, batch_size, n_threads = 4L, maxit = 25L, 
-                 seed = 1L, epsilon = 1e-8, alpha = .001, beta_1 = .9, 
-                 beta_2 = .999){
-  indices <- sample(0:(NROW(dat$seen_obs) - 1L), replace = FALSE)
-  blocks <- tapply(indices, (seq_along(indices) - 1L) %/% batch_size, 
-                   identity, simplify = FALSE)
-  
-  n_blocks <- length(blocks)
-  n_par <- length(val)
-  m <- v <- numeric(n_par)
-  fun_vals <- numeric(maxit)
-  estimates <- matrix(NA_real_, n_par, maxit)
-  i <- -1L
-  
-  for(k in 1:maxit){
-    for(ii in 1:n_blocks){
-      i <- i + 1L
-      idx_b <- (i %% n_blocks) + 1L
-      m_old <- m
-      v_old <- v
-      res <- par_fn(val, comp_derivs = TRUE, n_threads = n_threads, 
-                    seed = seed, indices = blocks[[idx_b]])
-      fun_vals[(i %/% n_blocks) + 1L] <- 
-        fun_vals[(i %/% n_blocks) + 1L] + c(res)
-      
-      gr <- attr(res, "grad")
-      
-      m <- beta_1 * m_old + (1 - beta_1) * gr
-      v <- beta_2 * v_old + (1 - beta_2) * gr^2
-      
-      m_hat <- m / (1 - beta_1^(i + 1))
-      v_hat <- v / (1 - beta_2^(i + 1))
-      
-      val <- val + alpha * m_hat / (sqrt(v_hat) + epsilon)
-      val <- get_lchol(cov2cor(get_lchol_inv(val)))
-    }
-    
-    estimates[, k] <- val
-  }
-  
-  list(result = get_lchol_inv(val), fun_vals = fun_vals, 
-       estimates = estimates)
-}
-
-# estimate the model parameters
-set.seed(1)
-system.time(res_adam  <- adam(
-  val = start_val, alpha = 1e-2, maxit = 25L, batch_size = 100L))
-
-# compare estimates with the truth
-norm(res_adam$result - dat$Sigma)
-res_adam$result
-dat$Sigma
-
-# use plot instead
-do_plot(res_adam$result, dat$Sigma, "Estimates (ADAM)")
-
-# look at the maximum log marginal likelihood both at the end and after 
-# each iteration
-log_ml(res_adam$result)
-funvals_adam_org <- 
-  apply(res_adam$estimates, 2L, function(x) log_ml(get_lchol_inv(x)))
-funvals_adam_org
-res_adam$fun_vals # likely lower bounds on the log-marginal likelihood
-res_adam_org <- res_adam
-
-#####
-# performs stochastic gradient descent instead (using SVRG).
-# 
-# Args: 
-#   val: starting value. 
-#   batch_size: number of observations in each batch. 
-#   n_threads: number of threads to use. 
-#   maxit: maximum number of iteration. 
-#   seed: seed to use.
-#   lr: learning rate. 
-svrg <- function(val, batch_size, n_threads = 4L, maxit = 25L, 
-                 seed = 1L, lr){
-  all_indices <- 0:(NROW(dat$seen_obs) - 1L)
-  indices <- sample(all_indices, replace = FALSE)
-  blocks <- tapply(indices, (seq_along(indices) - 1L) %/% batch_size, 
-                   identity, simplify = FALSE)
-  
-  n_blocks <- length(blocks)
-  n_par <- length(val)
-  estimates <- matrix(NA_real_, n_par, maxit + 1L)
-  fun_vals <- numeric(maxit + 1L)
-  estimates[, 1L] <- val
-  
-  for(k in 1:maxit + 1L){
-    old_val <- estimates[, k - 1L]
-    old_grs <- sapply(1:n_blocks - 1L, function(ii){
-      idx_b <- (ii %% n_blocks) + 1L
-      res_old <- par_fn(old_val, comp_derivs = TRUE, n_threads = n_threads, 
-                        seed = seed, indices = blocks[[idx_b]])
-      c(res_old, attr(res_old, "grad"))
-    })
-    
-    fun_vals[k - 1L] <- sum(old_grs[1, ])
-    old_grs <- old_grs[-1L, , drop = FALSE ]
-    old_gr <- rowSums(old_grs) / n_blocks
-    
-    for(ii in 1:n_blocks - 1L){
-      idx_b <- (ii %% n_blocks) + 1L
-      res <- par_fn(val, comp_derivs = TRUE, n_threads = n_threads, 
-                    seed = seed, indices = blocks[[idx_b]])
-      fun_vals[k] <- fun_vals[k] + c(res)
-      dir <- attr(res, "grad") - old_grs[, ii + 1L] + old_gr
-      
-      val <- val + lr * dir
-      val <- get_lchol(cov2cor(get_lchol_inv(val)))
-    }
-    
-    estimates[, k] <- val
-  }
-  
-  list(result = get_lchol_inv(val), fun_vals = fun_vals[-1L], 
-       estimates = estimates[, -1L, drop = FALSE])
-}
-
-# estimate the model parameters
-set.seed(1)
-system.time(res_svrg  <- svrg(
-  val = start_val, lr = 1e-3, maxit = 25L, batch_size = 100L))
-
-# compare estimates with the truth
-norm(res_svrg$result - dat$Sigma)
-res_svrg$result
-dat$Sigma
-
-# use plot instead
-do_plot(res_svrg$result, dat$Sigma, "Estimates (SVRG)")
-
-# look at the maximum log marginal likelihood both at the end and after 
-# each iteration
-funvals_svrg_org <- res_svrg$fun_vals
-funvals_svrg_org[length(funvals_svrg_org)] <- log_ml(res_svrg$result)
-funvals_svrg_org
-
-#####
-# we can use better starting values. E.g. something heuristic like: 
-#   - transform back into the [0, 1] scale. 
-#   - take the middle of the interval and map back. 
-#   - compute the partial correlations. 
-get_z_hat <- function(lower, upper, code){
-  out <- mapply(function(l, u, co){
-    if(co <= 1)
-      return(u)
-    
-    a <- if(is.infinite(l)) 0 else pnorm(l)
-    b <- if(is.infinite(u)) 1 else pnorm(u)
-    qnorm((a + b) / 2)
-  }, l = lower, u = upper, c = code)
-  dim(out) <- dim(lower)
-  out
-}
-tmp <- get_z_hat(mdgc_obj$lower, mdgc_obj$upper, mdgc_obj$code)
-
-# we also have a C++ function to do this which is faster
-categorical_arg <- replicate(NCOL(mdgc_obj$lower), matrix(0L, 0, 0), 
-                             simplify = FALSE) 
-all.equal(tmp, mdgc:::get_z_hat(
-  mdgc_obj$lower, mdgc_obj$upper, mdgc_obj$code, 
-  categorical = categorical_arg, n_threads = 4L))
-
-# the latter is faster but both are relatively fast
-mark(
-  `R version  ` = get_z_hat(mdgc_obj$lower, mdgc_obj$upper, mdgc_obj$code), 
-  `C++ verison` = mdgc:::get_z_hat(
-  mdgc_obj$lower, mdgc_obj$upper, mdgc_obj$code, 
-  categorical = categorical_arg, n_threads = 4L), 
-  min_iterations = 10)
-
-# then we can compute an approximation of the covariance matrix as follows
-system.time(chat <- cov2cor(cov(t(tmp), use = "pairwise.complete.obs")))
-
-# the starting value is already quite close
-norm(chat - dat$Sigma)
-do_plot(chat, dat$Sigma, "Starting value")
-
-# run ADAM again 
-start_val <- get_lchol(chat)
-set.seed(1)
-system.time(res_adam  <- adam(
-  val = start_val, alpha = 1e-2, maxit = 25L, batch_size = 100L))
-
-# for comparisons, we also run the code using one thread
-set.seed(1)
-system.time(res_adam_ser  <- adam(
-  val = start_val, alpha = 1e-2, maxit = 25L, batch_size = 100L, 
-  n_threads = 1L))
-
-# we get (roughly) the same
-norm(res_adam$result - res_adam_ser$result)
-
-# plot estimate
-norm(res_adam$result - dat$Sigma)
-do_plot(res_adam$result, dat$Sigma, "Estimates (ADAM)")
-
-# check log marginal likelihood like before
-log_ml(res_adam$result)
-funvals_adam <- 
-  apply(res_adam$estimates, 2L, function(x) log_ml(get_lchol_inv(x)))
-funvals_adam
-res_adam$fun_vals # likely lower bounds on the log-marginal likelihood
-
-# do the same with SVRG
-set.seed(1)
-system.time(res_svrg  <- svrg(
-  val = start_val, lr = 1e-3, maxit = 25L, batch_size = 100L))
-
-# compare estimates with the truth
-norm(res_svrg$result - dat$Sigma)
-res_svrg$result
-dat$Sigma
-
-# use plot instead
-do_plot(res_svrg$result, dat$Sigma, "Estimates (SVRG)")
-
-# look at the maximum log marginal likelihood both at the end and after 
-# each iteration
-funvals_svrg <- res_svrg$fun_vals
-funvals_svrg[length(funvals_svrg)] <- log_ml(res_svrg$result)
-funvals_svrg
-
-#####
-# compare convergence of the different methods 
-#  line: gradient descent. 
-#  dashed: ADAM with poor starting values. 
-#  dotted: ADAM with better starting values
-#  blue: same as ADAM but using SVRG.
-lls <- matrix(NA_real_, max(length(res$fun_vals), length(funvals_adam_org), 
-                            length(funvals_adam), length(funvals_svrg_org), 
-                            length(funvals_svrg)), 5L)
-lls[seq_along(res$fun_vals)    , 1] <- res$fun_vals
-lls[seq_along(funvals_adam_org), 2] <- funvals_adam_org
-lls[seq_along(funvals_adam)    , 3] <- funvals_adam
-lls[seq_along(funvals_svrg_org), 4] <- funvals_svrg_org
-lls[seq_along(funvals_svrg)    , 5] <- funvals_svrg
-
-par(mfcol = c(1, 1), mar = c(5, 5, 1, 1))
-matplot(
-  lls, lty = c(1:3, 2:3), col = c(rep("black", 3), rep("darkblue", 2)), 
-  bty = "l", type = "l", xlab = "Iteration", 
-  ylab = "Log marginal likelihood")
-
-# skipping the first n steps
-n_skip <- 5L
-matplot(
-  lls, lty = c(1:3, 2:3), col = c(rep("black", 3), rep("darkblue", 2)), 
-  ylim = range(lls[-(1:n_skip), ], na.rm = TRUE), bty = "l", 
-  type = "l", xlab = "Iteration", ylab = "Log marginal likelihood")
-```
+model.
 
 ## Adding Multinomial Variables
 We extend the model suggested by @zhao19 in this section. The example is 
@@ -1323,22 +808,25 @@ image(start_vals [, NCOL(dat$Sigma):1], zlim = c(-1, 1), col = sc,
 image(dat$Sigma  [, NCOL(dat$Sigma):1], zlim = c(-1, 1), col = sc,
       main = "Truth")
 # check the log marginal likelihood at the starting values and compare with
-# the true values 
-mdgc_log_ml(ptr, start_vals, n_threads = 1L) # at the starting values
-mdgc_log_ml(ptr, dat$Sigma , n_threads = 1L) # at the true values
+# the true values at the starting values
+mdgc_log_ml(ptr, start_vals, mea = obj$means, n_threads = 1L)
+# and at the true values
+mdgc_log_ml(ptr, dat$Sigma , mea = obj$means, n_threads = 1L)
 
 # much better than using a diagonal matrix!
-mdgc_log_ml(ptr, diag(NROW(dat$Sigma)), n_threads = 1L)
+mdgc_log_ml(ptr, diag(NROW(dat$Sigma)), mea = obj$means, n_threads = 1L)
 
 # estimate the model
 system.time(
-  ests <- mdgc_fit(ptr, vcov = start_vals, method = "aug_Lagran",
+  ests <- mdgc_fit(ptr, vcov = start_vals, mea = obj$means, 
+                   method = "aug_Lagran",
                    n_threads = 4L, rel_eps = 1e-2, maxpts = 1000L, 
                    minvls = 200L, use_aprx = TRUE))
 
 # refine the estimates
 system.time(
-  ests <- mdgc_fit(ptr, vcov = ests$result, method = "aug_Lagran",
+  ests <- mdgc_fit(ptr, vcov = ests$result, mea = obj$means, 
+                   method = "aug_Lagran",
                    n_threads = 4L, rel_eps = 1e-3, maxpts = 10000L, 
                    minvls = 1000L, mu = ests$mu, lambda = ests$lambda, 
                    use_aprx = TRUE))
@@ -1351,7 +839,7 @@ image(dat$Sigma  [, NCOL(dat$Sigma):1], zlim = c(-1, 1), col = sc,
       main = "Truth")
 # perform the imputation
 system.time(
-  imp_res <- mdgc_impute(obj, ests$result, rel_eps = 1e-3,
+  imp_res <- mdgc_impute(obj, ests$result, mea = obj$means, rel_eps = 1e-3,
                          maxit = 10000L, n_threads = 4L))
 
 # look at the result for one of the observations
@@ -1466,7 +954,7 @@ data(iris)
 # 
 # Args:
 #   p_na: chance of missing a value.
-get_iris <- function(p_na = .2){
+get_iris <- function(p_na = .1){
   is_miss <- matrix(p_na > runif(NROW(iris) * NCOL(iris)), 
                     NROW(iris), NCOL(iris))
   while(any(all_missing <- apply(is_miss, 1, all)))
@@ -1485,8 +973,9 @@ dat <- get_iris()
 
 # use the mdgc method
 system.time(
-  mdgc_res <- mdgc(dat, maxpts = 5000L, n_threads = 4L, maxit = 25L, 
-                   use_aprx = TRUE, method = "aug_Lagran"))
+  mdgc_res <- mdgc(dat, maxpts = 5000L, n_threads = 4L, maxit = 100L, 
+                   use_aprx = TRUE, method = "aug_Lagran", 
+                   minvls = 1000L, iminvls = 1000L))
 
 # some of the impuated values
 head(mdgc_res$ximp)
@@ -1504,5 +993,72 @@ get_classif_error(impu_dat = miss_res$ximp, truth = iris,
                   observed = dat)
 get_rmse(impu_dat = miss_res$ximp, truth = iris, observed = dat)
 ```
+
+## Chemotherapy for Stage B/C Colon Cancer
+
+```{r colon, cache = 1}
+library(survival)
+colon_use <- colon[, setdiff(
+  colnames(colon), c("id", "study", "time", "status", "node4", "etype"))]
+colon_use <- within(colon_use, {
+  sex <- sex > 0
+  obstruct <- obstruct > 0
+  perfor <- perfor > 0
+  adhere <- adhere > 0
+  differ <- ordered(differ)
+  extent <- ordered(extent)
+  surg <- surg > 0
+})
+
+get_colon <- function(p_na = .1){
+  is_miss <- matrix(p_na > runif(NROW(colon_use) * NCOL(colon_use)), 
+                    NROW(colon_use), NCOL(colon_use))
+  while(any(all_missing <- apply(is_miss, 1, all)))
+    # avoid rows with all missing variables
+    is_miss[all_missing, ] <- 
+      p_na > runif(sum(all_missing) * NCOL(colon_use))
+  
+  # create data set with missing values
+  out <- colon_use
+  out[is_miss] <- NA 
+  out
+}
+
+set.seed(68129371)
+dat <- get_colon()
+
+# use the mdgc method
+system.time(
+  mdgc_res <- mdgc(dat, maxpts = 10000L, n_threads = 4L, maxit = 100L, 
+                   use_aprx = TRUE, method = "aug_Lagran", 
+                   minvls = 1000L, iminvls = 5000L))
+
+# some of the impuated values
+head(mdgc_res$ximp)
+
+# compare with missForest
+miss_forest_arg <- dat
+is_log <- sapply(miss_forest_arg, is.logical)
+miss_forest_arg[, is_log] <- lapply(miss_forest_arg[, is_log], as.factor)
+system.time(miss_res <- missForest(miss_forest_arg))
+
+# turn binary variables back to logicals
+miss_res$ximp[, is_log] <- lapply(
+  miss_res$ximp[, is_log], function(x) as.integer(x) > 1L)
+
+# the errors
+rbind(
+  mdgc = get_classif_error(
+    impu_dat = mdgc_res$ximp, truth = colon_use, observed = dat), 
+  missForest = get_classif_error(
+    impu_dat = miss_res$ximp, truth = colon_use, observed = dat))
+
+rbind(
+  mdgc = get_rmse(
+    impu_dat = mdgc_res$ximp, truth = colon_use, observed = dat), 
+  missForest = 
+    get_rmse(impu_dat = miss_res$ximp, truth = colon_use, observed = dat))
+```
+
 
 ## References
