@@ -51,8 +51,8 @@ in the package to estimate the correlation matrix and to perform the
 imputation. We then show a [simulation study](#simulation-study) where
 we compare with the method suggested by Zhao and Udell (2019).
 
-The last section called [Adding Multinomial
-Variables](#adding-multinomial-variables) covers data sets which also
+The last section called [adding multinomial
+variables](#adding-multinomial-variables) covers data sets which also
 have multinomial variables.
 
 ## Installation
@@ -66,7 +66,7 @@ remotes::install_github("boennecd/mdgc")
 ## Quick Example
 
 We first simulate a data set and provide an example which shows how to
-use the package. The [An Even Shorter Example](#an-even-shorter-example)
+use the package. The [an even shorter example](#an-even-shorter-example)
 section shows a shorter example then what is shown here. You may want to
 see this first if you just want to perform some quick imputation.
 
@@ -1570,23 +1570,24 @@ data(iris)
 # assign function to produce iris data set with NAs.
 # 
 # Args:
+#   dat: data set to mask.
 #   p_na: chance of missing a value.
-get_iris <- function(p_na = .1){
-  is_miss <- matrix(p_na > runif(NROW(iris) * NCOL(iris)), 
-                    NROW(iris), NCOL(iris))
+mask_dat <- function(dat, p_na = .1){
+  is_miss <- matrix(p_na > runif(NROW(dat) * NCOL(dat)), 
+                    NROW(dat), NCOL(dat))
   while(any(all_missing <- apply(is_miss, 1, all)))
     # avoid rows with all missing variables
-    is_miss[all_missing, ] <- p_na > runif(sum(all_missing) * NCOL(iris))
+    is_miss[all_missing, ] <- p_na > runif(sum(all_missing) * NCOL(dat))
   
   # create data set with missing values
-  out <- iris
+  out <- dat
   out[is_miss] <- NA 
   out
 }
 
 # get a data set with all missing values
 set.seed(68129371)
-dat <- get_iris()
+dat <- mask_dat(iris)
 
 # use the mdgc method
 system.time(
@@ -1594,7 +1595,7 @@ system.time(
                    use_aprx = TRUE, method = "aug_Lagran", 
                    minvls = 1000L, iminvls = 1000L))
 #>    user  system elapsed 
-#>    4.14    0.00    1.04
+#>    4.09    0.00    1.03
 
 # some of the imputed values
 head(mdgc_res$ximp)
@@ -1614,7 +1615,7 @@ system.time(miss_res <- missForest(dat))
 #>   missForest iteration 4 in progress...done!
 #>   missForest iteration 5 in progress...done!
 #>    user  system elapsed 
-#>   0.365   0.004   0.369
+#>   0.371   0.000   0.371
 
 # the errors
 rbind(
@@ -1636,7 +1637,132 @@ rbind(
 #> missForest        0.310       0.316        0.280       0.218
 ```
 
+We repeat this a few times to get Monte Carlo estimates of the errors:
+
+``` r
+# function to get Monte Carlo estimates of the errors. 
+# 
+# Args:
+#   dat: data set to use. 
+#   seeds: seeds to use.
+get_err_n_time <- function(dat, seeds){
+  sapply(seeds, function(s){
+    # mask data
+    set.seed(s)
+    dat_mask <- mask_dat(dat)
+    
+    # fit models
+    
+    mdgc_time <- system.time(
+      mdgc_res <- mdgc(dat_mask, maxpts = 5000L, n_threads = 4L, maxit = 100L, 
+                       use_aprx = TRUE, minvls = 1000L, iminvls = 1000L,
+                       method = if(NROW(dat) > 1000L) "svrg" else "aug_Lagran", 
+                       lr = 1e-3, batch_size = 100L))
+    
+    # compare with missForest
+    miss_forest_arg <- dat_mask
+    is_log <- sapply(miss_forest_arg, is.logical)
+    miss_forest_arg[, is_log] <- lapply(miss_forest_arg[, is_log], as.factor)
+    sink(tempfile())
+    miss_time <- system.time(miss_res <- missForest(miss_forest_arg))
+    sink()
+    
+    # turn binary variables back to logicals
+    miss_res$ximp[, is_log] <- lapply(
+      miss_res$ximp[, is_log], function(x) as.integer(x) > 1L)
+    
+    # get the errors
+    er_int <- rbind(
+      mdgc = get_classif_error(
+        impu_dat = mdgc_res$ximp, truth = dat, observed = dat_mask), 
+      missForest = get_classif_error(
+        impu_dat = miss_res$ximp, truth = dat, observed = dat_mask))
+    er_con <- rbind(
+      mdgc = get_rmse(
+        impu_dat = mdgc_res$ximp, truth = dat, observed = dat_mask), 
+      missForest = 
+        get_rmse(impu_dat = miss_res$ximp, truth = dat, observed = dat_mask))
+      
+    # gather the output and return 
+    er <- cbind(er_int, er_con)
+    er <- er[, match(colnames(er), colnames(dat))]
+    ti <- rbind(mdgc_time, miss_time)[, 1:3]
+    out <- cbind(er, ti)
+    message(sprintf("\nResult with seed %d is:", s))
+    message(paste0(capture.output(print(out)), collapse = "\n"))
+    out
+
+  }, simplify = "array")
+}
+
+# get the results
+seeds <- c(40574428L, 13927943L, 31430660L, 38396447L, 20137114L, 59492953L, 
+           93913797L, 95452931L, 77261969L, 10996196L)
+res <- get_err_n_time(iris, seeds)
+```
+
+``` r
+# compute means and Monte Carlo standard errors
+show_res <- function(res, dat){
+  stats <- apply(res, 1:2, function(x) 
+    c(mean = mean(x), SE = sd(x) / sqrt(length(x))))
+  stats <- stats[, , c(colnames(dat), "user.self", "elapsed")]
+  for(i in seq_len(dim(stats)[[3]])){
+    nam <- dimnames(stats)[[3]][i]
+    cap <- if(nam %in% colnames(dat)){
+      if(is.ordered(dat[[nam]]))
+        "ordinal"
+      else if(is.factor(dat[[nam]]))
+        "multinomial"
+      else if(is.logical(dat[[nam]]))
+        "binary"
+      else
+        "continuous"
+    } else
+      "computation time"
+    
+    cat(sprintf("\n%s (%s):\n", nam, cap))
+    print(apply(round(
+      stats[, , i], 4), 2, function(x) sprintf("%.4f (%.4f)", x[1], x[2])), 
+      quote = FALSE)
+  }
+}
+
+show_res(res, iris)
+#> 
+#> Sepal.Length (continuous):
+#>            mdgc      missForest 
+#> 0.4040 (0.0226) 0.3608 (0.0166) 
+#> 
+#> Sepal.Width (continuous):
+#>            mdgc      missForest 
+#> 0.3891 (0.0205) 0.2655 (0.0247) 
+#> 
+#> Petal.Length (continuous):
+#>            mdgc      missForest 
+#> 0.3332 (0.0421) 0.2520 (0.0235) 
+#> 
+#> Petal.Width (continuous):
+#>            mdgc      missForest 
+#> 0.2403 (0.0108) 0.1863 (0.0148) 
+#> 
+#> Species (multinomial):
+#>            mdgc      missForest 
+#> 0.0297 (0.0125) 0.0413 (0.0118) 
+#> 
+#> user.self (computation time):
+#>            mdgc      missForest 
+#> 4.0731 (0.2171) 0.3434 (0.0136) 
+#> 
+#> elapsed (computation time):
+#>            mdgc      missForest 
+#> 1.0253 (0.0545) 0.3485 (0.0143)
+```
+
 ### Chemotherapy for Stage B/C Colon Cancer
+
+We do as in the [Edgar Anderson’s Iris Data](#edgar-andersons-iris-data)
+section here but with a different data set.
 
 ``` r
 # prepare the data
@@ -1671,24 +1797,9 @@ summary(colon_use)
 #>                  3rd Qu.: 5.0                                    
 #>                  Max.   :33.0
 
-# assign function to set some variables to NA
-get_colon <- function(p_na = .1){
-  is_miss <- matrix(p_na > runif(NROW(colon_use) * NCOL(colon_use)), 
-                    NROW(colon_use), NCOL(colon_use))
-  while(any(all_missing <- apply(is_miss, 1, all)))
-    # avoid rows with all missing variables
-    is_miss[all_missing, ] <- 
-      p_na > runif(sum(all_missing) * NCOL(colon_use))
-  
-  # create data set with missing values
-  out <- colon_use
-  out[is_miss] <- NA 
-  out
-}
-
 # sample missing values
 set.seed(68129371)
-dat <- get_colon()
+dat <- mask_dat(colon_use)
 
 # use the mdgc method
 system.time(
@@ -1696,7 +1807,7 @@ system.time(
                    use_aprx = TRUE, method = "svrg", batch_size = 100L,
                    minvls = 1000L, iminvls = 5000L, lr = 1e-3))
 #>    user  system elapsed 
-#>  31.404   0.004   8.039
+#>   28.88    0.00    7.41
 
 # some of the imputed values
 head(mdgc_res$ximp)
@@ -1724,7 +1835,7 @@ system.time(miss_res <- missForest(miss_forest_arg))
 #>   missForest iteration 9 in progress...done!
 #>   missForest iteration 10 in progress...done!
 #>    user  system elapsed 
-#>  16.080   0.036  16.115
+#>  16.169   0.024  16.193
 
 # turn binary variables back to logicals
 miss_res$ximp[, is_log] <- lapply(
@@ -1743,11 +1854,178 @@ rbind(
 rbind(
   mdgc = get_rmse(
     impu_dat = mdgc_res$ximp, truth = colon_use, observed = dat), 
-  missForest = 
-    get_rmse(impu_dat = miss_res$ximp, truth = colon_use, observed = dat))
+  missForest = get_rmse(
+    impu_dat = miss_res$ximp, truth = colon_use, observed = dat))
 #>             age nodes
 #> mdgc       12.3  3.24
 #> missForest 11.5  2.94
+```
+
+``` r
+# get the results
+res <- get_err_n_time(colon_use, seeds)
+```
+
+``` r
+# compute means and Monte Carlo standard errors
+show_res(res, colon_use)
+#> 
+#> rx (multinomial):
+#>            mdgc      missForest 
+#> 0.6483 (0.0124) 0.4731 (0.0126) 
+#> 
+#> sex (binary):
+#>            mdgc      missForest 
+#> 0.4727 (0.0159) 0.3081 (0.0196) 
+#> 
+#> age (continuous):
+#>             mdgc       missForest 
+#> 11.8608 (0.1384) 11.1135 (0.1331) 
+#> 
+#> obstruct (binary):
+#>            mdgc      missForest 
+#> 0.2082 (0.0093) 0.1999 (0.0108) 
+#> 
+#> perfor (binary):
+#>            mdgc      missForest 
+#> 0.0252 (0.0029) 0.0170 (0.0038) 
+#> 
+#> adhere (binary):
+#>            mdgc      missForest 
+#> 0.1566 (0.0096) 0.1485 (0.0114) 
+#> 
+#> nodes (continuous):
+#>            mdgc      missForest 
+#> 3.8995 (0.2102) 3.2867 (0.1618) 
+#> 
+#> differ (ordinal):
+#>            mdgc      missForest 
+#> 0.2610 (0.0068) 0.3150 (0.0096) 
+#> 
+#> extent (ordinal):
+#>            mdgc      missForest 
+#> 0.1851 (0.0072) 0.2713 (0.0082) 
+#> 
+#> surg (binary):
+#>            mdgc      missForest 
+#> 0.2679 (0.0080) 0.2470 (0.0081) 
+#> 
+#> user.self (computation time):
+#>             mdgc       missForest 
+#> 25.8197 (1.2289) 11.1045 (1.1232) 
+#> 
+#> elapsed (computation time):
+#>             mdgc       missForest 
+#>  6.6326 (0.3083) 11.1469 (1.1260)
+```
+
+### Cholesterol Data From a US Survey
+
+We do as in the [Edgar Anderson’s Iris Data](#edgar-andersons-iris-data)
+section here but with a different data set.
+
+``` r
+# prepare the data
+data("nhanes", package = "survey")
+
+nhanes_use <- within(nhanes, {
+  HI_CHOL <- HI_CHOL > 0
+  race <- factor(race)
+  agecat <- ordered(agecat)
+  RIAGENDR <- RIAGENDR > 1
+})[, c("HI_CHOL", "race", "agecat", "RIAGENDR")]
+nhanes_use <- nhanes_use[complete.cases(nhanes_use), ]
+
+# summary stats for the data
+summary(nhanes_use)
+#>   HI_CHOL        race          agecat      RIAGENDR      
+#>  Mode :logical   1:2532   (0,19]  :2150   Mode :logical  
+#>  FALSE:7059      2:3450   (19,39] :1905   FALSE:3889     
+#>  TRUE :787       3:1406   (39,59] :1911   TRUE :3957     
+#>                  4: 458   (59,Inf]:1880
+
+# sample a data set
+set.seed(1)
+dat <- mask_dat(nhanes_use)
+
+# use the mdgc method
+system.time(
+  mdgc_res <- mdgc(dat, maxpts = 5000L, n_threads = 4L, maxit = 100L, 
+                   use_aprx = TRUE, method = "svrg", batch_size = 100L,
+                   minvls = 1000L, iminvls = 5000L, lr = 1e-3))
+#>    user  system elapsed 
+#>   25.03    0.00    6.62
+
+# some of the imputed values
+head(mdgc_res$ximp)
+#>   HI_CHOL race   agecat RIAGENDR
+#> 1   FALSE    2  (19,39]    FALSE
+#> 2   FALSE    3   (0,19]    FALSE
+#> 3   FALSE    3   (0,19]    FALSE
+#> 4   FALSE    3 (59,Inf]     TRUE
+#> 5   FALSE    1  (19,39]    FALSE
+#> 6    TRUE    2  (39,59]     TRUE
+
+# compare with missForest
+miss_forest_arg <- dat
+is_log <- sapply(miss_forest_arg, is.logical)
+miss_forest_arg[, is_log] <- lapply(miss_forest_arg[, is_log], as.factor)
+system.time(miss_res <- missForest(miss_forest_arg))
+#>   missForest iteration 1 in progress...done!
+#>   missForest iteration 2 in progress...done!
+#>   missForest iteration 3 in progress...done!
+#>   missForest iteration 4 in progress...done!
+#>   missForest iteration 5 in progress...done!
+#>    user  system elapsed 
+#>   4.650   0.076   4.727
+
+# turn binary variables back to logicals
+miss_res$ximp[, is_log] <- lapply(
+  miss_res$ximp[, is_log], function(x) as.integer(x) > 1L)
+
+# the errors
+rbind(
+  mdgc = get_classif_error(
+    impu_dat = mdgc_res$ximp, truth = nhanes_use, observed = dat), 
+  missForest = get_classif_error(
+    impu_dat = miss_res$ximp, truth = nhanes_use, observed = dat))
+#>            HI_CHOL  race agecat RIAGENDR
+#> mdgc        0.0931 0.555  0.656    0.480
+#> missForest  0.3722 0.706  0.662    0.464
+```
+
+``` r
+# get the results
+res <- get_err_n_time(nhanes_use, seeds)
+```
+
+``` r
+# compute means and Monte Carlo standard errors
+show_res(res, nhanes_use)
+#> 
+#> HI_CHOL (binary):
+#>            mdgc      missForest 
+#> 0.0962 (0.0035) 0.3514 (0.0090) 
+#> 
+#> race (multinomial):
+#>            mdgc      missForest 
+#> 0.5374 (0.0068) 0.6865 (0.0113) 
+#> 
+#> agecat (ordinal):
+#>            mdgc      missForest 
+#> 0.6755 (0.0025) 0.6813 (0.0060) 
+#> 
+#> RIAGENDR (binary):
+#>            mdgc      missForest 
+#> 0.5017 (0.0065) 0.4798 (0.0045) 
+#> 
+#> user.self (computation time):
+#>             mdgc       missForest 
+#> 24.5492 (0.9312)  3.8695 (0.3629) 
+#> 
+#> elapsed (computation time):
+#>            mdgc      missForest 
+#> 6.5040 (0.2311) 3.9639 (0.3684)
 ```
 
 ## References

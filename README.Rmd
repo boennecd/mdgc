@@ -61,7 +61,7 @@ correlation matrix and to perform the imputation. We then show a
 [simulation study](#simulation-study) where we compare with the method 
 suggested by @zhao19.
 
-The last section called [Adding Multinomial Variables](#adding-multinomial-variables)
+The last section called [adding multinomial variables](#adding-multinomial-variables)
 covers data sets which also have multinomial variables.
 
 ## Installation
@@ -74,7 +74,7 @@ remotes::install_github("boennecd/mdgc")
 ## Quick Example
 
 We first simulate a data set and provide an example which shows how to use 
-the package. The [An Even Shorter Example](#an-even-shorter-example) section 
+the package. The [an even shorter example](#an-even-shorter-example) section 
 shows a shorter example then what is shown here. You may want to see this 
 first if you just want to perform some quick imputation.
 
@@ -941,23 +941,24 @@ data(iris)
 # assign function to produce iris data set with NAs.
 # 
 # Args:
+#   dat: data set to mask.
 #   p_na: chance of missing a value.
-get_iris <- function(p_na = .1){
-  is_miss <- matrix(p_na > runif(NROW(iris) * NCOL(iris)), 
-                    NROW(iris), NCOL(iris))
+mask_dat <- function(dat, p_na = .1){
+  is_miss <- matrix(p_na > runif(NROW(dat) * NCOL(dat)), 
+                    NROW(dat), NCOL(dat))
   while(any(all_missing <- apply(is_miss, 1, all)))
     # avoid rows with all missing variables
-    is_miss[all_missing, ] <- p_na > runif(sum(all_missing) * NCOL(iris))
+    is_miss[all_missing, ] <- p_na > runif(sum(all_missing) * NCOL(dat))
   
   # create data set with missing values
-  out <- iris
+  out <- dat
   out[is_miss] <- NA 
   out
 }
 
 # get a data set with all missing values
 set.seed(68129371)
-dat <- get_iris()
+dat <- mask_dat(iris)
 
 # use the mdgc method
 system.time(
@@ -985,7 +986,103 @@ rbind(
     get_rmse(impu_dat = miss_res$ximp, truth = iris, observed = dat))
 ```
 
+We repeat this a few times to get Monte Carlo estimates of the errors:
+
+```{r mult_iris, message=FALSE, cache=1}
+# function to get Monte Carlo estimates of the errors. 
+# 
+# Args:
+#   dat: data set to use. 
+#   seeds: seeds to use.
+get_err_n_time <- function(dat, seeds){
+  sapply(seeds, function(s){
+    # mask data
+    set.seed(s)
+    dat_mask <- mask_dat(dat)
+    
+    # fit models
+    
+    mdgc_time <- system.time(
+      mdgc_res <- mdgc(dat_mask, maxpts = 5000L, n_threads = 4L, maxit = 100L, 
+                       use_aprx = TRUE, minvls = 1000L, iminvls = 1000L,
+                       method = if(NROW(dat) > 1000L) "svrg" else "aug_Lagran", 
+                       lr = 1e-3, batch_size = 100L))
+    
+    # compare with missForest
+    miss_forest_arg <- dat_mask
+    is_log <- sapply(miss_forest_arg, is.logical)
+    miss_forest_arg[, is_log] <- lapply(miss_forest_arg[, is_log], as.factor)
+    sink(tempfile())
+    miss_time <- system.time(miss_res <- missForest(miss_forest_arg))
+    sink()
+    
+    # turn binary variables back to logicals
+    miss_res$ximp[, is_log] <- lapply(
+      miss_res$ximp[, is_log], function(x) as.integer(x) > 1L)
+    
+    # get the errors
+    er_int <- rbind(
+      mdgc = get_classif_error(
+        impu_dat = mdgc_res$ximp, truth = dat, observed = dat_mask), 
+      missForest = get_classif_error(
+        impu_dat = miss_res$ximp, truth = dat, observed = dat_mask))
+    er_con <- rbind(
+      mdgc = get_rmse(
+        impu_dat = mdgc_res$ximp, truth = dat, observed = dat_mask), 
+      missForest = 
+        get_rmse(impu_dat = miss_res$ximp, truth = dat, observed = dat_mask))
+      
+    # gather the output and return 
+    er <- cbind(er_int, er_con)
+    er <- er[, match(colnames(er), colnames(dat))]
+    ti <- rbind(mdgc_time, miss_time)[, 1:3]
+    out <- cbind(er, ti)
+    message(sprintf("\nResult with seed %d is:", s))
+    message(paste0(capture.output(print(out)), collapse = "\n"))
+    out
+
+  }, simplify = "array")
+}
+
+# get the results
+seeds <- c(40574428L, 13927943L, 31430660L, 38396447L, 20137114L, 59492953L, 
+           93913797L, 95452931L, 77261969L, 10996196L)
+res <- get_err_n_time(iris, seeds)
+```
+
+```{r show_res_mult_iris}
+# compute means and Monte Carlo standard errors
+show_res <- function(res, dat){
+  stats <- apply(res, 1:2, function(x) 
+    c(mean = mean(x), SE = sd(x) / sqrt(length(x))))
+  stats <- stats[, , c(colnames(dat), "user.self", "elapsed")]
+  for(i in seq_len(dim(stats)[[3]])){
+    nam <- dimnames(stats)[[3]][i]
+    cap <- if(nam %in% colnames(dat)){
+      if(is.ordered(dat[[nam]]))
+        "ordinal"
+      else if(is.factor(dat[[nam]]))
+        "multinomial"
+      else if(is.logical(dat[[nam]]))
+        "binary"
+      else
+        "continuous"
+    } else
+      "computation time"
+    
+    cat(sprintf("\n%s (%s):\n", nam, cap))
+    print(apply(round(
+      stats[, , i], 4), 2, function(x) sprintf("%.4f (%.4f)", x[1], x[2])), 
+      quote = FALSE)
+  }
+}
+
+show_res(res, iris)
+```
+
 ### Chemotherapy for Stage B/C Colon Cancer
+We do as in the [Edgar Anderson's Iris Data](#edgar-andersons-iris-data)
+section here but with a different data set.
 
 ```{r colon, cache = 1}
 # prepare the data
@@ -1006,24 +1103,9 @@ colon_use <- colon_use[complete.cases(colon_use), ]
 # stats for the data set
 summary(colon_use)
 
-# assign function to set some variables to NA
-get_colon <- function(p_na = .1){
-  is_miss <- matrix(p_na > runif(NROW(colon_use) * NCOL(colon_use)), 
-                    NROW(colon_use), NCOL(colon_use))
-  while(any(all_missing <- apply(is_miss, 1, all)))
-    # avoid rows with all missing variables
-    is_miss[all_missing, ] <- 
-      p_na > runif(sum(all_missing) * NCOL(colon_use))
-  
-  # create data set with missing values
-  out <- colon_use
-  out[is_miss] <- NA 
-  out
-}
-
 # sample missing values
 set.seed(68129371)
-dat <- get_colon()
+dat <- mask_dat(colon_use)
 
 # use the mdgc method
 system.time(
@@ -1054,8 +1136,78 @@ rbind(
 rbind(
   mdgc = get_rmse(
     impu_dat = mdgc_res$ximp, truth = colon_use, observed = dat), 
-  missForest = 
-    get_rmse(impu_dat = miss_res$ximp, truth = colon_use, observed = dat))
+  missForest = get_rmse(
+    impu_dat = miss_res$ximp, truth = colon_use, observed = dat))
+```
+
+```{r mult_colon, message=FALSE, cache=1}
+# get the results
+res <- get_err_n_time(colon_use, seeds)
+```
+
+```{r show_res_mult_colon}
+# compute means and Monte Carlo standard errors
+show_res(res, colon_use)
+```
+
+### Cholesterol Data From a US Survey
+We do as in the [Edgar Anderson's Iris Data](#edgar-andersons-iris-data)
+section here but with a different data set.
+
+```{r nhanes, cache = 1}
+# prepare the data
+data("nhanes", package = "survey")
+
+nhanes_use <- within(nhanes, {
+  HI_CHOL <- HI_CHOL > 0
+  race <- factor(race)
+  agecat <- ordered(agecat)
+  RIAGENDR <- RIAGENDR > 1
+})[, c("HI_CHOL", "race", "agecat", "RIAGENDR")]
+nhanes_use <- nhanes_use[complete.cases(nhanes_use), ]
+
+# summary stats for the data
+summary(nhanes_use)
+
+# sample a data set
+set.seed(1)
+dat <- mask_dat(nhanes_use)
+
+# use the mdgc method
+system.time(
+  mdgc_res <- mdgc(dat, maxpts = 5000L, n_threads = 4L, maxit = 100L, 
+                   use_aprx = TRUE, method = "svrg", batch_size = 100L,
+                   minvls = 1000L, iminvls = 5000L, lr = 1e-3))
+
+# some of the imputed values
+head(mdgc_res$ximp)
+
+# compare with missForest
+miss_forest_arg <- dat
+is_log <- sapply(miss_forest_arg, is.logical)
+miss_forest_arg[, is_log] <- lapply(miss_forest_arg[, is_log], as.factor)
+system.time(miss_res <- missForest(miss_forest_arg))
+
+# turn binary variables back to logicals
+miss_res$ximp[, is_log] <- lapply(
+  miss_res$ximp[, is_log], function(x) as.integer(x) > 1L)
+
+# the errors
+rbind(
+  mdgc = get_classif_error(
+    impu_dat = mdgc_res$ximp, truth = nhanes_use, observed = dat), 
+  missForest = get_classif_error(
+    impu_dat = miss_res$ximp, truth = nhanes_use, observed = dat))
+```
+
+```{r mult_nhanes, message=FALSE, cache=1}
+# get the results
+res <- get_err_n_time(nhanes_use, seeds)
+```
+
+```{r show_res_mult_nhanes}
+# compute means and Monte Carlo standard errors
+show_res(res, nhanes_use)
 ```
 
 ## References

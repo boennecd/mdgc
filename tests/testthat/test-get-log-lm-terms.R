@@ -149,7 +149,90 @@ test_that("'get_log_lm_terms' gives the correct result with and without gradient
 })
 
 test_that("'get_log_lm_terms' gives the correct result with and without gradients with multinomial variables", {
-  expect_true(isTRUE("Implement the test"))
+  skip_if_not_installed("datasets")
+  library(datasets)
+  dat <- iris[c(1:10, 51:60, 101:110), 3:5]
+  dat[seq(1, NROW(dat), by = 4), 1] <- NA
+  dat[seq(2, NROW(dat), by = 4), 2] <- NA
+  dat[seq(3, NROW(dat), by = 4), 3] <- NA
+
+  obj <- get_mdgc(dat)
+  ptr <- get_mdgc_log_ml(obj)
+  start <- mdgc_start_value(obj)
+
+  lcov_to_mat <- function(par){
+    p <- (sqrt(8 * length(par) + 1) - 1) / 2
+    L <- matrix(0, p, p)
+    L[lower.tri(L, TRUE)] <- par
+    L[upper.tri(L)] <- t(L)[upper.tri(L)]
+    L
+  }
+
+  log_ml <- function(par, rel_eps = 1e-5, n_threads = 1L,
+                     comp_derivs = FALSE, seed = NULL){
+    if(!is.null(seed))
+      set.seed(seed)
+    vcov_log_chol <- head(par, -2)
+    mea           <- tail(par,  2)
+    Arg <- lcov_to_mat(vcov_log_chol)
+
+    mdgc_log_ml(ptr = ptr, vcov = Arg, mea = mea,
+                maxpts = 1000000L, abs_eps = -1, rel_eps = rel_eps,
+                n_threads = n_threads, comp_derivs = comp_derivs,
+                minvls = 0L)
+  }
+
+  set.seed(1)
+  pa <- c(start[lower.tri(start, TRUE)], obj$means)
+  val <- log_ml(pa)
+  # dput(val)
+  expect_equal(val, -62.496433767902, tolerance = 1e-3)
+
+  grad <- log_ml(pa, comp_derivs = TRUE)
+  # truth <- numDeriv::jacobian(log_ml, pa, seed = 1L)
+  # dput(truth)
+  true_grad <-c(
+    -10.8490252758386, 11.3412044896911, -8.09698535456282,
+    0.313894770695329, 7.78309064063369, -14.9804883174154, -10.4020331443358,
+    1.3207808003981, 9.08125234387075, -7.69933557281718, 1.2228223849216,
+    14.1758487591125, -0.538639488002858, -0.145543412030162, -7.01515267411361,
+    -0.262549150275879, -1.05471744166441)
+
+  # dput(matrixcalc::duplication.matrix(5L))
+  jac <-structure(c(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
+                    0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0,
+                    0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+                    0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    1), .Dim = c(25L, 15L))
+  expect_equal(
+    drop(c(attr(grad, "grad_vcov")) %*% jac), head(true_grad, -2),
+    tolerance = 1e-3)
+  expect_equal(
+    drop(attr(grad, "grad_mea")), tail(true_grad, 2),
+    tolerance = 1e-3)
+
+  # now with two threads
+  grad <- log_ml(pa, comp_derivs = TRUE, n_threads = 2L)
+  expect_equal(
+    drop(c(attr(grad, "grad_vcov")) %*% jac), head(true_grad, -2),
+    tolerance = 1e-3)
+  expect_equal(
+    drop(attr(grad, "grad_mea")), tail(true_grad, 2),
+    tolerance = 1e-3)
 })
 
 # sim_dat <- function(n, p = 4, n_lvls = 5L){
@@ -330,7 +413,7 @@ test_that("mdgc_log_ml gives the correct result with a single log marginal likel
   lower <- rep(-Inf, n_latent) # default to -Inf
   upper <- numeric(n_latent)   # default to zero
 
-  # handle continous
+  # handle continuous
   upper[n_lvl[1L] + 1:2] <- obs_x[n_lvl[1L] + 1:2]
 
   # handle the binary

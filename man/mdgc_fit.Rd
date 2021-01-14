@@ -38,13 +38,14 @@ non-zero mean entries.}
 
 \item{lr}{learning rate.}
 
-\item{rel_eps}{relative error for each term.}
+\item{rel_eps}{relative error for each marginal likelihood factor.}
 
 \item{maxit}{maximum number of iteration.}
 
 \item{batch_size}{number of observations in each batch.}
 
-\item{method}{estimation method to use.}
+\item{method}{estimation method to use. Can be \code{"svrg"}, \code{"adam"},
+or \code{"aug_Lagran"}.}
 
 \item{seed}{fixed seed to use. Use \code{NULL} if the seed should not be
 fixed.}
@@ -56,9 +57,11 @@ fixed.}
 \item{do_reorder}{logical for whether to use a heuristic variable
 reordering. \code{TRUE} is likely the best option.}
 
-\item{abs_eps}{absolute convergence threshold for each term.}
+\item{abs_eps}{absolute convergence threshold for each marginal likelihood
+factor.}
 
-\item{maxpts}{maximum number of samples to draw.}
+\item{maxpts}{maximum number of samples to draw for each marginal likelihood
+term.}
 
 \item{minvls}{minimum number of samples.}
 
@@ -80,7 +83,7 @@ method.}
 }
 \description{
 Estimates the covariance matrix and the non-zero mean terms.
-The \code{lr} parameter and the \code{batch_size} parameter is likely
+The \code{lr} parameter and the \code{batch_size} parameter are likely
 data dependent.
 Convergence should be monitored e.g. by using \code{verbose = TRUE}
 with \code{method = "svrg"}.

@@ -52,13 +52,13 @@ should be sorted.}
 \description{
 Creates a C++ object which is needed to approximate the log marginal
 likelihood. The object cannot be saved.
-
-\code{idx_non_zero_mean} terms with \code{code} equal to zero (
-observed values) are ignored.
 }
 \details{
 Indices are zero-based except the outcome index for multinomial
 variables.
+
+\code{idx_non_zero_mean} indices with terms with \code{code} equal to zero
+(observed values) are ignored.
 }
 \seealso{
 \code{\link{mdgc_fit}}, \code{\link{mdgc_log_ml}}

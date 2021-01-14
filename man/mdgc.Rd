@@ -41,9 +41,10 @@ data.}
 
 \item{batch_size}{number of observations in each batch.}
 
-\item{rel_eps}{relative error for each term.}
+\item{rel_eps}{relative error for each marginal likelihood factor.}
 
-\item{method}{estimation method to use.}
+\item{method}{estimation method to use. Can be \code{"svrg"}, \code{"adam"},
+or \code{"aug_Lagran"}.}
 
 \item{seed}{fixed seed to use. Use \code{NULL} if the seed should not be
 fixed.}
@@ -59,9 +60,11 @@ fixed.}
 \item{do_reorder}{logical for whether to use a heuristic variable
 reordering. \code{TRUE} is likely the best option.}
 
-\item{abs_eps}{absolute convergence threshold for each term.}
+\item{abs_eps}{absolute convergence threshold for each marginal likelihood
+factor.}
 
-\item{maxpts}{maximum number of samples to draw.}
+\item{maxpts}{maximum number of samples to draw for each marginal likelihood
+term.}
 
 \item{minvls}{minimum number of samples.}
 

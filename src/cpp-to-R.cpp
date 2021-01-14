@@ -597,7 +597,7 @@ Rcpp::List impute
         out.emplace_back(new restrictcdf::imputation::multinomial(
             Rcpp::NumericVector(mu).size() + 1));
       else if(bo.isNULL())
-        // the variable is continous and we just have to increament the
+        // the variable is continuous and we just have to increament the
         // pointer
         out.emplace_back(new restrictcdf::imputation::contin());
       else {
@@ -811,7 +811,7 @@ Rcpp::List impute
       mu_use += Mtmp.t() * a_obs_val;
 
     } else
-      // no observed continous variables to condition on
+      // no observed continuous variables to condition on
       Sigma_use = Sigma;
 
     if(n_D_col > 0){
@@ -834,7 +834,7 @@ Rcpp::List impute
       for(auto &type_list_it : type_list){
         if(cur_idx_obs != a_idx_obs.end() and
              static_cast<size_t>(j) == *cur_idx_obs){
-          // the outcome is known and continous so we can use the value
+          // the outcome is known and continuous so we can use the value
           // as is
           ++cur_idx_obs;
           ++j;
@@ -887,7 +887,7 @@ Rcpp::List impute
       for(auto &type_j : type_list){
         if(cur_idx_obs != a_idx_obs.end() and
              static_cast<size_t>(j) == *cur_idx_obs){
-          // the variable is continous and known. Do nothing.
+          // the variable is continuous and known. Do nothing.
           ++cur_idx_obs;
           o += impute_get_output_dim(type_j.get());
           j += type_j->n_latent();

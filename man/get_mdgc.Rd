@@ -12,17 +12,17 @@ data.}
 }
 \description{
 Creates a mdgc object which is needed for estimation of the
-covariance matrix and to perform imputation.
+covariance matrix and the mean vector and to perform imputation.
 }
 \details{
 It is important to use appropriate classes for the \code{\link{data.frame}}
 columns:
 
 \itemize{
-  \item{Continous variables: }{should be \code{\link{numeric}} or \code{\link{integer}}.}
-  \item{Binary variables: }{should be \code{\link{logical}}.}
-  \item{Multinomial variables: }{should be a \code{\link{factor}}.}
-  \item{Ordinal variables: }{should be a \code{\link{ordered}}.}
+  \item{Continuous variables: }{should be \code{\link{numeric}}s.}
+  \item{Binary variables: }{should be \code{\link{logical}}s.}
+  \item{Multinomial variables: }{should be \code{\link{factor}}s.}
+  \item{Ordinal variables: }{should be \code{\link{ordered}}.}
 }
 }
 \seealso{

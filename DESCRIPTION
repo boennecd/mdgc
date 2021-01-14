@@ -1,6 +1,6 @@
 Package: mdgc
 Type: Package
-Title: Missing Data imputation using Gaussian Copulas
+Title: Missing Data Imputation Using Gaussian Copulas
 Version: 0.1.0
 Authors@R: c(
   person("Benjamin", "Christoffersen", 
@@ -21,7 +21,8 @@ Description: Provides functions to impute missing values using Gaussian
     Hoff (2007) <doi:10.1214/07-AOAS107> and Zhao and Udell (2019) 
     <arXiv:1910.12845> but differs by making a direct 
     approximation of the log marginal likelihood using an extended version 
-    of the Fortran code created by <doi:10.1198/106186002394>.
+    of the Fortran code created by <doi:10.1198/106186002394>. The model 
+    supports binary, ordinal, multinomial, and continuous variables.
 License: GPL-2
 Encoding: UTF-8
 LazyData: true

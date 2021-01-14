@@ -1,17 +1,17 @@
 #' Get mdgc Object
 #' @description
 #' Creates a mdgc object which is needed for estimation of the
-#' covariance matrix and to perform imputation.
+#' covariance matrix and the mean vector and to perform imputation.
 #'
 #' @details
 #' It is important to use appropriate classes for the \code{\link{data.frame}}
 #' columns:
 #'
 #' \itemize{
-#'   \item{Continous variables: }{should be \code{\link{numeric}} or \code{\link{integer}}.}
-#'   \item{Binary variables: }{should be \code{\link{logical}}.}
-#'   \item{Multinomial variables: }{should be a \code{\link{factor}}.}
-#'   \item{Ordinal variables: }{should be a \code{\link{ordered}}.}
+#'   \item{Continuous variables: }{should be \code{\link{numeric}}s.}
+#'   \item{Binary variables: }{should be \code{\link{logical}}s.}
+#'   \item{Multinomial variables: }{should be \code{\link{factor}}s.}
+#'   \item{Ordinal variables: }{should be \code{\link{ordered}}.}
 #' }
 #'
 #' @param dat \code{\link{data.frame}} with continuous, multinomial, ordinal, and binary
@@ -182,9 +182,6 @@ get_mdgc <- function(dat){
 #' Creates a C++ object which is needed to approximate the log marginal
 #' likelihood. The object cannot be saved.
 #'
-#' \code{idx_non_zero_mean} terms with \code{code} equal to zero (
-#' observed values) are ignored.
-#'
 #' @param object mdgc object from \code{\link{get_mdgc}} or a
 #' \code{\link{data.frame}} to pass to \code{\link{get_mdgc}}. Ignored by
 #' the default method.
@@ -207,6 +204,9 @@ get_mdgc <- function(dat){
 #' @details
 #' Indices are zero-based except the outcome index for multinomial
 #' variables.
+#'
+#' \code{idx_non_zero_mean} indices with terms with \code{code} equal to zero
+#' (observed values) are ignored.
 #'
 #' @seealso
 #' \code{\link{mdgc_fit}}, \code{\link{mdgc_log_ml}}
@@ -263,7 +263,7 @@ get_mdgc_log_ml.default <- function(object, lower, upper, code, multinomial,
 #' quasi-random numbers. The method uses a generalization of the Fortran
 #' code by Genz and Bretz (2002).
 #'
-#' Mean terms for observed continous variables are always assumed to be
+#' Mean terms for observed continuous variables are always assumed to be
 #' zero.
 #'
 #' @return
@@ -279,15 +279,17 @@ get_mdgc_log_ml.default <- function(object, lower, upper, code, multinomial,
 #' @param ptr object returned by \code{\link{get_mdgc_log_ml}}.
 #' @param vcov covariance matrix.
 #' @param mea vector with non-zero mean entries.
-#' @param rel_eps relative error for each term.
+#' @param rel_eps relative error for each marginal likelihood factor.
 #' @param n_threads number of threads to use.
 #' @param comp_derivs logical for whether to approximate the gradient.
 #' @param indices integer vector with which terms (observations) to include.
-#' Must be zero indexed. \code{NULL} yields all observations.
+#' Must be zero-based. \code{NULL} yields all observations.
 #' @param do_reorder logical for whether to use a heuristic variable
 #' reordering. \code{TRUE} is likely the best option.
-#' @param maxpts maximum number of samples to draw.
-#' @param abs_eps absolute convergence threshold for each term.
+#' @param maxpts maximum number of samples to draw for each marginal likelihood
+#' term.
+#' @param abs_eps absolute convergence threshold for each marginal likelihood
+#' factor.
 #' @param minvls minimum number of samples.
 #' @param use_aprx logical for whether to use an approximation of
 #' \code{\link{pnorm}} and \code{\link{qnorm}}. This may yield a
@@ -415,7 +417,7 @@ mdgc_start_value.default <- function(object, lower, upper, code,
 #'
 #' @description
 #' Estimates the covariance matrix and the non-zero mean terms.
-#' The \code{lr} parameter and the \code{batch_size} parameter is likely
+#' The \code{lr} parameter and the \code{batch_size} parameter are likely
 #' data dependent.
 #' Convergence should be monitored e.g. by using \code{verbose = TRUE}
 #' with \code{method = "svrg"}.
@@ -432,7 +434,8 @@ mdgc_start_value.default <- function(object, lower, upper, code,
 #' @param batch_size number of observations in each batch.
 #' @param lr learning rate.
 #' @param decay the learning rate used by SVRG is given by \code{lr * decay^iteration_number}.
-#' @param method estimation method to use.
+#' @param method estimation method to use. Can be \code{"svrg"}, \code{"adam"},
+#' or \code{"aug_Lagran"}.
 #' @param maxit maximum number of iteration.
 #' @param seed fixed seed to use. Use \code{NULL} if the seed should not be
 #' fixed.
@@ -451,6 +454,7 @@ mdgc_start_value.default <- function(object, lower, upper, code,
 #' Johnson, R., & Zhang, T. (2013). \emph{Accelerating stochastic gradient descent using predictive variance reduction}. In Advances in neural information processing systems.
 #'
 #' @importFrom stats optim
+#' @importFrom utils tail
 #' @export
 mdgc_fit <- function(ptr, vcov, mea, lr = 1e-3, rel_eps = 1e-3,
                      maxit = 10L, batch_size = NULL,
@@ -955,22 +959,23 @@ svrg <- function(par_fn, nobs, val_vcov, val_mea, batch_size, maxit = 10L,
   lSig[lower.tri(lSig, TRUE)]
 }
 
-#' Impute Missing Values Given a Covariance Matrix
+#' Impute Missing Values
 #'
 #' @description
-#' Imputes missing values given a covariance matrix using a similar
-#' quasi-random numbers method as \code{\link{mdgc_fit}}.
+#' Imputes missing values given a covariance matrix and mean vector using a
+#' similar quasi-random numbers method as \code{\link{mdgc_log_ml}}.
 #'
 #' @param object returned object from \code{\link{get_mdgc}}.
 #' @param vcov covariance matrix to condition on in the imputation.
-#' @param mea vector with non-zero mean entries.
+#' @param mea vector with non-zero mean entries to condition on.
 #' @inheritParams mdgc_fit
 #' @inheritParams mdgc_log_ml
 #' @export
 #'
 #' @return
 #' A list with imputed values for the continuous variables and a vector with
-#' probabilities for each level for the ordinal variables.
+#' probabilities for each level for the ordinal, binary, and multinomial
+#' variables.
 mdgc_impute <- function(object, vcov, mea, rel_eps = 1e-3, maxit = 10000L,
                         abs_eps = -1, n_threads = 1L, do_reorder = TRUE,
                         minvls = 1000L, use_aprx = FALSE){
@@ -1188,10 +1193,16 @@ mdgc <- function(dat, lr = 1e-3, maxit = 10L, batch_size = NULL,
       as.data.frame(  x )
   }
 
-  out_cont <- trans_to_df(sapply(imputed, function(x) unlist(x[is_cont])))
-  out_cat <- trans_to_df(sapply(imputed, function(x)
-    sapply(x[is_cat], which.max)))
-  out <- cbind(out_cont, out_cat)
+  out_cont <- if(length(is_cont) == 0)
+    NULL else trans_to_df(sapply(imputed, function(x) unlist(x[is_cont])))
+  out_cat <- if(length(is_cat) == 0)
+    NULL else trans_to_df(sapply(imputed, function(x)
+      sapply(x[is_cat], which.max)))
+  out <-
+    if(is.null(out_cont))
+      out_cat else if(is.null(out_cat))
+        out_cont else
+          cbind(out_cont, out_cat)
 
   # set factor levels etc.
   out <- out[, order(c(is_cont, is_bin, is_ord, is_mult))]

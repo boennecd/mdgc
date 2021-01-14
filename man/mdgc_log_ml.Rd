@@ -26,21 +26,23 @@ mdgc_log_ml(
 
 \item{mea}{vector with non-zero mean entries.}
 
-\item{rel_eps}{relative error for each term.}
+\item{rel_eps}{relative error for each marginal likelihood factor.}
 
 \item{n_threads}{number of threads to use.}
 
 \item{comp_derivs}{logical for whether to approximate the gradient.}
 
 \item{indices}{integer vector with which terms (observations) to include.
-Must be zero indexed. \code{NULL} yields all observations.}
+Must be zero-based. \code{NULL} yields all observations.}
 
 \item{do_reorder}{logical for whether to use a heuristic variable
 reordering. \code{TRUE} is likely the best option.}
 
-\item{maxpts}{maximum number of samples to draw.}
+\item{maxpts}{maximum number of samples to draw for each marginal likelihood
+term.}
 
-\item{abs_eps}{absolute convergence threshold for each term.}
+\item{abs_eps}{absolute convergence threshold for each marginal likelihood
+factor.}
 
 \item{minvls}{minimum number of samples.}
 
@@ -60,7 +62,7 @@ Approximates the log marginal likelihood and the derivatives using
 quasi-random numbers. The method uses a generalization of the Fortran
 code by Genz and Bretz (2002).
 
-Mean terms for observed continous variables are always assumed to be
+Mean terms for observed continuous variables are always assumed to be
 zero.
 }
 \references{

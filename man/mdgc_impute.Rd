@@ -2,7 +2,7 @@
 % Please edit documentation in R/mdgc.R
 \name{mdgc_impute}
 \alias{mdgc_impute}
-\title{Impute Missing Values Given a Covariance Matrix}
+\title{Impute Missing Values}
 \usage{
 mdgc_impute(
   object,
@@ -22,13 +22,14 @@ mdgc_impute(
 
 \item{vcov}{covariance matrix to condition on in the imputation.}
 
-\item{mea}{vector with non-zero mean entries.}
+\item{mea}{vector with non-zero mean entries to condition on.}
 
-\item{rel_eps}{relative error for each term.}
+\item{rel_eps}{relative error for each marginal likelihood factor.}
 
 \item{maxit}{maximum number of iteration.}
 
-\item{abs_eps}{absolute convergence threshold for each term.}
+\item{abs_eps}{absolute convergence threshold for each marginal likelihood
+factor.}
 
 \item{n_threads}{number of threads to use.}
 
@@ -43,9 +44,10 @@ noticeable reduction in the computation time.}
 }
 \value{
 A list with imputed values for the continuous variables and a vector with
-probabilities for each level for the ordinal variables.
+probabilities for each level for the ordinal, binary, and multinomial
+variables.
 }
 \description{
-Imputes missing values given a covariance matrix using a similar
-quasi-random numbers method as \code{\link{mdgc_fit}}.
+Imputes missing values given a covariance matrix and mean vector using a
+similar quasi-random numbers method as \code{\link{mdgc_log_ml}}.
 }

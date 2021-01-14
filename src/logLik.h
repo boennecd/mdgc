@@ -190,8 +190,8 @@ public:
    * @param vcov Covariance matrix at which to evalute the log marginal
    * likelihood term.
    * @param mu Mean vector at which to evaluate the log marginal likelihood
-   * term. Does not have any effect for continous variables.
-   * @param derivs_vcov Matrix with derivatives to increament for the
+   * term. Does not have any effect for continuous variables.
+   * @param derivs_vcov Matrix with derivatives to increment for the
    * covariance matrix.
    * @param derivs_mea Vector with derivatives to increament for the
    * mean vector.
