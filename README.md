@@ -186,7 +186,7 @@ mark(`Setup time` = {
 #> # A tibble: 1 x 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Setup time   22.4ms     23ms      43.0    9.65MB     13.4
+#> 1 Setup time   22.1ms   22.8ms      43.4    9.65MB     13.6
 
 # fit the model using three different methods
 set.seed(60941821)
@@ -196,7 +196,7 @@ system.time(
     n_threads = 4L, maxit = 100L, method = "aug_Lagran", rel_eps = 1e-3, 
     maxpts = 200L))
 #>    user  system elapsed 
-#> 171.736   0.043  43.004
+#>   166.6     0.0    41.7
 system.time(
   fit_Lagran <- mdgc_fit(
     ptr = log_ml_ptr, vcov = fit_Lagran_start$result$vcov, 
@@ -205,7 +205,7 @@ system.time(
     maxpts = 5000L, mu = fit_Lagran_start$mu, 
     lambda = fit_Lagran_start$lambda))
 #>    user  system elapsed 
-#>  39.840   0.001  10.007
+#>   39.61    0.00    9.97
 
 system.time(
   fit_adam <- mdgc_fit(
@@ -213,7 +213,7 @@ system.time(
     n_threads = 4L, lr = 1e-3, maxit = 25L, batch_size = 100L, 
     method = "adam", rel_eps = 1e-3, maxpts = 5000L))
 #>    user  system elapsed 
-#>    40.7     0.0    10.2
+#>    40.5     0.0    10.1
 
 set.seed(fit_seed <- 19570958L)
 system.time(
@@ -321,7 +321,7 @@ system.time(
 #> Log marginal likelihood approximation is    -23330.83
 #> Previous approximate gradient norm was         226.77
 #>    user  system elapsed 
-#>    82.1     0.0    20.5
+#>  79.770   0.004  19.948
 
 # compare the log marginal likelihood 
 print(rbind(
@@ -348,7 +348,7 @@ system.time(
     n_threads = 4L, lr = 1e-3, maxit = 25L, batch_size = 100L, 
     method = "svrg", rel_eps = 1e-3, maxpts = 5000L, use_aprx = TRUE))
 #>    user  system elapsed 
-#>      56       0      14
+#>  55.150   0.008  13.790
 
 # essentially the same estimates
 norm(fit_svrg_aprx$result$vcov - fit_svrg$result$vcov, "F") 
@@ -401,7 +401,7 @@ system.time(imp_res <- mdgc_impute(
   mdgc_obj, fit_svrg$result$vcov, mea = fit_svrg$result$mea, rel_eps = 1e-3, 
   maxit = 10000L, n_threads = 4L))
 #>    user  system elapsed 
-#>   17.51    0.00    4.79
+#>   17.08    0.00    4.69
 
 # look at the result for one of the observations
 imp_res[2L]
@@ -598,7 +598,7 @@ system.time(miss_res <- missForest(miss_forest_arg))
 #>   missForest iteration 8 in progress...done!
 #>   missForest iteration 9 in progress...done!
 #>    user  system elapsed 
-#>  45.805   0.036  45.841
+#>   44.99    0.04   45.03
 
 # turn binary variables back to logicals
 miss_res$ximp[, is_log] <- lapply(
@@ -694,7 +694,7 @@ system.time(res <- mdgc(dat$seen_obs, verbose = TRUE, maxpts = 5000L,
 #> 
 #> Performing imputation...
 #>    user  system elapsed 
-#>   16.56    0.00    4.61
+#>   16.39    0.00    4.55
 
 # compare the estimated correlation matrix with the truth
 norm(dat$Sigma - res$vcov, "F") / norm(dat$Sigma, "F")
@@ -720,7 +720,7 @@ dat_pass[, is_cat] <- lapply(dat_pass[, is_cat], as.integer)
 
 system.time(imp_apr_em <- impute_mixedgc(dat_pass, eps = 1e-4))
 #>    user  system elapsed 
-#>    19.8     0.0    19.8
+#>    19.6     0.0    19.6
 
 # compare the estimated correlation matrix with the truth
 get_rel_err <- function(est, keep = seq_len(NROW(truth)), truth = dat$Sigma)
@@ -1005,7 +1005,7 @@ show_sim_stats("mdgc_class", "mixedgc_class", "missForest_class", "err")
 #> mixedgc_class    -0.0332 0.00316
 #> missForest_class -0.0679 0.00272
 
-# the continous variables
+# the continuous variables
 show_sim_stats("mdgc_rmse", "mixedgc_rmse", "missForest_rmse", "err")
 #> Means and standard errors:
 #>                  mean      SE
@@ -1038,7 +1038,7 @@ variables.
 #   verbose: print status during the simulation.
 # 
 # Returns: 
-#   Simluated masked data, the true data, and true covariance matrix. 
+#   Simulated masked data, the true data, and true covariance matrix. 
 sim_dat <- function(n, p = 4L, n_lvls = 5L, verbose = FALSE){
   # determine the type
   n_rep <- floor((p + 4 - 1) / 4)
@@ -1053,91 +1053,22 @@ sim_dat <- function(n, p = 4L, n_lvls = 5L, verbose = FALSE){
   
   # get the covariance matrix
   n_latent <- p + (n_lvls - 1L) * (p %/% 4)
-
-  Sig <- cov2cor(drop(rWishart(1L, 2 * n_latent, diag(n_latent))))
+  Sig <- drop(rWishart(1L, 2 * n_latent, diag(1 / n_latent / 2, n_latent)))
   
-  # Find the closest matrix which satisfy the zero constraint
-  type_augmented <- unlist(sapply(seq_along(type), function(x)
-    if(x %% 4 == 0) rep(x, n_lvls) else x))
-  zero_indices <- do.call(rbind, tapply(
-    seq_along(type_augmented)[type_augmented %% 4L == 0L], 
-    type_augmented[type_augmented %% 4L == 0L], function(x)
-      subset(expand.grid(row = x, col = x), row > col)))
-  zero_indices <- as.matrix(zero_indices) - 1L
-  
-  # setup objects and functions to run augmented Lagrangian method
-  par <- t(chol(Sig))
-  par <- par[lower.tri(par, TRUE)]
-  
-  # you can skip these function definitions
-  com_vec <- mdgc:::get_commutation_vec(n_latent, n_latent, FALSE)
-  get_mat_from_cholesky <- function(x){
-    out <- matrix(0., n_latent, n_latent)
-    out[lower.tri(out, TRUE)] <- x
-    tcrossprod(out)
-  }
-  fn <- function(x, lambda, mu){
-    sig_hat <- get_mat_from_cholesky(x)
-    consts <- mdgc:::lower_tri_inner(
-      x = x, idx = zero_indices, jacob = FALSE, rhs = numeric())
-    
-    norm(sig_hat - Sig, "F")^2 / 2 - sum(lambda * consts) +
-      mu / 2 * sum(consts^2)
-  }
-  gr <- function(x, lambda, mu){
-    sig_hat <- get_mat_from_cholesky(x)
-    
-    L <- matrix(0., n_latent, n_latent)
-    L[lower.tri(L, TRUE)] <- x
-    
-    d_Sig <- sig_hat - Sig
-    d_Sig <- ((d_Sig + d_Sig[com_vec]) %*% L)[lower.tri(L, TRUE)]
-    
-    consts <- mdgc:::lower_tri_inner(
-      x = x, idx = zero_indices, jacob = FALSE, rhs = numeric())
-    rhs <- -lambda + mu * consts
-    d_aug <- mdgc:::lower_tri_inner(
-      x = x, idx = zero_indices, jacob = TRUE, rhs = rhs)
-    
-    d_Sig + d_aug
+  # essentially set the reference level to zero
+  for(i in idx[is_mult]){
+    Sig[i,  ] <- 0
+    Sig[ , i] <- 0
+    Sig[i, i] <- 1e-12
   }
   
-  # augmented Lagrangian method
-  lambda <- numeric(NROW(zero_indices))
-  mu <- 1
-  
-  # check gradient
-  if(FALSE){
-    x_test      <- runif(length(par))
-    lambda_test <- runif(length(lambda))
-    all.equal(numDeriv::grad(fn, x_test, lambda = lambda_test, mu = mu),
-              gr(x_test, lambda = lambda_test, mu = mu))
+  # rescale some rows and columns
+  sds <- sqrt(diag(Sig))
+  for(i in idx[is_mult]){
+    sds[i] <- 1
+    sds[i + 3:n_lvls - 1] <- 1
   }
-  
-  for(i in 1:25){
-    opt <- optim(par, fn, gr, mu = mu, lambda = lambda, method = "BFGS")
-    par <- opt$par
-    
-    consts <- mdgc:::lower_tri_inner(
-      x = par, idx = zero_indices, jacob = FALSE, rhs = numeric())
-      
-    all_ok <- all(abs(consts) < 1e-8)
-    if(all_ok)
-      break
-
-    # update lambda, mu and par. Then repaet
-    lambda <- lambda - mu * consts
-    mu <- mu * 5
-  }
-  
-  # we found a matrix. We set it
-  Sig_new <- cov2cor(get_mat_from_cholesky(par))
-  if(verbose)
-    cat(sprintf(
-      "Relative norm difference between the constrained and simulated covariance matrix is %.2f\n", 
-      norm(Sig - Sig_new, "F") / norm(Sig, "F")))
-  
-  Sig <- Sig_new
+  Sig <- diag(1/sds) %*% Sig %*% diag(1/sds)
       
   # draw the observations
   truth <- matrix(rnorm(n * n_latent), n) %*% chol(Sig)
@@ -1159,7 +1090,7 @@ sim_dat <- function(n, p = 4L, n_lvls = 5L, verbose = FALSE){
     idx_i <- idx[i]
     switch(
       type[i],
-      # continous
+      # continuous
       truth_obs[, i] <- qexp(pnorm(truth[, idx_i])),
       # binary
       truth_obs[, i] <- truth[, idx_i] > 0,
@@ -1191,18 +1122,17 @@ sim_dat <- function(n, p = 4L, n_lvls = 5L, verbose = FALSE){
 # simulate and show the data
 set.seed(1)
 p <- 8L
-dat <- sim_dat(2000L, p = p, verbose = TRUE, n_lvls = 3)
-#> Relative norm difference between the constrained and simulated covariance matrix is 0.15
+dat <- sim_dat(2000L, p = p, verbose = TRUE, n_lvls = 4)
 
 # show the first rows of the observed data
 head(dat$seen_obs)
 #>      C1    B1   O1 M1    C2    B2   O2   M2
-#> 1 2.255  TRUE <NA> T1    NA  TRUE    C <NA>
-#> 2 1.514    NA    B T2 0.722  TRUE    C   T2
-#> 3 0.533 FALSE    C T2 0.612  TRUE    B   T1
-#> 4 0.409  TRUE    A T1    NA FALSE <NA>   T1
-#> 5    NA  TRUE    A T3    NA FALSE    C   T2
-#> 6 1.836 FALSE    C T1 1.973 FALSE <NA>   T3
+#> 1    NA  TRUE    D T4 0.628  TRUE    C   T4
+#> 2 3.065    NA    A T2    NA FALSE    C   T3
+#> 3 0.415 FALSE    A T3 0.746    NA <NA>   T2
+#> 4    NA    NA <NA> T2 0.232 FALSE <NA>   T4
+#> 5    NA  TRUE <NA> T4    NA FALSE    D <NA>
+#> 6 0.715 FALSE <NA> T2 1.018  TRUE    D   T1
 
 # assign object to perform the estimation and the imputation
 obj <- get_mdgc(dat$seen_obs)
@@ -1215,9 +1145,10 @@ start_vals <- mdgc_start_value(obj)
 # overparameterization)
 par(mar = c(3, 3, 2, 1), mfcol = c(1, 2))
 sc <- colorRampPalette(c("Red", "White", "Blue"))(201)
-image(start_vals [, NCOL(dat$Sigma):1], zlim = c(-1, 1), col = sc, 
+ma <- max(abs(dat$Sigma), max(abs(start_vals)))
+image(start_vals [, NCOL(dat$Sigma):1], zlim = c(-ma, ma), col = sc, 
       main = "Starting values")
-image(dat$Sigma  [, NCOL(dat$Sigma):1], zlim = c(-1, 1), col = sc,
+image(dat$Sigma  [, NCOL(dat$Sigma):1], zlim = c(-ma, ma), col = sc,
       main = "Truth")
 ```
 
@@ -1227,14 +1158,15 @@ image(dat$Sigma  [, NCOL(dat$Sigma):1], zlim = c(-1, 1), col = sc,
 # check the log marginal likelihood at the starting values and compare with
 # the true values at the starting values
 mdgc_log_ml(ptr, start_vals, mea = obj$means, n_threads = 1L)
-#> [1] -11842
+#> [1] -13160
 # and at the true values
-mdgc_log_ml(ptr, dat$Sigma , mea = obj$means, n_threads = 1L)
-#> [1] -11856
+mdgc_log_ml(ptr, dat$Sigma , mea = numeric(length(obj$means)), 
+            n_threads = 1L)
+#> [1] -13135
 
 # much better than using a diagonal matrix!
 mdgc_log_ml(ptr, diag(NROW(dat$Sigma)), mea = obj$means, n_threads = 1L)
-#> [1] -12085
+#> [1] -13606
 
 # estimate the model
 system.time(
@@ -1243,7 +1175,7 @@ system.time(
                    n_threads = 4L, rel_eps = 1e-2, maxpts = 1000L, 
                    minvls = 200L, use_aprx = TRUE))
 #>    user  system elapsed 
-#>    59.8     0.0    14.9
+#>   104.2     0.0    26.1
 
 # refine the estimates
 system.time(
@@ -1254,13 +1186,20 @@ system.time(
                    minvls = 1000L, mu = ests$mu, lambda = ests$lambda, 
                    use_aprx = TRUE))
 #>    user  system elapsed 
-#>   21.56    0.00    5.44
+#>   36.46    0.00    9.46
 
-# compare the estimated and the true values (should not match because of
-# overparameterization)
-image(ests$result$vcov[, NCOL(dat$Sigma):1], zlim = c(-1, 1), col = sc, 
+# compare log marginal likelihood
+mdgc_log_ml(ptr, ests$result$vcov, mea = ests$result$mea, n_threads = 1L)
+#> [1] -13090
+mdgc_log_ml(ptr, dat$Sigma       , mea = numeric(length(obj$means)), 
+            n_threads = 1L)
+#> [1] -13135
+
+# compare the estimated and the true values
+ma <- max(abs(ests$result$vcov), abs(dat$Sigma))
+image(ests$result$vcov[, NCOL(dat$Sigma):1], zlim = c(-ma, ma), col = sc, 
       main = "Estimates")
-image(dat$Sigma       [, NCOL(dat$Sigma):1], zlim = c(-1, 1), col = sc, 
+image(dat$Sigma       [, NCOL(dat$Sigma):1], zlim = c(-ma, ma), col = sc, 
       main = "Truth")
 ```
 
@@ -1272,46 +1211,46 @@ system.time(
   imp_res <- mdgc_impute(obj, ests$result$vcov, mea = ests$result$mea, 
                          rel_eps = 1e-3, maxit = 10000L, n_threads = 4L))
 #>    user  system elapsed 
-#>  11.550   0.004   3.097
+#>  14.648   0.004   3.853
 
 # look at the result for one of the observations
 imp_res[1L]
 #> [[1]]
 #> [[1]]$C1
-#> [1] 2.25
+#> [1] 0.657
 #> 
 #> [[1]]$B1
 #> FALSE  TRUE 
 #>     0     1 
 #> 
 #> [[1]]$O1
-#>     A     B     C 
-#> 0.457 0.332 0.211 
+#> A B C D 
+#> 0 0 0 1 
 #> 
 #> [[1]]$M1
-#> T1 T2 T3 
-#>  1  0  0 
+#> T1 T2 T3 T4 
+#>  0  0  0  1 
 #> 
 #> [[1]]$C2
-#> [1] 0.752
+#> [1] 0.628
 #> 
 #> [[1]]$B2
 #> FALSE  TRUE 
 #>     0     1 
 #> 
 #> [[1]]$O2
-#> A B C 
-#> 0 0 1 
+#> A B C D 
+#> 0 0 1 0 
 #> 
 #> [[1]]$M2
-#>    T1    T2    T3 
-#> 0.571 0.128 0.302
+#> T1 T2 T3 T4 
+#>  0  0  0  1
 
 # compare with the observed and true data
 rbind(truth = dat$truth_obs[1L, ], observed = dat$seen_obs[1L, ])
-#>            C1   B1   O1 M1    C2   B2 O2   M2
-#> truth    2.25 TRUE    C T1 0.505 TRUE  C   T3
-#> observed 2.25 TRUE <NA> T1    NA TRUE  C <NA>
+#>             C1   B1 O1 M1    C2   B2 O2 M2
+#> truth    0.369 TRUE  D T4 0.628 TRUE  C T4
+#> observed    NA TRUE  D T4 0.628 TRUE  C T4
 
 # we can threshold the data like this
 threshold <- function(org_data, imputed){
@@ -1363,28 +1302,28 @@ thresh_dat <- threshold(dat$seen_obs, imp_res)
 # compare thresholded data with observed and true data
 head(thresh_dat)
 #>      C1    B1 O1 M1    C2    B2 O2 M2
-#> 1 2.255  TRUE  A T1 0.752  TRUE  C T1
-#> 2 1.514 FALSE  B T2 0.722  TRUE  C T2
-#> 3 0.533 FALSE  C T2 0.612  TRUE  B T1
-#> 4 0.409  TRUE  A T1 0.736 FALSE  A T1
-#> 5 1.050  TRUE  A T3 0.510 FALSE  C T2
-#> 6 1.836 FALSE  C T1 1.973 FALSE  B T3
+#> 1 0.657  TRUE  D T4 0.628  TRUE  C T4
+#> 2 3.065  TRUE  A T2 0.805 FALSE  C T3
+#> 3 0.415 FALSE  A T3 0.746 FALSE  A T2
+#> 4 0.497 FALSE  D T2 0.232 FALSE  B T4
+#> 5 0.556  TRUE  C T4 1.207 FALSE  D T1
+#> 6 0.715 FALSE  D T2 1.018  TRUE  D T1
 head(dat$seen_obs)  # observed data
 #>      C1    B1   O1 M1    C2    B2   O2   M2
-#> 1 2.255  TRUE <NA> T1    NA  TRUE    C <NA>
-#> 2 1.514    NA    B T2 0.722  TRUE    C   T2
-#> 3 0.533 FALSE    C T2 0.612  TRUE    B   T1
-#> 4 0.409  TRUE    A T1    NA FALSE <NA>   T1
-#> 5    NA  TRUE    A T3    NA FALSE    C   T2
-#> 6 1.836 FALSE    C T1 1.973 FALSE <NA>   T3
+#> 1    NA  TRUE    D T4 0.628  TRUE    C   T4
+#> 2 3.065    NA    A T2    NA FALSE    C   T3
+#> 3 0.415 FALSE    A T3 0.746    NA <NA>   T2
+#> 4    NA    NA <NA> T2 0.232 FALSE <NA>   T4
+#> 5    NA  TRUE <NA> T4    NA FALSE    D <NA>
+#> 6 0.715 FALSE <NA> T2 1.018  TRUE    D   T1
 head(dat$truth_obs) # true data
 #>      C1    B1 O1 M1    C2    B2 O2 M2
-#> 1 2.255  TRUE  C T1 0.505  TRUE  C T3
-#> 2 1.514  TRUE  B T2 0.722  TRUE  C T2
-#> 3 0.533 FALSE  C T2 0.612  TRUE  B T1
-#> 4 0.409  TRUE  A T1 0.298 FALSE  B T1
-#> 5 0.412  TRUE  A T3 0.648 FALSE  C T2
-#> 6 1.836 FALSE  C T1 1.973 FALSE  B T3
+#> 1 0.369  TRUE  D T4 0.628  TRUE  C T4
+#> 2 3.065 FALSE  A T2 3.508 FALSE  C T3
+#> 3 0.415 FALSE  A T3 0.746  TRUE  C T2
+#> 4 0.181 FALSE  C T2 0.232 FALSE  B T4
+#> 5 0.714  TRUE  A T4 0.686 FALSE  D T3
+#> 6 0.715 FALSE  D T2 1.018  TRUE  D T1
 
 # compare correct categories
 get_classif_error <- function(impu_dat, truth = dat$truth_obs, 
@@ -1399,7 +1338,7 @@ get_classif_error <- function(impu_dat, truth = dat$truth_obs,
 }
 get_classif_error(thresh_dat)
 #>    B1    O1    M1    B2    O2    M2 
-#> 0.413 0.539 0.589 0.388 0.607 0.545
+#> 0.409 0.655 0.614 0.395 0.623 0.601
 
 # compute RMSE
 get_rmse <- function(impu_dat, truth = dat$truth_obs,
@@ -1411,7 +1350,7 @@ get_rmse <- function(impu_dat, truth = dat$truth_obs,
 }
 get_rmse(thresh_dat)
 #>    C1    C2 
-#> 1.021 0.965
+#> 1.018 0.958
 
 # we can compare this with missForest
 miss_forest_arg <- dat$seen_obs
@@ -1427,10 +1366,8 @@ system.time(miss_res <- missForest(miss_forest_arg))
 #>   missForest iteration 6 in progress...done!
 #>   missForest iteration 7 in progress...done!
 #>   missForest iteration 8 in progress...done!
-#>   missForest iteration 9 in progress...done!
-#>   missForest iteration 10 in progress...done!
 #>    user  system elapsed 
-#>    9.41    0.04    9.45
+#>   9.345   0.052   9.397
 
 # turn binary variables back to logicals
 miss_res$ximp[, is_log] <- lapply(
@@ -1440,13 +1377,13 @@ miss_res$ximp[, is_log] <- lapply(
 rbind(mdgc       = get_classif_error(thresh_dat),
       missForest = get_classif_error(miss_res$ximp))
 #>               B1    O1    M1    B2    O2    M2
-#> mdgc       0.413 0.539 0.589 0.388 0.607 0.545
-#> missForest 0.470 0.607 0.602 0.417 0.639 0.558
+#> mdgc       0.409 0.655 0.614 0.395 0.623 0.601
+#> missForest 0.448 0.675 0.654 0.427 0.695 0.663
 rbind(mdgc       = get_rmse(thresh_dat),
       missForest = get_rmse(miss_res$ximp))
 #>              C1    C2
-#> mdgc       1.02 0.965
-#> missForest 1.06 0.966
+#> mdgc       1.02 0.958
+#> missForest 1.11 1.039
 ```
 
 ### Edgar Anderson’s Iris Data
@@ -1486,7 +1423,7 @@ system.time(
                    use_aprx = TRUE, method = "aug_Lagran", 
                    minvls = 1000L, iminvls = 1000L))
 #>    user  system elapsed 
-#>    5.17    0.00    1.31
+#>    4.10    0.00    1.03
 
 # some of the impuated values
 head(mdgc_res$ximp)
@@ -1498,15 +1435,6 @@ head(mdgc_res$ximp)
 #> 5          5.0         3.6          1.4         0.2  setosa
 #> 6          5.4         3.9          1.7         1.0  setosa
 
-# the errors
-get_classif_error(impu_dat = mdgc_res$ximp, truth = iris, 
-                  observed = dat)
-#> Species 
-#>   0.208
-get_rmse(impu_dat = mdgc_res$ximp, truth = iris, observed = dat)
-#> Sepal.Length  Sepal.Width Petal.Length  Petal.Width 
-#>        0.378        0.356        0.287        0.324
-
 # compare with missForest
 system.time(miss_res <- missForest(dat))
 #>   missForest iteration 1 in progress...done!
@@ -1515,21 +1443,32 @@ system.time(miss_res <- missForest(dat))
 #>   missForest iteration 4 in progress...done!
 #>   missForest iteration 5 in progress...done!
 #>    user  system elapsed 
-#>   0.360   0.000   0.359
+#>   0.358   0.000   0.358
 
 # the errors
-get_classif_error(impu_dat = miss_res$ximp, truth = iris, 
-                  observed = dat)
-#> Species 
-#>  0.0833
-get_rmse(impu_dat = miss_res$ximp, truth = iris, observed = dat)
-#> Sepal.Length  Sepal.Width Petal.Length  Petal.Width 
-#>        0.310        0.316        0.280        0.218
+rbind(
+  mdgc = get_classif_error(
+    impu_dat = mdgc_res$ximp, truth = iris, observed = dat), 
+  missForest = get_classif_error(
+    impu_dat = miss_res$ximp, truth = iris, observed = dat))
+#>            Species
+#> mdgc        0.0000
+#> missForest  0.0833
+
+rbind(
+  mdgc = get_rmse(
+    impu_dat = mdgc_res$ximp, truth = iris, observed = dat), 
+  missForest = 
+    get_rmse(impu_dat = miss_res$ximp, truth = iris, observed = dat))
+#>            Sepal.Length Sepal.Width Petal.Length Petal.Width
+#> mdgc              0.365       0.429        0.306       0.337
+#> missForest        0.310       0.316        0.280       0.218
 ```
 
 ## Chemotherapy for Stage B/C Colon Cancer
 
 ``` r
+# prepare the data
 library(survival)
 colon_use <- colon[, setdiff(
   colnames(colon), c("id", "study", "time", "status", "node4", "etype"))]
@@ -1542,7 +1481,26 @@ colon_use <- within(colon_use, {
   extent <- ordered(extent)
   surg <- surg > 0
 })
+colon_use <- colon_use[complete.cases(colon_use), ]
 
+# stats for the data set
+summary(colon_use)
+#>        rx         sex               age        obstruct         perfor       
+#>  Obs    :610   Mode :logical   Min.   :18.0   Mode :logical   Mode :logical  
+#>  Lev    :588   FALSE:856       1st Qu.:53.0   FALSE:1434      FALSE:1722     
+#>  Lev+5FU:578   TRUE :920       Median :61.0   TRUE :342       TRUE :54       
+#>                                Mean   :59.8                                  
+#>                                3rd Qu.:69.0                                  
+#>                                Max.   :85.0                                  
+#>    adhere            nodes      differ   extent      surg        
+#>  Mode :logical   Min.   : 0.0   1: 180   1:  38   Mode :logical  
+#>  FALSE:1520      1st Qu.: 1.0   2:1306   2: 204   FALSE:1300     
+#>  TRUE :256       Median : 2.0   3: 290   3:1460   TRUE :476      
+#>                  Mean   : 3.7            4:  74                  
+#>                  3rd Qu.: 5.0                                    
+#>                  Max.   :33.0
+
+# assign function to set some variables to NA
 get_colon <- function(p_na = .1){
   is_miss <- matrix(p_na > runif(NROW(colon_use) * NCOL(colon_use)), 
                     NROW(colon_use), NCOL(colon_use))
@@ -1557,25 +1515,26 @@ get_colon <- function(p_na = .1){
   out
 }
 
+# sample missing values
 set.seed(68129371)
 dat <- get_colon()
 
 # use the mdgc method
 system.time(
-  mdgc_res <- mdgc(dat, maxpts = 10000L, n_threads = 4L, maxit = 100L, 
+  mdgc_res <- mdgc(dat, maxpts = 5000L, n_threads = 4L, maxit = 100L, 
                    use_aprx = TRUE, method = "aug_Lagran", 
                    minvls = 1000L, iminvls = 5000L))
 #>    user  system elapsed 
-#>  515.73    0.16  130.61
+#> 313.333   0.004  79.667
 
-# some of the impuated values
+# some of the imputed values
 head(mdgc_res$ximp)
 #>        rx   sex age obstruct perfor adhere nodes differ extent  surg
 #> 1 Lev+5FU  TRUE  43    FALSE  FALSE  FALSE     5      2      3 FALSE
-#> 2 Lev+5FU  TRUE  43    FALSE  FALSE  FALSE     5      2      3 FALSE
+#> 2 Lev+5FU FALSE  43    FALSE  FALSE  FALSE     5      2      3 FALSE
 #> 3 Lev+5FU  TRUE  63    FALSE  FALSE  FALSE     1      2      3 FALSE
 #> 4 Lev+5FU  TRUE  63    FALSE  FALSE  FALSE     1      2      3 FALSE
-#> 5     Obs FALSE  71    FALSE  FALSE   TRUE     2      2      2 FALSE
+#> 5     Obs FALSE  71    FALSE  FALSE   TRUE     7      2      3 FALSE
 #> 6     Obs FALSE  71    FALSE  FALSE   TRUE     7      2      2 FALSE
 
 # compare with missForest
@@ -1594,7 +1553,7 @@ system.time(miss_res <- missForest(miss_forest_arg))
 #>   missForest iteration 9 in progress...done!
 #>   missForest iteration 10 in progress...done!
 #>    user  system elapsed 
-#>  17.637   0.004  17.642
+#>  16.511   0.024  16.536
 
 # turn binary variables back to logicals
 miss_res$ximp[, is_log] <- lapply(
@@ -1607,8 +1566,8 @@ rbind(
   missForest = get_classif_error(
     impu_dat = miss_res$ximp, truth = colon_use, observed = dat))
 #>               rx   sex obstruct perfor adhere differ extent  surg
-#> mdgc       0.675 0.483    0.193 0.0296  0.149  0.311  0.213 0.267
-#> missForest 0.470 0.393    0.172 0.0296  0.138  0.281  0.319 0.251
+#> mdgc       0.609 0.491    0.185 0.0303 0.0928  0.290  0.149 0.210
+#> missForest 0.462 0.286    0.141 0.0202 0.1082  0.331  0.264 0.256
 
 rbind(
   mdgc = get_rmse(
@@ -1616,8 +1575,8 @@ rbind(
   missForest = 
     get_rmse(impu_dat = miss_res$ximp, truth = colon_use, observed = dat))
 #>             age nodes
-#> mdgc       11.0  3.93
-#> missForest 10.5  3.62
+#> mdgc       12.3  3.24
+#> missForest 11.5  2.94
 ```
 
 ## References
@@ -1628,7 +1587,7 @@ rbind(
 
 Genz, Alan, and Frank Bretz. 2002. “Comparison of Methods for the
 Computation of Multivariate T Probabilities.” *Journal of Computational
-and Graphical Statistics* 11 (4). Taylor & Francis: 950–71.
+and Graphical Statistics* 11 (4): 950–71.
 <https://doi.org/10.1198/106186002394>.
 
 </div>
@@ -1636,15 +1595,15 @@ and Graphical Statistics* 11 (4). Taylor & Francis: 950–71.
 <div id="ref-hoff07">
 
 Hoff, Peter D. 2007. “Extending the Rank Likelihood for Semiparametric
-Copula Estimation.” *Ann. Appl. Stat.* 1 (1). The Institute of
-Mathematical Statistics: 265–83. <https://doi.org/10.1214/07-AOAS107>.
+Copula Estimation.” *Ann. Appl. Stat.* 1 (1): 265–83.
+<https://doi.org/10.1214/07-AOAS107>.
 
 </div>
 
 <div id="ref-zhao19">
 
 Zhao, Yuxuan, and Madeleine Udell. 2019. “Missing Value Imputation for
-Mixed Data via Gaussian Copula.”
+Mixed Data via Gaussian Copula.” <http://arxiv.org/abs/1910.12845>.
 
 </div>
 

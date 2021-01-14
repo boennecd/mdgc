@@ -41,6 +41,10 @@ eval_multinomial_prob <- function(icase, means) {
     .Call(`_mdgc_eval_multinomial_prob`, icase, means)
 }
 
+eval_multinomial_prob_gr <- function(icase, means) {
+    .Call(`_mdgc_eval_multinomial_prob_gr`, icase, means)
+}
+
 multinomial_find_means <- function(probs, rel_eps = 3.000214e-13, max_it = 100L, c1 = .0001, c2 = .9) {
     .Call(`_mdgc_multinomial_find_means`, probs, rel_eps, max_it, c1, c2)
 }

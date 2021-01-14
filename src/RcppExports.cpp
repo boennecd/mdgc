@@ -162,6 +162,17 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// eval_multinomial_prob_gr
+Rcpp::NumericVector eval_multinomial_prob_gr(int const icase, arma::vec const& means);
+RcppExport SEXP _mdgc_eval_multinomial_prob_gr(SEXP icaseSEXP, SEXP meansSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::traits::input_parameter< int const >::type icase(icaseSEXP);
+    Rcpp::traits::input_parameter< arma::vec const& >::type means(meansSEXP);
+    rcpp_result_gen = Rcpp::wrap(eval_multinomial_prob_gr(icase, means));
+    return rcpp_result_gen;
+END_RCPP
+}
 // multinomial_find_means
 Rcpp::NumericVector multinomial_find_means(arma::vec const& probs, double const rel_eps, int const max_it, double const c1, double const c2);
 RcppExport SEXP _mdgc_multinomial_find_means(SEXP probsSEXP, SEXP rel_epsSEXP, SEXP max_itSEXP, SEXP c1SEXP, SEXP c2SEXP) {
@@ -190,6 +201,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_mdgc_impute", (DL_FUNC) &_mdgc_impute, 17},
     {"_mdgc_lower_tri_inner", (DL_FUNC) &_mdgc_lower_tri_inner, 4},
     {"_mdgc_eval_multinomial_prob", (DL_FUNC) &_mdgc_eval_multinomial_prob, 2},
+    {"_mdgc_eval_multinomial_prob_gr", (DL_FUNC) &_mdgc_eval_multinomial_prob_gr, 2},
     {"_mdgc_multinomial_find_means", (DL_FUNC) &_mdgc_multinomial_find_means, 5},
     {"run_testthat_tests", (DL_FUNC) &run_testthat_tests, 1},
     {NULL, NULL, 0}

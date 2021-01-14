@@ -621,7 +621,7 @@ show_sim_stats("mdgc_bin", "mixedgc_bin", "missForest_bin", "err")
 # the ordinal variables
 show_sim_stats("mdgc_class", "mixedgc_class", "missForest_class", "err")
 
-# the continous variables
+# the continuous variables
 show_sim_stats("mdgc_rmse", "mixedgc_rmse", "missForest_rmse", "err")
 ```
 
@@ -642,7 +642,7 @@ very similar to the previous one but with multinomial variables.
 #   verbose: print status during the simulation.
 # 
 # Returns: 
-#   Simluated masked data, the true data, and true covariance matrix. 
+#   Simulated masked data, the true data, and true covariance matrix. 
 sim_dat <- function(n, p = 4L, n_lvls = 5L, verbose = FALSE){
   # determine the type
   n_rep <- floor((p + 4 - 1) / 4)
@@ -657,91 +657,22 @@ sim_dat <- function(n, p = 4L, n_lvls = 5L, verbose = FALSE){
   
   # get the covariance matrix
   n_latent <- p + (n_lvls - 1L) * (p %/% 4)
-
-  Sig <- cov2cor(drop(rWishart(1L, 2 * n_latent, diag(n_latent))))
+  Sig <- drop(rWishart(1L, 2 * n_latent, diag(1 / n_latent / 2, n_latent)))
   
-  # Find the closest matrix which satisfy the zero constraint
-  type_augmented <- unlist(sapply(seq_along(type), function(x)
-    if(x %% 4 == 0) rep(x, n_lvls) else x))
-  zero_indices <- do.call(rbind, tapply(
-    seq_along(type_augmented)[type_augmented %% 4L == 0L], 
-    type_augmented[type_augmented %% 4L == 0L], function(x)
-      subset(expand.grid(row = x, col = x), row > col)))
-  zero_indices <- as.matrix(zero_indices) - 1L
-  
-  # setup objects and functions to run augmented Lagrangian method
-  par <- t(chol(Sig))
-  par <- par[lower.tri(par, TRUE)]
-  
-  # you can skip these function definitions
-  com_vec <- mdgc:::get_commutation_vec(n_latent, n_latent, FALSE)
-  get_mat_from_cholesky <- function(x){
-    out <- matrix(0., n_latent, n_latent)
-    out[lower.tri(out, TRUE)] <- x
-    tcrossprod(out)
-  }
-  fn <- function(x, lambda, mu){
-    sig_hat <- get_mat_from_cholesky(x)
-    consts <- mdgc:::lower_tri_inner(
-      x = x, idx = zero_indices, jacob = FALSE, rhs = numeric())
-    
-    norm(sig_hat - Sig, "F")^2 / 2 - sum(lambda * consts) +
-      mu / 2 * sum(consts^2)
-  }
-  gr <- function(x, lambda, mu){
-    sig_hat <- get_mat_from_cholesky(x)
-    
-    L <- matrix(0., n_latent, n_latent)
-    L[lower.tri(L, TRUE)] <- x
-    
-    d_Sig <- sig_hat - Sig
-    d_Sig <- ((d_Sig + d_Sig[com_vec]) %*% L)[lower.tri(L, TRUE)]
-    
-    consts <- mdgc:::lower_tri_inner(
-      x = x, idx = zero_indices, jacob = FALSE, rhs = numeric())
-    rhs <- -lambda + mu * consts
-    d_aug <- mdgc:::lower_tri_inner(
-      x = x, idx = zero_indices, jacob = TRUE, rhs = rhs)
-    
-    d_Sig + d_aug
+  # essentially set the reference level to zero
+  for(i in idx[is_mult]){
+    Sig[i,  ] <- 0
+    Sig[ , i] <- 0
+    Sig[i, i] <- 1e-12
   }
   
-  # augmented Lagrangian method
-  lambda <- numeric(NROW(zero_indices))
-  mu <- 1
-  
-  # check gradient
-  if(FALSE){
-    x_test      <- runif(length(par))
-    lambda_test <- runif(length(lambda))
-    all.equal(numDeriv::grad(fn, x_test, lambda = lambda_test, mu = mu),
-              gr(x_test, lambda = lambda_test, mu = mu))
+  # rescale some rows and columns
+  sds <- sqrt(diag(Sig))
+  for(i in idx[is_mult]){
+    sds[i] <- 1
+    sds[i + 3:n_lvls - 1] <- 1
   }
-  
-  for(i in 1:25){
-    opt <- optim(par, fn, gr, mu = mu, lambda = lambda, method = "BFGS")
-    par <- opt$par
-    
-    consts <- mdgc:::lower_tri_inner(
-      x = par, idx = zero_indices, jacob = FALSE, rhs = numeric())
-      
-    all_ok <- all(abs(consts) < 1e-8)
-    if(all_ok)
-      break
-
-    # update lambda, mu and par. Then repaet
-    lambda <- lambda - mu * consts
-    mu <- mu * 5
-  }
-  
-  # we found a matrix. We set it
-  Sig_new <- cov2cor(get_mat_from_cholesky(par))
-  if(verbose)
-    cat(sprintf(
-      "Relative norm difference between the constrained and simulated covariance matrix is %.2f\n", 
-      norm(Sig - Sig_new, "F") / norm(Sig, "F")))
-  
-  Sig <- Sig_new
+  Sig <- diag(1/sds) %*% Sig %*% diag(1/sds)
       
   # draw the observations
   truth <- matrix(rnorm(n * n_latent), n) %*% chol(Sig)
@@ -763,7 +694,7 @@ sim_dat <- function(n, p = 4L, n_lvls = 5L, verbose = FALSE){
     idx_i <- idx[i]
     switch(
       type[i],
-      # continous
+      # continuous
       truth_obs[, i] <- qexp(pnorm(truth[, idx_i])),
       # binary
       truth_obs[, i] <- truth[, idx_i] > 0,
@@ -795,7 +726,7 @@ sim_dat <- function(n, p = 4L, n_lvls = 5L, verbose = FALSE){
 # simulate and show the data
 set.seed(1)
 p <- 8L
-dat <- sim_dat(2000L, p = p, verbose = TRUE, n_lvls = 3)
+dat <- sim_dat(2000L, p = p, verbose = TRUE, n_lvls = 4)
 
 # show the first rows of the observed data
 head(dat$seen_obs)
@@ -811,15 +742,17 @@ start_vals <- mdgc_start_value(obj)
 # overparameterization)
 par(mar = c(3, 3, 2, 1), mfcol = c(1, 2))
 sc <- colorRampPalette(c("Red", "White", "Blue"))(201)
-image(start_vals [, NCOL(dat$Sigma):1], zlim = c(-1, 1), col = sc, 
+ma <- max(abs(dat$Sigma), max(abs(start_vals)))
+image(start_vals [, NCOL(dat$Sigma):1], zlim = c(-ma, ma), col = sc, 
       main = "Starting values")
-image(dat$Sigma  [, NCOL(dat$Sigma):1], zlim = c(-1, 1), col = sc,
+image(dat$Sigma  [, NCOL(dat$Sigma):1], zlim = c(-ma, ma), col = sc,
       main = "Truth")
 # check the log marginal likelihood at the starting values and compare with
 # the true values at the starting values
 mdgc_log_ml(ptr, start_vals, mea = obj$means, n_threads = 1L)
 # and at the true values
-mdgc_log_ml(ptr, dat$Sigma , mea = obj$means, n_threads = 1L)
+mdgc_log_ml(ptr, dat$Sigma , mea = numeric(length(obj$means)), 
+            n_threads = 1L)
 
 # much better than using a diagonal matrix!
 mdgc_log_ml(ptr, diag(NROW(dat$Sigma)), mea = obj$means, n_threads = 1L)
@@ -840,11 +773,16 @@ system.time(
                    minvls = 1000L, mu = ests$mu, lambda = ests$lambda, 
                    use_aprx = TRUE))
 
-# compare the estimated and the true values (should not match because of
-# overparameterization)
-image(ests$result$vcov[, NCOL(dat$Sigma):1], zlim = c(-1, 1), col = sc, 
+# compare log marginal likelihood
+mdgc_log_ml(ptr, ests$result$vcov, mea = ests$result$mea, n_threads = 1L)
+mdgc_log_ml(ptr, dat$Sigma       , mea = numeric(length(obj$means)), 
+            n_threads = 1L)
+
+# compare the estimated and the true values
+ma <- max(abs(ests$result$vcov), abs(dat$Sigma))
+image(ests$result$vcov[, NCOL(dat$Sigma):1], zlim = c(-ma, ma), col = sc, 
       main = "Estimates")
-image(dat$Sigma       [, NCOL(dat$Sigma):1], zlim = c(-1, 1), col = sc, 
+image(dat$Sigma       [, NCOL(dat$Sigma):1], zlim = c(-ma, ma), col = sc, 
       main = "Truth")
 # perform the imputation
 system.time(
@@ -989,23 +927,27 @@ system.time(
 # some of the impuated values
 head(mdgc_res$ximp)
 
-# the errors
-get_classif_error(impu_dat = mdgc_res$ximp, truth = iris, 
-                  observed = dat)
-get_rmse(impu_dat = mdgc_res$ximp, truth = iris, observed = dat)
-
 # compare with missForest
 system.time(miss_res <- missForest(dat))
 
 # the errors
-get_classif_error(impu_dat = miss_res$ximp, truth = iris, 
-                  observed = dat)
-get_rmse(impu_dat = miss_res$ximp, truth = iris, observed = dat)
+rbind(
+  mdgc = get_classif_error(
+    impu_dat = mdgc_res$ximp, truth = iris, observed = dat), 
+  missForest = get_classif_error(
+    impu_dat = miss_res$ximp, truth = iris, observed = dat))
+
+rbind(
+  mdgc = get_rmse(
+    impu_dat = mdgc_res$ximp, truth = iris, observed = dat), 
+  missForest = 
+    get_rmse(impu_dat = miss_res$ximp, truth = iris, observed = dat))
 ```
 
 ## Chemotherapy for Stage B/C Colon Cancer
 
 ```{r colon, cache = 1}
+# prepare the data
 library(survival)
 colon_use <- colon[, setdiff(
   colnames(colon), c("id", "study", "time", "status", "node4", "etype"))]
@@ -1018,7 +960,12 @@ colon_use <- within(colon_use, {
   extent <- ordered(extent)
   surg <- surg > 0
 })
+colon_use <- colon_use[complete.cases(colon_use), ]
 
+# stats for the data set
+summary(colon_use)
+
+# assign function to set some variables to NA
 get_colon <- function(p_na = .1){
   is_miss <- matrix(p_na > runif(NROW(colon_use) * NCOL(colon_use)), 
                     NROW(colon_use), NCOL(colon_use))
@@ -1033,16 +980,17 @@ get_colon <- function(p_na = .1){
   out
 }
 
+# sample missing values
 set.seed(68129371)
 dat <- get_colon()
 
 # use the mdgc method
 system.time(
-  mdgc_res <- mdgc(dat, maxpts = 10000L, n_threads = 4L, maxit = 100L, 
+  mdgc_res <- mdgc(dat, maxpts = 5000L, n_threads = 4L, maxit = 100L, 
                    use_aprx = TRUE, method = "aug_Lagran", 
                    minvls = 1000L, iminvls = 5000L))
 
-# some of the impuated values
+# some of the imputed values
 head(mdgc_res$ximp)
 
 # compare with missForest

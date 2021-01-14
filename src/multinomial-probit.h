@@ -3,15 +3,31 @@
 
 namespace multinomial {
 
-/** approximates
- *     \int \phi(x; \mu_k, 1)\prod_{i \neq k}\Phi(x;\mu_i; 1) dx
+/**
+ * approximates
+ *     \int \phi(x; \mu_k, \sigma_k)\prod_{i \neq k}\Phi(x;\mu_i, \sigma_i) dx
+ *
+ * with \sigma_i being one if k \neq 1 or -> 0^+ otherwise.
  *
  * @param mu pointer to the mean vector of the nvars - 1 last elements. The
  * first mean element is assumed to be zero.
- * @param variable from 0,...,nvars - 1 with the index k.
+ * @param icase integer in 0,...,nvars - 1 with the index k.
  * @param nvars number of categories.
  */
 double eval(double const *mu, int const icase, int const nvars);
+
+/**
+ * approximates the derivative of eval with pre-allocated working memory.
+ *
+ * @param mu pointer to the mean vector of the nvars - 1 last elements. The
+ * first mean element is assumed to be zero.
+ * @param gr_val gradient wrt mu on return.
+ * @param icase integer in 0,...,nvars - 1 with the index k.
+ * @param nvars number of categories.
+ * @param wk working memory of size nvars - 1.
+ */
+double eval_gr(double const *mu, double *gr_val, int const icase,
+               int const nvars, double *wk);
 
 /** finds the mean values corresponding to the passed probabilities.
  *  The methods minimizes the KL diverence using the psqn method. The

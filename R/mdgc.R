@@ -378,6 +378,12 @@ mdgc_start_value.default <- function(object, lower, upper, code,
                  code, multinomial = multinomial, n_threads = n_threads)
   out <- cov(t(Z), use = "pairwise.complete.obs")
 
+  first_mult <- multinomial[[1L]]
+  any_cate <- length(first_mult) > 0
+  if(any_cate)
+    for(i in first_mult[3, ] + 1)
+      out[i, i] <- 1
+
   # handle non-postive definite estimates
   eg <- eigen(out, symmetric = TRUE)
   eps <- 1e-2 * max(eg$values)
@@ -386,106 +392,12 @@ mdgc_start_value.default <- function(object, lower, upper, code,
     out <- tcrossprod(eg$vectors * rep(eg$values, each = NROW(Z)), eg$vectors)
   }
 
+  # rescale
   out <- cov2cor(out)
-  any_cate <- length(multinomial[[1L]])
-  if(!any_cate)
-    return(out)
-
-  # constrain the matrix
-  # first assign the indices for the contraints
-  n_latent <- NCOL(out)
-  constraints_idx <- matrix(rep(1:n_latent, 2), ncol = 2,
-                            dimnames = list(NULL, c("row", "col")))
-  constraints_idx <- constraints_idx - 1
-  # then the wanted value
-  constraints_val <- rep(1, n_latent)
-
-  # add zero constraints from the multinomial values
-  zero_indices <- .get_multinomial_zero_indices(multinomial)
-  constraints_val <- c(constraints_val, rep(0, NROW(zero_indices)))
-  constraints_idx <- rbind(constraints_idx, zero_indices)
-
-  # assign objective function and the gradient
-  com_vec <- get_commutation_vec(n_latent, n_latent, FALSE)
-  get_mat_from_cholesky <- function(x){
-    out <- matrix(0., n_latent, n_latent)
-    out[lower.tri(out, TRUE)] <- x
-    tcrossprod(out)
-  }
-  fn <- function(x, lambda, mu){
-    out_hat <- get_mat_from_cholesky(x)
-    consts <- lower_tri_inner(
-      x = x, idx = constraints_idx, jacob = FALSE, rhs = numeric())
-    consts <- consts - constraints_val
-
-    norm(out_hat - out, "F")^2 / 2 - sum(lambda * consts) +
-      mu / 2 * sum(consts^2)
-  }
-  gr <- function(x, lambda, mu){
-    out_hat <- get_mat_from_cholesky(x)
-
-    L <- matrix(0., n_latent, n_latent)
-    L[lower.tri(L, TRUE)] <- x
-
-    d_Sig <- out_hat - out
-    d_Sig <- ((d_Sig + d_Sig[com_vec]) %*% L)[lower.tri(L, TRUE)]
-
-    consts <- lower_tri_inner(
-      x = x, idx = constraints_idx, jacob = FALSE, rhs = numeric())
-    consts <- consts - constraints_val
-
-    rhs <- -lambda + mu * consts
-    d_aug <- lower_tri_inner(
-      x = x, idx = constraints_idx, jacob = TRUE, rhs = rhs)
-
-    d_Sig + d_aug
-  }
-
-  # augmented Lagrangian method
-  lambda <- numeric(NROW(constraints_idx))
-  mu <- 1
-  par <- t(chol(out))[lower.tri(out, TRUE)]
-
-  # perform the optimization
-  for(i in 1:25){
-    opt <- optim(par, fn, gr, mu = mu, lambda = lambda, method = "BFGS")
-    par <- opt$par
-
-    consts <- lower_tri_inner(
-      x = par, idx = constraints_idx, jacob = FALSE, rhs = numeric()) -
-      constraints_val
-
-    all_ok <- all(abs(consts) < 1e-8)
-    if(all_ok)
-      break
-
-    # update lambda, mu and par. Then repaet
-    lambda <- lambda - mu * consts
-    mu <- mu * 5
-  }
-
-  # get the matrix and potentially alter eigenvalues
-  out <- get_mat_from_cholesky(par)
-  eg <- eigen(out, symmetric = TRUE)
-  eps <- 1e-2 * max(eg$values)
-  if(any(is_small <- eg$values < eps)){
-    eg$values[is_small] <- eps
-    out <- tcrossprod(eg$vectors * rep(eg$values, each = NROW(Z)), eg$vectors)
-  }
-
-  cov2cor(out)
-}
-
-.get_multinomial_zero_indices <- function(multinomial){
-  # the matrices should be the same for all log likelihood terms
-  cat_info <- multinomial[[1L]]
-  cat_info <- apply(cat_info, 2L, function(info){
-    latent_idx <- info[3]
-    n_vars <- info[2]
-    indices <- latent_idx + 1:n_vars - 1L
-    subset(expand.grid(row = indices, col = indices), row > col)
-  })
-  do.call(rbind, lapply(cat_info, as.matrix))
+  if(any_cate)
+    for(i in first_mult[3, ] + 1)
+      out[i, i] <- 1e-12
+  out
 }
 
 #' Estimate the Covariance Matrix
@@ -543,7 +455,7 @@ mdgc_fit <- function(ptr, vcov, mea, lr = 1e-3, rel_eps = 1e-3,
   nvars <- attr(ptr, "nvars")
   nobs <- attr(ptr, "nobs")
   idx_non_zero_mean <- attr(ptr, "idx_non_zero_mean")
-  stopifnot(!is.null(nvars), !is.null(nobs))
+  stopifnot(!is.null(nvars), !is.null(nobs), !is.null(idx_non_zero_mean))
 
   if(is.null(batch_size))
     batch_size <- as.integer(max(min(10L, nobs), nobs / 20))
@@ -583,8 +495,59 @@ mdgc_fit <- function(ptr, vcov, mea, lr = 1e-3, rel_eps = 1e-3,
 
   #####
   # assign functions to use
+
+  # we work with a lower dimensional covariance matrix when there are
+  # multinomial variables. Thus, we make a few adjustments in this case
+  # these are the indices for the free and fixed rows and columns (except
+  # for possible scaling constraints)
+  fixed_dim <- if(any_multinomial)
+    multinomial[[1L]][3, ] + 1 else NULL
+  free_dims <- if(any_multinomial)
+    setdiff(1:NROW(vcov), fixed_dim) else 1:NROW(vcov)
+
+  # returns the free part of the covariance matrix
+  get_free_vcov <- function(x)
+    x[free_dims, free_dims]
+
+  # the reverse
+  get_free_vcov_inv <- function(x){
+    out <- matrix(0., nvars, nvars)
+    out[free_dims, free_dims] <- x
+    for(i in fixed_dim)
+      out[i, i] <- 1e-12
+    out
+  }
+
+  # use the function
+  vcov <- get_free_vcov(vcov)
+
   # indices used to apply a matrix product with a get_commutation matrix
-  com_vec <- get_commutation_vec(nvars, nvars, FALSE)
+  com_vec <- get_commutation_vec(NROW(vcov), NROW(vcov), FALSE)
+
+  # these are the rows and columns that are subject to a scaling constrain
+  is_scale_constrained <- 1:NCOL(vcov)
+  if(any_multinomial)
+    for(i in 1:NCOL(multinomial[[1L]]))
+      is_scale_constrained <- setdiff(
+        is_scale_constrained,
+        multinomial[[1L]][3, i] - i + 3:multinomial[[1L]][2, i])
+
+  # this function rescales the rows and columns that are subject to a scaling
+  # constrain
+  rescale_vcov <- function(x){
+    if(length(is_scale_constrained) == 0)
+      # nothing to do
+      return(x)
+
+    sds <- sqrt(diag(x))
+    if(length(is_scale_constrained) != NCOL(x))
+      # there are some which are not zero
+      sds[-is_scale_constrained] <- 1
+
+    # re-scale and return
+    sds <- 1/sds
+    sds * x * rep(sds, each = NROW(x))
+  }
 
   # indices of a diagonal entries with in a vector with only the lower
   # diagonal
@@ -603,6 +566,7 @@ mdgc_fit <- function(ptr, vcov, mea, lr = 1e-3, rel_eps = 1e-3,
     if(!is.null(seed))
       set.seed(seed)
     Arg <- .get_lchol_inv(par_vcov)
+    Arg <- get_free_vcov_inv(Arg)
 
     res <- .mdgc_log_ml(
       ptr = ptr, Arg, mu = par_mea, comp_derivs = comp_derivs,
@@ -613,17 +577,18 @@ mdgc_fit <- function(ptr, vcov, mea, lr = 1e-3, rel_eps = 1e-3,
     if(comp_derivs){
       # handle dervatives wrt vcov
       gr_vcov <- attr(res, "grad_vcov")
-      tmp <- matrix(0, nvars, nvars)
+      gr_vcov <- get_free_vcov(gr_vcov)
+      tmp <- matrix(0, NROW(vcov), NROW(vcov))
       tmp[lower.tri(tmp, TRUE)] <- par_vcov
       diag(tmp) <- exp(diag(tmp))
       gr_vcov <- gr_vcov[com_vec] + c(gr_vcov)
-      gr_vcov <- x_dot_X_kron_I(x = gr_vcov, X = tmp, l = nvars)
+      gr_vcov <- x_dot_X_kron_I(x = gr_vcov, X = tmp, l = NROW(vcov))
       gr_vcov <- gr_vcov[, lower.tri(tmp, TRUE)]
       gr_vcov[idx_diag] <- gr_vcov[idx_diag] * diag(tmp)
 
       attr(log_ml, "grad_vcov") <- gr_vcov
 
-      # handle dervatives wrt par_mea
+      # handle derivatives wrt par_mea
       attr(log_ml, "grad_mea") <- drop(attr(res, "grad_mea"))
 
     }
@@ -655,19 +620,11 @@ mdgc_fit <- function(ptr, vcov, mea, lr = 1e-3, rel_eps = 1e-3,
 
   # construct function to evaluate the constraints and the derivatives
   # first assign the indices for the contraints
-  constraints_idx <- matrix(rep(1:NROW(vcov), 2), ncol = 2,
+  constraints_idx <- matrix(rep(is_scale_constrained, 2), ncol = 2,
                             dimnames = list(NULL, c("row", "col")))
   constraints_idx <- constraints_idx - 1
   # then the wanted value
-  constraints_val <- rep(1, NROW(vcov))
-
-  if(any_multinomial){
-    # add constraints for off-diagonal elements
-    cat_info <- .get_multinomial_zero_indices(multinomial)
-
-    constraints_val <- c(constraints_val, rep(0, NROW(cat_info)))
-    constraints_idx <- rbind(constraints_idx, cat_info)
-  }
+  constraints_val <- rep(1, NROW(constraints_idx))
 
   # then the functions
   get_cons <- function(par){
@@ -729,7 +686,6 @@ mdgc_fit <- function(ptr, vcov, mea, lr = 1e-3, rel_eps = 1e-3,
       maxpts = maxpts)
     t2 <- c_func(par = par_vcov, derivs = TRUE, lambda = lambda, mu = mu)
 
-
     c(-attr(t1, "grad_vcov") + t2, -attr(t1, "grad_mea"))
   }
 
@@ -754,7 +710,7 @@ mdgc_fit <- function(ptr, vcov, mea, lr = 1e-3, rel_eps = 1e-3,
     if(all_ok)
       break
 
-    # update lambda, mu and par. Then repaet
+    # update lambda, mu and par. Then repeat
     lambda <- lambda - mu * nobs * const
     new_norm <- norm(t(const), "F")
     if(verbose)
@@ -767,9 +723,9 @@ mdgc_fit <- function(ptr, vcov, mea, lr = 1e-3, rel_eps = 1e-3,
     const_norm <- new_norm
   }
 
+  vcov_res <- rescale_vcov(.get_lchol_inv(get_par_vcov(par)))
   list(result = list(
-    # TODO: the cov2cor has to removed for the multinomial variables
-    vcov = cov2cor(.get_lchol_inv(get_par_vcov(par))),
+    vcov = get_free_vcov_inv(vcov_res),
     mea = get_par_mea(par)), mu = mu, lambda = lambda)
 }
 

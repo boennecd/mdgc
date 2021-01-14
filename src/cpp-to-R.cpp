@@ -259,6 +259,7 @@ Rcpp::NumericMatrix get_z_hat
         int const obs_lvl = multinomial_j.at(0, k) - 1,
               idx_obs_lvl = obs_lvl + i,
                    n_lvls = multinomial_j.at(1, k);
+        bool const is_first = obs_lvl == 0L;
 
         if(code.at(i, j) == 1L)
           // the value is missing
@@ -267,15 +268,22 @@ Rcpp::NumericMatrix get_z_hat
         else {
           double const val_obs = qnorm_w(
             static_cast<double>(n_lvls) / (n_lvls + 1.),
-            -upper.at(idx_obs_lvl, j), 1., 1L, 0L);
+            -upper.at(idx_obs_lvl, j), is_first ? 1e-8 : 1., 1L, 0L);
 
-          for(int l = 0; l < n_lvls; ++l, ++i, ++oj)
+          *oj++ = 0; // always zero for identification
+          ++i;
+
+          for(int l = 1; l < n_lvls; ++l, ++i, ++oj)
             if(i == static_cast<size_t>(idx_obs_lvl))
+              // the observed level
               *oj = val_obs;
             else {
+              // median of the truncated distribution
               double const mu = -upper.at(i, j);
-              *oj = qnorm_w(pnorm_std(val_obs - mu, 1L, 0L) / 2.,
-                            mu, 1., 1L, 0L);
+
+              *oj = qnorm_w(
+                pnorm_std((val_obs - mu), 1L, 0L) / 2., mu, 1., 1L, 0L);
+
             }
         }
 
@@ -992,6 +1000,21 @@ double eval_multinomial_prob(int const icase, arma::vec const &means){
     throw std::invalid_argument("eval_multinomial_prob: invalid means");
 
   return multinomial::eval(means.begin(), icase, means.size() + 1);
+}
+
+// [[Rcpp::export(rng = false)]]
+Rcpp::NumericVector eval_multinomial_prob_gr(
+    int const icase, arma::vec const &means){
+  if(static_cast<size_t>(icase) >= means.size() + 1 or icase < 0)
+    throw std::invalid_argument("eval_multinomial_prob: invalid icase");
+  if(means.size() < 1)
+    throw std::invalid_argument("eval_multinomial_prob: invalid means");
+
+  Rcpp::NumericVector out(means.size());
+  std::unique_ptr<double[]> wk(new double[means.size()]);
+  out.attr("prob") = multinomial::eval_gr(
+    means.begin(), &out[0], icase, means.size() + 1, wk.get());
+  return out;
 }
 
 // [[Rcpp::export(rng = false)]]
