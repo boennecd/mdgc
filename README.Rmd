@@ -663,7 +663,6 @@ sim_dat <- function(n, p = 4L, n_lvls = 5L, verbose = FALSE){
   for(i in idx[is_mult]){
     Sig[i,  ] <- 0
     Sig[ , i] <- 0
-    Sig[i, i] <- 1e-12
   }
   
   # rescale some rows and columns
@@ -675,7 +674,8 @@ sim_dat <- function(n, p = 4L, n_lvls = 5L, verbose = FALSE){
   Sig <- diag(1/sds) %*% Sig %*% diag(1/sds)
       
   # draw the observations
-  truth <- matrix(rnorm(n * n_latent), n) %*% chol(Sig)
+  truth <- mvtnorm::rmvnorm(n, sigma = Sig)
+  truth[, idx[is_mult]] <- 0
   
   # sample which are masked data 
   is_mask <- matrix(runif(n * p) < .3, n)
@@ -762,7 +762,7 @@ system.time(
   ests <- mdgc_fit(ptr, vcov = start_vals, mea = obj$means, 
                    method = "aug_Lagran",
                    n_threads = 4L, rel_eps = 1e-2, maxpts = 1000L, 
-                   minvls = 200L, use_aprx = TRUE))
+                   minvls = 200L, use_aprx = TRUE, conv_crit = 1e-8))
 
 # refine the estimates
 system.time(
@@ -771,7 +771,7 @@ system.time(
                    method = "aug_Lagran",
                    n_threads = 4L, rel_eps = 1e-3, maxpts = 10000L, 
                    minvls = 1000L, mu = ests$mu, lambda = ests$lambda, 
-                   use_aprx = TRUE))
+                   use_aprx = TRUE, conv_crit = 1e-8))
 
 # compare log marginal likelihood
 mdgc_log_ml(ptr, ests$result$vcov, mea = ests$result$mea, n_threads = 1L)
@@ -877,7 +877,7 @@ miss_forest_arg[, is_log] <- lapply(miss_forest_arg[, is_log], as.factor)
 set.seed(1)
 system.time(miss_res <- missForest(miss_forest_arg))
 
-# turn binary variables back to logicals
+# turn binary variables back to logical variables
 miss_res$ximp[, is_log] <- lapply(
   miss_res$ximp[, is_log], function(x) as.integer(x) > 1L)
 

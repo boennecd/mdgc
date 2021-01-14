@@ -1059,7 +1059,6 @@ sim_dat <- function(n, p = 4L, n_lvls = 5L, verbose = FALSE){
   for(i in idx[is_mult]){
     Sig[i,  ] <- 0
     Sig[ , i] <- 0
-    Sig[i, i] <- 1e-12
   }
   
   # rescale some rows and columns
@@ -1071,7 +1070,8 @@ sim_dat <- function(n, p = 4L, n_lvls = 5L, verbose = FALSE){
   Sig <- diag(1/sds) %*% Sig %*% diag(1/sds)
       
   # draw the observations
-  truth <- matrix(rnorm(n * n_latent), n) %*% chol(Sig)
+  truth <- mvtnorm::rmvnorm(n, sigma = Sig)
+  truth[, idx[is_mult]] <- 0
   
   # sample which are masked data 
   is_mask <- matrix(runif(n * p) < .3, n)
@@ -1127,12 +1127,12 @@ dat <- sim_dat(2000L, p = p, verbose = TRUE, n_lvls = 4)
 # show the first rows of the observed data
 head(dat$seen_obs)
 #>      C1    B1   O1 M1    C2    B2   O2   M2
-#> 1    NA  TRUE    D T4 0.628  TRUE    C   T4
-#> 2 3.065    NA    A T2    NA FALSE    C   T3
-#> 3 0.415 FALSE    A T3 0.746    NA <NA>   T2
-#> 4    NA    NA <NA> T2 0.232 FALSE <NA>   T4
-#> 5    NA  TRUE <NA> T4    NA FALSE    D <NA>
-#> 6 0.715 FALSE <NA> T2 1.018  TRUE    D   T1
+#> 1    NA  TRUE    B T1 1.989 FALSE    C   T2
+#> 2 0.206    NA    A T2    NA  TRUE    B   T3
+#> 3 0.111 FALSE    B T2 0.132    NA <NA>   T3
+#> 4    NA    NA <NA> T2 1.137  TRUE <NA>   T3
+#> 5    NA  TRUE <NA> T4    NA FALSE    B <NA>
+#> 6 0.320 FALSE <NA> T3 0.492 FALSE    A   T2
 
 # assign object to perform the estimation and the imputation
 obj <- get_mdgc(dat$seen_obs)
@@ -1158,24 +1158,24 @@ image(dat$Sigma  [, NCOL(dat$Sigma):1], zlim = c(-ma, ma), col = sc,
 # check the log marginal likelihood at the starting values and compare with
 # the true values at the starting values
 mdgc_log_ml(ptr, start_vals, mea = obj$means, n_threads = 1L)
-#> [1] -13160
+#> [1] -13185
 # and at the true values
 mdgc_log_ml(ptr, dat$Sigma , mea = numeric(length(obj$means)), 
             n_threads = 1L)
-#> [1] -13135
+#> [1] -13140
 
 # much better than using a diagonal matrix!
 mdgc_log_ml(ptr, diag(NROW(dat$Sigma)), mea = obj$means, n_threads = 1L)
-#> [1] -13606
+#> [1] -13622
 
 # estimate the model
 system.time(
   ests <- mdgc_fit(ptr, vcov = start_vals, mea = obj$means, 
                    method = "aug_Lagran",
                    n_threads = 4L, rel_eps = 1e-2, maxpts = 1000L, 
-                   minvls = 200L, use_aprx = TRUE))
+                   minvls = 200L, use_aprx = TRUE, conv_crit = 1e-8))
 #>    user  system elapsed 
-#>   104.2     0.0    26.1
+#>   231.6     0.0    57.9
 
 # refine the estimates
 system.time(
@@ -1184,16 +1184,16 @@ system.time(
                    method = "aug_Lagran",
                    n_threads = 4L, rel_eps = 1e-3, maxpts = 10000L, 
                    minvls = 1000L, mu = ests$mu, lambda = ests$lambda, 
-                   use_aprx = TRUE))
+                   use_aprx = TRUE, conv_crit = 1e-8))
 #>    user  system elapsed 
-#>   36.46    0.00    9.46
+#>   207.1     0.0    53.7
 
 # compare log marginal likelihood
 mdgc_log_ml(ptr, ests$result$vcov, mea = ests$result$mea, n_threads = 1L)
-#> [1] -13090
+#> [1] -13111
 mdgc_log_ml(ptr, dat$Sigma       , mea = numeric(length(obj$means)), 
             n_threads = 1L)
-#> [1] -13135
+#> [1] -13140
 
 # compare the estimated and the true values
 ma <- max(abs(ests$result$vcov), abs(dat$Sigma))
@@ -1211,13 +1211,13 @@ system.time(
   imp_res <- mdgc_impute(obj, ests$result$vcov, mea = ests$result$mea, 
                          rel_eps = 1e-3, maxit = 10000L, n_threads = 4L))
 #>    user  system elapsed 
-#>  14.648   0.004   3.853
+#>  14.864   0.003   3.922
 
 # look at the result for one of the observations
 imp_res[1L]
 #> [[1]]
 #> [[1]]$C1
-#> [1] 0.657
+#> [1] 0.696
 #> 
 #> [[1]]$B1
 #> FALSE  TRUE 
@@ -1225,18 +1225,18 @@ imp_res[1L]
 #> 
 #> [[1]]$O1
 #> A B C D 
-#> 0 0 0 1 
+#> 0 1 0 0 
 #> 
 #> [[1]]$M1
 #> T1 T2 T3 T4 
-#>  0  0  0  1 
+#>  1  0  0  0 
 #> 
 #> [[1]]$C2
-#> [1] 0.628
+#> [1] 1.99
 #> 
 #> [[1]]$B2
 #> FALSE  TRUE 
-#>     0     1 
+#>     1     0 
 #> 
 #> [[1]]$O2
 #> A B C D 
@@ -1244,13 +1244,13 @@ imp_res[1L]
 #> 
 #> [[1]]$M2
 #> T1 T2 T3 T4 
-#>  0  0  0  1
+#>  0  1  0  0
 
 # compare with the observed and true data
 rbind(truth = dat$truth_obs[1L, ], observed = dat$seen_obs[1L, ])
-#>             C1   B1 O1 M1    C2   B2 O2 M2
-#> truth    0.369 TRUE  D T4 0.628 TRUE  C T4
-#> observed    NA TRUE  D T4 0.628 TRUE  C T4
+#>             C1   B1 O1 M1   C2    B2 O2 M2
+#> truth    0.442 TRUE  B T1 1.99 FALSE  C T2
+#> observed    NA TRUE  B T1 1.99 FALSE  C T2
 
 # we can threshold the data like this
 threshold <- function(org_data, imputed){
@@ -1302,28 +1302,28 @@ thresh_dat <- threshold(dat$seen_obs, imp_res)
 # compare thresholded data with observed and true data
 head(thresh_dat)
 #>      C1    B1 O1 M1    C2    B2 O2 M2
-#> 1 0.657  TRUE  D T4 0.628  TRUE  C T4
-#> 2 3.065  TRUE  A T2 0.805 FALSE  C T3
-#> 3 0.415 FALSE  A T3 0.746 FALSE  A T2
-#> 4 0.497 FALSE  D T2 0.232 FALSE  B T4
-#> 5 0.556  TRUE  C T4 1.207 FALSE  D T1
-#> 6 0.715 FALSE  D T2 1.018  TRUE  D T1
+#> 1 0.696  TRUE  B T1 1.989 FALSE  C T2
+#> 2 0.206 FALSE  A T2 0.743  TRUE  B T3
+#> 3 0.111 FALSE  B T2 0.132  TRUE  A T3
+#> 4 0.845 FALSE  C T2 1.137  TRUE  D T3
+#> 5 0.725  TRUE  C T4 0.645 FALSE  B T2
+#> 6 0.320 FALSE  C T3 0.492 FALSE  A T2
 head(dat$seen_obs)  # observed data
 #>      C1    B1   O1 M1    C2    B2   O2   M2
-#> 1    NA  TRUE    D T4 0.628  TRUE    C   T4
-#> 2 3.065    NA    A T2    NA FALSE    C   T3
-#> 3 0.415 FALSE    A T3 0.746    NA <NA>   T2
-#> 4    NA    NA <NA> T2 0.232 FALSE <NA>   T4
-#> 5    NA  TRUE <NA> T4    NA FALSE    D <NA>
-#> 6 0.715 FALSE <NA> T2 1.018  TRUE    D   T1
+#> 1    NA  TRUE    B T1 1.989 FALSE    C   T2
+#> 2 0.206    NA    A T2    NA  TRUE    B   T3
+#> 3 0.111 FALSE    B T2 0.132    NA <NA>   T3
+#> 4    NA    NA <NA> T2 1.137  TRUE <NA>   T3
+#> 5    NA  TRUE <NA> T4    NA FALSE    B <NA>
+#> 6 0.320 FALSE <NA> T3 0.492 FALSE    A   T2
 head(dat$truth_obs) # true data
 #>      C1    B1 O1 M1    C2    B2 O2 M2
-#> 1 0.369  TRUE  D T4 0.628  TRUE  C T4
-#> 2 3.065 FALSE  A T2 3.508 FALSE  C T3
-#> 3 0.415 FALSE  A T3 0.746  TRUE  C T2
-#> 4 0.181 FALSE  C T2 0.232 FALSE  B T4
-#> 5 0.714  TRUE  A T4 0.686 FALSE  D T3
-#> 6 0.715 FALSE  D T2 1.018  TRUE  D T1
+#> 1 0.442  TRUE  B T1 1.989 FALSE  C T2
+#> 2 0.206 FALSE  A T2 0.639  TRUE  B T3
+#> 3 0.111 FALSE  B T2 0.132 FALSE  A T3
+#> 4 2.645 FALSE  B T2 1.137  TRUE  B T3
+#> 5 1.495  TRUE  B T4 0.162 FALSE  B T2
+#> 6 0.320 FALSE  C T3 0.492 FALSE  A T2
 
 # compare correct categories
 get_classif_error <- function(impu_dat, truth = dat$truth_obs, 
@@ -1338,7 +1338,7 @@ get_classif_error <- function(impu_dat, truth = dat$truth_obs,
 }
 get_classif_error(thresh_dat)
 #>    B1    O1    M1    B2    O2    M2 
-#> 0.409 0.655 0.614 0.395 0.623 0.601
+#> 0.339 0.653 0.596 0.396 0.613 0.572
 
 # compute RMSE
 get_rmse <- function(impu_dat, truth = dat$truth_obs,
@@ -1349,8 +1349,8 @@ get_rmse <- function(impu_dat, truth = dat$truth_obs,
   sqrt(colMeans(err^2, na.rm = TRUE))
 }
 get_rmse(thresh_dat)
-#>    C1    C2 
-#> 1.018 0.958
+#>   C1   C2 
+#> 1.09 1.10
 
 # we can compare this with missForest
 miss_forest_arg <- dat$seen_obs
@@ -1367,9 +1367,9 @@ system.time(miss_res <- missForest(miss_forest_arg))
 #>   missForest iteration 7 in progress...done!
 #>   missForest iteration 8 in progress...done!
 #>    user  system elapsed 
-#>   9.345   0.052   9.397
+#>   9.660   0.024   9.685
 
-# turn binary variables back to logicals
+# turn binary variables back to logical variables
 miss_res$ximp[, is_log] <- lapply(
   miss_res$ximp[, is_log], function(x) as.integer(x) > 1L)
 
@@ -1377,13 +1377,13 @@ miss_res$ximp[, is_log] <- lapply(
 rbind(mdgc       = get_classif_error(thresh_dat),
       missForest = get_classif_error(miss_res$ximp))
 #>               B1    O1    M1    B2    O2    M2
-#> mdgc       0.409 0.655 0.614 0.395 0.623 0.601
-#> missForest 0.448 0.675 0.654 0.427 0.695 0.663
+#> mdgc       0.339 0.653 0.596 0.396 0.613 0.572
+#> missForest 0.394 0.695 0.645 0.422 0.644 0.643
 rbind(mdgc       = get_rmse(thresh_dat),
       missForest = get_rmse(miss_res$ximp))
-#>              C1    C2
-#> mdgc       1.02 0.958
-#> missForest 1.11 1.039
+#>              C1   C2
+#> mdgc       1.09 1.10
+#> missForest 1.12 1.09
 ```
 
 ### Edgar Anderson’s Iris Data
@@ -1423,7 +1423,7 @@ system.time(
                    use_aprx = TRUE, method = "aug_Lagran", 
                    minvls = 1000L, iminvls = 1000L))
 #>    user  system elapsed 
-#>    4.10    0.00    1.03
+#>    4.15    0.00    1.04
 
 # some of the impuated values
 head(mdgc_res$ximp)
@@ -1443,7 +1443,7 @@ system.time(miss_res <- missForest(dat))
 #>   missForest iteration 4 in progress...done!
 #>   missForest iteration 5 in progress...done!
 #>    user  system elapsed 
-#>   0.358   0.000   0.358
+#>   0.358   0.012   0.370
 
 # the errors
 rbind(
@@ -1525,7 +1525,7 @@ system.time(
                    use_aprx = TRUE, method = "aug_Lagran", 
                    minvls = 1000L, iminvls = 5000L))
 #>    user  system elapsed 
-#> 313.333   0.004  79.667
+#> 317.896   0.036  81.162
 
 # some of the imputed values
 head(mdgc_res$ximp)
@@ -1553,7 +1553,7 @@ system.time(miss_res <- missForest(miss_forest_arg))
 #>   missForest iteration 9 in progress...done!
 #>   missForest iteration 10 in progress...done!
 #>    user  system elapsed 
-#>  16.511   0.024  16.536
+#>   17.73    0.06   17.79
 
 # turn binary variables back to logicals
 miss_res$ximp[, is_log] <- lapply(

@@ -396,7 +396,7 @@ mdgc_start_value.default <- function(object, lower, upper, code,
   out <- cov2cor(out)
   if(any_cate)
     for(i in first_mult[3, ] + 1)
-      out[i, i] <- 1e-12
+      out[i, i] <- 0
   out
 }
 
@@ -513,8 +513,6 @@ mdgc_fit <- function(ptr, vcov, mea, lr = 1e-3, rel_eps = 1e-3,
   get_free_vcov_inv <- function(x){
     out <- matrix(0., nvars, nvars)
     out[free_dims, free_dims] <- x
-    for(i in fixed_dim)
-      out[i, i] <- 1e-12
     out
   }
 
@@ -1005,6 +1003,11 @@ mdgc_impute <- function(object, vcov, mea, rel_eps = 1e-3, maxit = 10000L,
 
   mea_arg <- numeric(nvars)
   mea_arg[idx_non_zero_mean + 1L] <- mea
+
+  if(NCOL(multinomial[[1L]]) > 0)
+    # TODO: would be nice to avoid this in the C++ code
+    for(i in multinomial[[1L]][3, ] + 1L)
+      vcov[i, i] <- 1e-20
 
   impute(lower = object$lower, upper = object$upper, code = object$code,
          Sigma = vcov, mea = mea_arg, truth = object$truth,
