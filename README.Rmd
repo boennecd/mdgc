@@ -8,8 +8,7 @@ knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
   fig.path = "man/figures/README-",
-  out.width = "100%"
-)
+  out.width = "100%")
 options(digits = 3)
 ```
 
@@ -29,7 +28,11 @@ Slides from a presentation on the packages is provided at
 [rpubs.com/boennecd/Gaussian-copula-KTH](https://rpubs.com/boennecd/Gaussian-copula-KTH)
 and paper has not been published yet. 
 
-However, the package can be useful for a lot of other models. For instance, 
+Importantly, we also extend the model used by @zhao19 to support multinomial 
+variables. Thus, our model supports both continuous, binary, ordinal, and 
+multinomial variables which makes it applicable to a large number of data sets.
+
+The package can be useful for a lot of other models. For instance, 
 the methods are directly applicable to other Gaussian copula models and some 
 mixed effect models. All methods are implemented in C++, support computation 
 in parallel, and should easily be able to be ported to other languages. 
@@ -47,34 +50,19 @@ implementation to be fair) while it takes more than 150
 seconds for the MCMC algorithm used by @hoff07. These figures
 should be kept in mind when looking at the results below. Importantly, 
 @zhao19 use an approximation in the E-step of an EM algorithm which is 
-fast but might be crude is some settings. Using a potentially arbitrarily 
+fast but might be crude in some settings. Using a potentially arbitrarily 
 precise approximation of the log  marginal likelihood is useful if this can 
 be done quickly enough.
 
-We will provide a [quick-example](#quick-example) and 
+We will provide a [quick example](#quick-example) and 
 [an even shorter example](#an-even-shorter-example)
 where we show how to use the methods in the package to estimate the 
 correlation matrix and to perform the imputation. We then show a 
 [simulation study](#simulation-study) where we compare with the method 
 suggested by @zhao19.
 
-We end by providing a [detailed example](#detailed-example) where we: 
-
- 1. show how to use the C++ functions and that these provide an 
-    approximation of the log marginal likelihood and its gradient. Moreover, 
-    we show that the methods scales well in the number of threads.
- 2. define functions to perform maximum likelihood estimation.
- 3. estimate the parameters using a simple gradient descent algorithm, and 
-    stochastic gradient descent methods. This serves 
-    as an example to show how to implement other gradient based methods 
-    to estimate the model.
- 4. show how to improve 4. by using better starting values which are quick 
-    to compute. As of this writing, this reduces the estimation time to 
-    about 4 seconds using four threads and about 12 seconds using 
-    one thread.
-    
-The last section is added to give an idea about what is going on under the 
-hood and can likely be skipped.
+The last section called [Adding Multinomial Variables](#adding-multinomial-variables)
+covers data sets which also have multinomial variables.
 
 ## Installation
 The packages can be installed from Github by calling:
@@ -83,7 +71,7 @@ The packages can be installed from Github by calling:
 remotes::install_github("boennecd/mdgc")
 ```
 
-### Quick Example
+## Quick Example
 
 We first simulate a data set and provide an example which shows how to use 
 the package. The [An Even Shorter Example](#an-even-shorter-example) section 
@@ -108,7 +96,7 @@ library(mixedgcImp)
 #   n_lvls: number of levels for the ordinal variables. 
 # 
 # Returns: 
-#   Simluated masked data, the true data, and true covariance matrix. 
+#   Simulated masked data, the true data, and true covariance matrix. 
 sim_dat <- function(n, p = 3L, n_lvls = 5L){
   # get the covariance matrix
   Sig <- cov2cor(drop(rWishart(1L, p, diag(p))))
@@ -216,7 +204,10 @@ print(rbind(
                 ptr = log_ml_ptr, rel_eps = 1e-3),
   SVRG =
     mdgc_log_ml(vcov = fit_svrg$result$vcov  , mea = fit_svrg$result$mea, 
-                ptr = log_ml_ptr, rel_eps = 1e-3)), 
+                ptr = log_ml_ptr, rel_eps = 1e-3),
+  Truth = 
+    mdgc_log_ml(vcov = dat$Sigma             , mea = numeric(5), 
+                ptr = log_ml_ptr, rel_eps = 1e-3)),
   digits = 10)
 
 # we can use an approximation in the method
@@ -347,13 +338,13 @@ rbind(mdgc       = get_rmse(thresh_dat),
       missForest = get_rmse(miss_res$ximp))
 ```
 
-#### An Even Shorter Example
+## An Even Shorter Example
 
 Here is an example where we use the `mdgc` function to do the model 
 estimation and the imputation:
 
 ```{r very_quick_example, cache = 1, eval = TRUE}
-# have a data set with missing continous, binary, and ordinal variables
+# have a data set with missing continuous, binary, and ordinal variables
 head(dat$seen_obs)
   
 # perform the estimation and imputation
@@ -373,7 +364,7 @@ We can compare this with the `mixedgcImp` which uses the method described
 in @zhao19:
 
 ```{r use_zhao19, eval = TRUE, cache = 1}
-# turn the data to a format that can be bassed
+# turn the data to a format that can be based
 dat_pass <- dat$seen_obs
 is_cat <- sapply(dat_pass, function(x) is.logical(x) | is.ordered(x))
 dat_pass[, is_cat] <- lapply(dat_pass[, is_cat], as.integer)
@@ -407,7 +398,7 @@ rbind(mdgc       = get_rmse(res$ximp),
       mixedgcImp = get_rmse(imp_apr_res))
 ```
 
-### Simulation Study
+## Simulation Study
 
 ```{r before_sim_clean, echo = FALSE}
 rm(list = setdiff(ls(), c(
@@ -738,15 +729,22 @@ ptr <- get_mdgc_log_ml(obj)
 # get starting values
 start_vals <- mdgc_start_value(obj)
 
-# plot the starting values and the true values (should not match because of
-# overparameterization)
-par(mar = c(3, 3, 2, 1), mfcol = c(1, 2))
-sc <- colorRampPalette(c("Red", "White", "Blue"))(201)
-ma <- max(abs(dat$Sigma), max(abs(start_vals)))
-image(start_vals [, NCOL(dat$Sigma):1], zlim = c(-ma, ma), col = sc, 
-      main = "Starting values")
-image(dat$Sigma  [, NCOL(dat$Sigma):1], zlim = c(-ma, ma), col = sc,
-      main = "Truth")
+# plot the starting values and the true values
+do_plot <- function(est, truth, main){
+  par_old <- par(mfcol = c(1, 3), mar  = c(1, 1, 4, 1))
+  on.exit(par(par_old))
+  sc <- colorRampPalette(c("Red", "White", "Blue"))(201)
+
+  ma <- max(abs(est), max(abs(truth)))  
+  f <- function(x, main)
+    image(x[, NCOL(x):1], main = main, col = sc, zlim = c(-ma, ma), 
+          xaxt = "n", yaxt = "n", bty = "n")
+  f(est, main)
+  f(truth, "Truth")
+  f(est - truth, "Difference")
+}
+
+do_plot(start_vals, dat$Sigma, "Starting values")
 # check the log marginal likelihood at the starting values and compare with
 # the true values at the starting values
 mdgc_log_ml(ptr, start_vals, mea = obj$means, n_threads = 1L)
@@ -773,17 +771,60 @@ system.time(
                    minvls = 1000L, mu = ests$mu, lambda = ests$lambda, 
                    use_aprx = TRUE, conv_crit = 1e-8))
 
-# compare log marginal likelihood
-mdgc_log_ml(ptr, ests$result$vcov, mea = ests$result$mea, n_threads = 1L)
-mdgc_log_ml(ptr, dat$Sigma       , mea = numeric(length(obj$means)), 
-            n_threads = 1L)
+# use ADAM
+system.time(
+  fit_adam <- mdgc_fit(
+    ptr, vcov = start_vals, mea = obj$means, minvls = 200L,
+    n_threads = 4L, lr = 1e-3, maxit = 25L, batch_size = 100L, 
+    method = "adam", rel_eps = 1e-3, maxpts = 5000L, 
+    use_aprx = TRUE))
 
-# compare the estimated and the true values
-ma <- max(abs(ests$result$vcov), abs(dat$Sigma))
-image(ests$result$vcov[, NCOL(dat$Sigma):1], zlim = c(-ma, ma), col = sc, 
-      main = "Estimates")
-image(dat$Sigma       [, NCOL(dat$Sigma):1], zlim = c(-ma, ma), col = sc, 
-      main = "Truth")
+# use SVRG
+system.time(
+  fit_svrg <- mdgc_fit(
+    ptr, vcov = start_vals, mea = obj$means,  minvls = 200L,
+    n_threads = 4L, lr = 1e-3, maxit = 25L, batch_size = 100L, 
+    method = "svrg", verbose = TRUE, rel_eps = 1e-3, maxpts = 5000L, 
+    use_aprx = TRUE, conv_crit = 1e-8))
+
+# compare log marginal likelihood
+print(rbind(
+  `Augmented Lagrangian` = 
+    mdgc_log_ml(ptr, ests$result$vcov    , mea = ests$result$mea, 
+                n_threads = 1L),
+  ADAM = 
+    mdgc_log_ml(ptr, fit_adam$result$vcov, mea = fit_adam$result$mea, 
+                n_threads = 1L),
+  SVRG = 
+    mdgc_log_ml(ptr, fit_svrg$result$vcov, mea = fit_svrg$result$mea, 
+                n_threads = 1L),
+  Truth = 
+    mdgc_log_ml(ptr, dat$Sigma           , mea = numeric(length(obj$means)), 
+                n_threads = 1L)), digits = 10)
+
+# compare the estimated and the true values (should not match because of
+# overparameterization? See https://stats.stackexchange.com/q/504682/81865)
+do_plot(ests$result$vcov    , dat$Sigma, "Estimates (Aug. Lagrangian)")
+do_plot(fit_adam$result$vcov, dat$Sigma, "Estimates (ADAM)")
+do_plot(fit_svrg$result$vcov, dat$Sigma, "Estimates (SVRG)")
+# after rescaling
+do_plot_rescale <- function(x, lab){
+  trans <- function(z){
+    scal <- diag(NCOL(z))
+    m <- obj$multinomial[[1L]]
+    for(i in seq_len(NCOL(m))){
+      idx <- m[3, i] + 1 + seq_len(m[2, i] - 1)
+      scal[idx, idx] <- solve(t(chol(z[idx, idx])))
+    }
+    tcrossprod(scal %*% z, scal)
+  }
+  
+  do_plot(trans(x), trans(dat$Sigma), lab)  
+}
+do_plot_rescale(ests$result$vcov    , "Estimates (Aug. Lagrangian)")
+do_plot_rescale(fit_adam$result$vcov, "Estimates (ADAM)")
+do_plot_rescale(fit_svrg$result$vcov, "Estimates (SVRG)")
+
 # perform the imputation
 system.time(
   imp_res <- mdgc_impute(obj, ests$result$vcov, mea = ests$result$mea, 
@@ -924,7 +965,7 @@ system.time(
                    use_aprx = TRUE, method = "aug_Lagran", 
                    minvls = 1000L, iminvls = 1000L))
 
-# some of the impuated values
+# some of the imputed values
 head(mdgc_res$ximp)
 
 # compare with missForest
@@ -944,7 +985,7 @@ rbind(
     get_rmse(impu_dat = miss_res$ximp, truth = iris, observed = dat))
 ```
 
-## Chemotherapy for Stage B/C Colon Cancer
+### Chemotherapy for Stage B/C Colon Cancer
 
 ```{r colon, cache = 1}
 # prepare the data
@@ -987,8 +1028,8 @@ dat <- get_colon()
 # use the mdgc method
 system.time(
   mdgc_res <- mdgc(dat, maxpts = 5000L, n_threads = 4L, maxit = 100L, 
-                   use_aprx = TRUE, method = "aug_Lagran", 
-                   minvls = 1000L, iminvls = 5000L))
+                   use_aprx = TRUE, method = "svrg", batch_size = 100L,
+                   minvls = 1000L, iminvls = 5000L, lr = 1e-3))
 
 # some of the imputed values
 head(mdgc_res$ximp)
@@ -1016,6 +1057,5 @@ rbind(
   missForest = 
     get_rmse(impu_dat = miss_res$ximp, truth = colon_use, observed = dat))
 ```
-
 
 ## References

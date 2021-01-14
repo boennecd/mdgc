@@ -16,11 +16,16 @@ presentation on the packages is provided at
 [rpubs.com/boennecd/Gaussian-copula-KTH](https://rpubs.com/boennecd/Gaussian-copula-KTH)
 and paper has not been published yet.
 
-However, the package can be useful for a lot of other models. For
-instance, the methods are directly applicable to other Gaussian copula
-models and some mixed effect models. All methods are implemented in C++,
-support computation in parallel, and should easily be able to be ported
-to other languages.
+Importantly, we also extend the model used by Zhao and Udell (2019) to
+support multinomial variables. Thus, our model supports both continuous,
+binary, ordinal, and multinomial variables which makes it applicable to
+a large number of data sets.
+
+The package can be useful for a lot of other models. For instance, the
+methods are directly applicable to other Gaussian copula models and some
+mixed effect models. All methods are implemented in C++, support
+computation in parallel, and should easily be able to be ported to other
+languages.
 
 ## Example
 
@@ -36,34 +41,19 @@ approximate EM algorithm converges in what seems to be 20-25 seconds
 than 150 seconds for the MCMC algorithm used by Hoff (2007). These
 figures should be kept in mind when looking at the results below.
 Importantly, Zhao and Udell (2019) use an approximation in the E-step of
-an EM algorithm which is fast but might be crude is some settings. Using
+an EM algorithm which is fast but might be crude in some settings. Using
 a potentially arbitrarily precise approximation of the log marginal
 likelihood is useful if this can be done quickly enough.
 
-We will provide a [quick-example](#quick-example) and [an even shorter
+We will provide a [quick example](#quick-example) and [an even shorter
 example](#an-even-shorter-example) where we show how to use the methods
 in the package to estimate the correlation matrix and to perform the
 imputation. We then show a [simulation study](#simulation-study) where
 we compare with the method suggested by Zhao and Udell (2019).
 
-We end by providing a [detailed example](#detailed-example) where we:
-
-1.  show how to use the C++ functions and that these provide an
-    approximation of the log marginal likelihood and its gradient.
-    Moreover, we show that the methods scales well in the number of
-    threads.
-2.  define functions to perform maximum likelihood estimation.
-3.  estimate the parameters using a simple gradient descent algorithm,
-    and stochastic gradient descent methods. This serves as an example
-    to show how to implement other gradient based methods to estimate
-    the model.
-4.  show how to improve 4. by using better starting values which are
-    quick to compute. As of this writing, this reduces the estimation
-    time to about 4 seconds using four threads and about 12 seconds
-    using one thread.
-
-The last section is added to give an idea about what is going on under
-the hood and can likely be skipped.
+The last section called [Adding Multinomial
+Variables](#adding-multinomial-variables) covers data sets which also
+have multinomial variables.
 
 ## Installation
 
@@ -73,7 +63,7 @@ The packages can be installed from Github by calling:
 remotes::install_github("boennecd/mdgc")
 ```
 
-### Quick Example
+## Quick Example
 
 We first simulate a data set and provide an example which shows how to
 use the package. The [An Even Shorter Example](#an-even-shorter-example)
@@ -100,7 +90,7 @@ library(mixedgcImp)
 #   n_lvls: number of levels for the ordinal variables. 
 # 
 # Returns: 
-#   Simluated masked data, the true data, and true covariance matrix. 
+#   Simulated masked data, the true data, and true covariance matrix. 
 sim_dat <- function(n, p = 3L, n_lvls = 5L){
   # get the covariance matrix
   Sig <- cov2cor(drop(rWishart(1L, p, diag(p))))
@@ -186,7 +176,7 @@ mark(`Setup time` = {
 #> # A tibble: 1 x 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Setup time   22.1ms   22.8ms      43.4    9.65MB     13.6
+#> 1 Setup time   22.4ms     24ms      41.6    9.65MB     22.4
 
 # fit the model using three different methods
 set.seed(60941821)
@@ -196,7 +186,7 @@ system.time(
     n_threads = 4L, maxit = 100L, method = "aug_Lagran", rel_eps = 1e-3, 
     maxpts = 200L))
 #>    user  system elapsed 
-#>   166.6     0.0    41.7
+#> 177.254   0.045  44.444
 system.time(
   fit_Lagran <- mdgc_fit(
     ptr = log_ml_ptr, vcov = fit_Lagran_start$result$vcov, 
@@ -205,7 +195,7 @@ system.time(
     maxpts = 5000L, mu = fit_Lagran_start$mu, 
     lambda = fit_Lagran_start$lambda))
 #>    user  system elapsed 
-#>   39.61    0.00    9.97
+#>    39.9     0.0    10.1
 
 system.time(
   fit_adam <- mdgc_fit(
@@ -213,7 +203,7 @@ system.time(
     n_threads = 4L, lr = 1e-3, maxit = 25L, batch_size = 100L, 
     method = "adam", rel_eps = 1e-3, maxpts = 5000L))
 #>    user  system elapsed 
-#>    40.5     0.0    10.1
+#>  43.504   0.003  10.920
 
 set.seed(fit_seed <- 19570958L)
 system.time(
@@ -321,7 +311,7 @@ system.time(
 #> Log marginal likelihood approximation is    -23330.83
 #> Previous approximate gradient norm was         226.77
 #>    user  system elapsed 
-#>  79.770   0.004  19.948
+#>    85.6     0.0    21.4
 
 # compare the log marginal likelihood 
 print(rbind(
@@ -333,12 +323,16 @@ print(rbind(
                 ptr = log_ml_ptr, rel_eps = 1e-3),
   SVRG =
     mdgc_log_ml(vcov = fit_svrg$result$vcov  , mea = fit_svrg$result$mea, 
-                ptr = log_ml_ptr, rel_eps = 1e-3)), 
+                ptr = log_ml_ptr, rel_eps = 1e-3),
+  Truth = 
+    mdgc_log_ml(vcov = dat$Sigma             , mea = numeric(5), 
+                ptr = log_ml_ptr, rel_eps = 1e-3)),
   digits = 10)
 #>                              [,1]
 #> Augmented Lagrangian -23330.35309
 #> ADAM                 -23349.73214
 #> SVRG                 -23330.80260
+#> Truth                -23384.11648
 
 # we can use an approximation in the method
 set.seed(fit_seed)
@@ -348,7 +342,7 @@ system.time(
     n_threads = 4L, lr = 1e-3, maxit = 25L, batch_size = 100L, 
     method = "svrg", rel_eps = 1e-3, maxpts = 5000L, use_aprx = TRUE))
 #>    user  system elapsed 
-#>  55.150   0.008  13.790
+#>  57.029   0.003  14.262
 
 # essentially the same estimates
 norm(fit_svrg_aprx$result$vcov - fit_svrg$result$vcov, "F") 
@@ -401,7 +395,7 @@ system.time(imp_res <- mdgc_impute(
   mdgc_obj, fit_svrg$result$vcov, mea = fit_svrg$result$mea, rel_eps = 1e-3, 
   maxit = 10000L, n_threads = 4L))
 #>    user  system elapsed 
-#>   17.08    0.00    4.69
+#>   17.98    0.00    4.92
 
 # look at the result for one of the observations
 imp_res[2L]
@@ -598,7 +592,7 @@ system.time(miss_res <- missForest(miss_forest_arg))
 #>   missForest iteration 8 in progress...done!
 #>   missForest iteration 9 in progress...done!
 #>    user  system elapsed 
-#>   44.99    0.04   45.03
+#>  47.737   0.107  47.846
 
 # turn binary variables back to logicals
 miss_res$ximp[, is_log] <- lapply(
@@ -616,13 +610,13 @@ rbind(mdgc       = get_rmse(thresh_dat),
 #> missForest 0.806 0.848 0.755 0.845 0.842
 ```
 
-#### An Even Shorter Example
+## An Even Shorter Example
 
 Here is an example where we use the `mdgc` function to do the model
 estimation and the imputation:
 
 ``` r
-# have a data set with missing continous, binary, and ordinal variables
+# have a data set with missing continuous, binary, and ordinal variables
 head(dat$seen_obs)
 #>      C1    C2    C3     C4       C5    B1    B2    B3    B4    B5   O1   O2
 #> 1 0.237 0.693 0.798 0.0666       NA FALSE FALSE FALSE FALSE  TRUE    E    C
@@ -694,7 +688,7 @@ system.time(res <- mdgc(dat$seen_obs, verbose = TRUE, maxpts = 5000L,
 #> 
 #> Performing imputation...
 #>    user  system elapsed 
-#>   16.39    0.00    4.55
+#>  16.824   0.001   4.701
 
 # compare the estimated correlation matrix with the truth
 norm(dat$Sigma - res$vcov, "F") / norm(dat$Sigma, "F")
@@ -713,14 +707,14 @@ We can compare this with the `mixedgcImp` which uses the method
 described in Zhao and Udell (2019):
 
 ``` r
-# turn the data to a format that can be bassed
+# turn the data to a format that can be based
 dat_pass <- dat$seen_obs
 is_cat <- sapply(dat_pass, function(x) is.logical(x) | is.ordered(x))
 dat_pass[, is_cat] <- lapply(dat_pass[, is_cat], as.integer)
 
 system.time(imp_apr_em <- impute_mixedgc(dat_pass, eps = 1e-4))
 #>    user  system elapsed 
-#>    19.6     0.0    19.6
+#>    20.4     0.0    20.4
 
 # compare the estimated correlation matrix with the truth
 get_rel_err <- function(est, keep = seq_len(NROW(truth)), truth = dat$Sigma)
@@ -759,7 +753,7 @@ rbind(mdgc       = get_rmse(res$ximp),
 #> mixedgcImp 0.645 0.789 0.655 0.810 0.755
 ```
 
-### Simulation Study
+## Simulation Study
 
 We will perform a simulation study in this section to compare different
 methods in terms of their computation time and performance. We first
@@ -1141,15 +1135,22 @@ ptr <- get_mdgc_log_ml(obj)
 # get starting values
 start_vals <- mdgc_start_value(obj)
 
-# plot the starting values and the true values (should not match because of
-# overparameterization)
-par(mar = c(3, 3, 2, 1), mfcol = c(1, 2))
-sc <- colorRampPalette(c("Red", "White", "Blue"))(201)
-ma <- max(abs(dat$Sigma), max(abs(start_vals)))
-image(start_vals [, NCOL(dat$Sigma):1], zlim = c(-ma, ma), col = sc, 
-      main = "Starting values")
-image(dat$Sigma  [, NCOL(dat$Sigma):1], zlim = c(-ma, ma), col = sc,
-      main = "Truth")
+# plot the starting values and the true values
+do_plot <- function(est, truth, main){
+  par_old <- par(mfcol = c(1, 3), mar  = c(1, 1, 4, 1))
+  on.exit(par(par_old))
+  sc <- colorRampPalette(c("Red", "White", "Blue"))(201)
+
+  ma <- max(abs(est), max(abs(truth)))  
+  f <- function(x, main)
+    image(x[, NCOL(x):1], main = main, col = sc, zlim = c(-ma, ma), 
+          xaxt = "n", yaxt = "n", bty = "n")
+  f(est, main)
+  f(truth, "Truth")
+  f(est - truth, "Difference")
+}
+
+do_plot(start_vals, dat$Sigma, "Starting values")
 ```
 
 <img src="man/figures/README-mult_sim-1.png" width="100%" />
@@ -1175,7 +1176,7 @@ system.time(
                    n_threads = 4L, rel_eps = 1e-2, maxpts = 1000L, 
                    minvls = 200L, use_aprx = TRUE, conv_crit = 1e-8))
 #>    user  system elapsed 
-#>   231.6     0.0    57.9
+#> 238.801   0.007  59.720
 
 # refine the estimates
 system.time(
@@ -1186,38 +1187,208 @@ system.time(
                    minvls = 1000L, mu = ests$mu, lambda = ests$lambda, 
                    use_aprx = TRUE, conv_crit = 1e-8))
 #>    user  system elapsed 
-#>   207.1     0.0    53.7
+#> 213.352   0.004  55.233
+
+# use ADAM
+system.time(
+  fit_adam <- mdgc_fit(
+    ptr, vcov = start_vals, mea = obj$means, minvls = 200L,
+    n_threads = 4L, lr = 1e-3, maxit = 25L, batch_size = 100L, 
+    method = "adam", rel_eps = 1e-3, maxpts = 5000L, 
+    use_aprx = TRUE))
+#>    user  system elapsed 
+#>   35.36    0.00    8.84
+
+# use SVRG
+system.time(
+  fit_svrg <- mdgc_fit(
+    ptr, vcov = start_vals, mea = obj$means,  minvls = 200L,
+    n_threads = 4L, lr = 1e-3, maxit = 25L, batch_size = 100L, 
+    method = "svrg", verbose = TRUE, rel_eps = 1e-3, maxpts = 5000L, 
+    use_aprx = TRUE, conv_crit = 1e-8))
+#> End of iteration    1 with learning rate 0.00100000
+#> Log marginal likelihood approximation is    -13162.26
+#> Previous approximate gradient norm was        1981.42
+#> 
+#> End of iteration    2 with learning rate 0.00098000
+#> Log marginal likelihood approximation is    -13135.75
+#> Previous approximate gradient norm was        1176.23
+#> 
+#> End of iteration    3 with learning rate 0.00096040
+#> Log marginal likelihood approximation is    -13125.26
+#> Previous approximate gradient norm was         760.41
+#> 
+#> End of iteration    4 with learning rate 0.00094119
+#> Log marginal likelihood approximation is    -13120.16
+#> Previous approximate gradient norm was         526.35
+#> 
+#> End of iteration    5 with learning rate 0.00092237
+#> Log marginal likelihood approximation is    -13117.28
+#> Previous approximate gradient norm was         385.34
+#> 
+#> End of iteration    6 with learning rate 0.00090392
+#> Log marginal likelihood approximation is    -13115.52
+#> Previous approximate gradient norm was         301.86
+#> 
+#> End of iteration    7 with learning rate 0.00088584
+#> Log marginal likelihood approximation is    -13114.37
+#> Previous approximate gradient norm was         249.96
+#> 
+#> End of iteration    8 with learning rate 0.00086813
+#> Log marginal likelihood approximation is    -13113.57
+#> Previous approximate gradient norm was         213.68
+#> 
+#> End of iteration    9 with learning rate 0.00085076
+#> Log marginal likelihood approximation is    -13112.99
+#> Previous approximate gradient norm was         184.89
+#> 
+#> End of iteration   10 with learning rate 0.00083375
+#> Log marginal likelihood approximation is    -13112.56
+#> Previous approximate gradient norm was         162.23
+#> 
+#> End of iteration   11 with learning rate 0.00081707
+#> Log marginal likelihood approximation is    -13112.26
+#> Previous approximate gradient norm was         146.08
+#> 
+#> End of iteration   12 with learning rate 0.00080073
+#> Log marginal likelihood approximation is    -13112.02
+#> Previous approximate gradient norm was         130.93
+#> 
+#> End of iteration   13 with learning rate 0.00078472
+#> Log marginal likelihood approximation is    -13111.84
+#> Previous approximate gradient norm was         118.14
+#> 
+#> End of iteration   14 with learning rate 0.00076902
+#> Log marginal likelihood approximation is    -13111.69
+#> Previous approximate gradient norm was         108.17
+#> 
+#> End of iteration   15 with learning rate 0.00075364
+#> Log marginal likelihood approximation is    -13111.51
+#> Previous approximate gradient norm was         123.45
+#> 
+#> End of iteration   16 with learning rate 0.00073857
+#> Log marginal likelihood approximation is    -13111.37
+#> Previous approximate gradient norm was         112.51
+#> 
+#> End of iteration   17 with learning rate 0.00072380
+#> Log marginal likelihood approximation is    -13111.27
+#> Previous approximate gradient norm was         104.05
+#> 
+#> End of iteration   18 with learning rate 0.00070932
+#> Log marginal likelihood approximation is    -13111.18
+#> Previous approximate gradient norm was          98.71
+#> 
+#> End of iteration   19 with learning rate 0.00069514
+#> Log marginal likelihood approximation is    -13111.12
+#> Previous approximate gradient norm was          94.11
+#> 
+#> End of iteration   20 with learning rate 0.00068123
+#> Log marginal likelihood approximation is    -13111.08
+#> Previous approximate gradient norm was          97.16
+#> 
+#> End of iteration   21 with learning rate 0.00066761
+#> Log marginal likelihood approximation is    -13111.03
+#> Previous approximate gradient norm was          92.58
+#> 
+#> End of iteration   22 with learning rate 0.00065426
+#> Log marginal likelihood approximation is    -13110.98
+#> Previous approximate gradient norm was          88.84
+#> 
+#> End of iteration   23 with learning rate 0.00064117
+#> Log marginal likelihood approximation is    -13110.95
+#> Previous approximate gradient norm was          85.79
+#> 
+#> End of iteration   24 with learning rate 0.00062835
+#> Log marginal likelihood approximation is    -13110.90
+#> Previous approximate gradient norm was          77.46
+#>    user  system elapsed 
+#>    60.5     0.0    15.1
 
 # compare log marginal likelihood
-mdgc_log_ml(ptr, ests$result$vcov, mea = ests$result$mea, n_threads = 1L)
-#> [1] -13111
-mdgc_log_ml(ptr, dat$Sigma       , mea = numeric(length(obj$means)), 
-            n_threads = 1L)
-#> [1] -13140
+print(rbind(
+  `Augmented Lagrangian` = 
+    mdgc_log_ml(ptr, ests$result$vcov    , mea = ests$result$mea, 
+                n_threads = 1L),
+  ADAM = 
+    mdgc_log_ml(ptr, fit_adam$result$vcov, mea = fit_adam$result$mea, 
+                n_threads = 1L),
+  SVRG = 
+    mdgc_log_ml(ptr, fit_svrg$result$vcov, mea = fit_svrg$result$mea, 
+                n_threads = 1L),
+  Truth = 
+    mdgc_log_ml(ptr, dat$Sigma           , mea = numeric(length(obj$means)), 
+                n_threads = 1L)), digits = 10)
+#>                              [,1]
+#> Augmented Lagrangian -13110.65817
+#> ADAM                 -13113.31822
+#> SVRG                 -13110.88608
+#> Truth                -13140.31880
 
-# compare the estimated and the true values
-ma <- max(abs(ests$result$vcov), abs(dat$Sigma))
-image(ests$result$vcov[, NCOL(dat$Sigma):1], zlim = c(-ma, ma), col = sc, 
-      main = "Estimates")
-image(dat$Sigma       [, NCOL(dat$Sigma):1], zlim = c(-ma, ma), col = sc, 
-      main = "Truth")
+# compare the estimated and the true values (should not match because of
+# overparameterization? See https://stats.stackexchange.com/q/504682/81865)
+do_plot(ests$result$vcov    , dat$Sigma, "Estimates (Aug. Lagrangian)")
 ```
 
 <img src="man/figures/README-mult_sim-2.png" width="100%" />
 
 ``` r
+do_plot(fit_adam$result$vcov, dat$Sigma, "Estimates (ADAM)")
+```
+
+<img src="man/figures/README-mult_sim-3.png" width="100%" />
+
+``` r
+do_plot(fit_svrg$result$vcov, dat$Sigma, "Estimates (SVRG)")
+```
+
+<img src="man/figures/README-mult_sim-4.png" width="100%" />
+
+``` r
+# after rescaling
+do_plot_rescale <- function(x, lab){
+  trans <- function(z){
+    scal <- diag(NCOL(z))
+    m <- obj$multinomial[[1L]]
+    for(i in seq_len(NCOL(m))){
+      idx <- m[3, i] + 1 + seq_len(m[2, i] - 1)
+      scal[idx, idx] <- solve(t(chol(z[idx, idx])))
+    }
+    tcrossprod(scal %*% z, scal)
+  }
+  
+  do_plot(trans(x), trans(dat$Sigma), lab)  
+}
+do_plot_rescale(ests$result$vcov    , "Estimates (Aug. Lagrangian)")
+```
+
+<img src="man/figures/README-mult_sim-5.png" width="100%" />
+
+``` r
+do_plot_rescale(fit_adam$result$vcov, "Estimates (ADAM)")
+```
+
+<img src="man/figures/README-mult_sim-6.png" width="100%" />
+
+``` r
+do_plot_rescale(fit_svrg$result$vcov, "Estimates (SVRG)")
+```
+
+<img src="man/figures/README-mult_sim-7.png" width="100%" />
+
+``` r
+
 # perform the imputation
 system.time(
   imp_res <- mdgc_impute(obj, ests$result$vcov, mea = ests$result$mea, 
                          rel_eps = 1e-3, maxit = 10000L, n_threads = 4L))
 #>    user  system elapsed 
-#>  14.864   0.003   3.922
+#>  15.143   0.004   3.992
 
 # look at the result for one of the observations
 imp_res[1L]
 #> [[1]]
 #> [[1]]$C1
-#> [1] 0.696
+#> [1] 0.695
 #> 
 #> [[1]]$B1
 #> FALSE  TRUE 
@@ -1302,11 +1473,11 @@ thresh_dat <- threshold(dat$seen_obs, imp_res)
 # compare thresholded data with observed and true data
 head(thresh_dat)
 #>      C1    B1 O1 M1    C2    B2 O2 M2
-#> 1 0.696  TRUE  B T1 1.989 FALSE  C T2
+#> 1 0.695  TRUE  B T1 1.989 FALSE  C T2
 #> 2 0.206 FALSE  A T2 0.743  TRUE  B T3
 #> 3 0.111 FALSE  B T2 0.132  TRUE  A T3
-#> 4 0.845 FALSE  C T2 1.137  TRUE  D T3
-#> 5 0.725  TRUE  C T4 0.645 FALSE  B T2
+#> 4 0.847 FALSE  C T2 1.137  TRUE  D T3
+#> 5 0.726  TRUE  C T4 0.644 FALSE  B T2
 #> 6 0.320 FALSE  C T3 0.492 FALSE  A T2
 head(dat$seen_obs)  # observed data
 #>      C1    B1   O1 M1    C2    B2   O2   M2
@@ -1338,7 +1509,7 @@ get_classif_error <- function(impu_dat, truth = dat$truth_obs,
 }
 get_classif_error(thresh_dat)
 #>    B1    O1    M1    B2    O2    M2 
-#> 0.339 0.653 0.596 0.396 0.613 0.572
+#> 0.340 0.658 0.592 0.390 0.615 0.579
 
 # compute RMSE
 get_rmse <- function(impu_dat, truth = dat$truth_obs,
@@ -1367,7 +1538,7 @@ system.time(miss_res <- missForest(miss_forest_arg))
 #>   missForest iteration 7 in progress...done!
 #>   missForest iteration 8 in progress...done!
 #>    user  system elapsed 
-#>   9.660   0.024   9.685
+#>    9.64    0.04    9.68
 
 # turn binary variables back to logical variables
 miss_res$ximp[, is_log] <- lapply(
@@ -1377,7 +1548,7 @@ miss_res$ximp[, is_log] <- lapply(
 rbind(mdgc       = get_classif_error(thresh_dat),
       missForest = get_classif_error(miss_res$ximp))
 #>               B1    O1    M1    B2    O2    M2
-#> mdgc       0.339 0.653 0.596 0.396 0.613 0.572
+#> mdgc       0.340 0.658 0.592 0.390 0.615 0.579
 #> missForest 0.394 0.695 0.645 0.422 0.644 0.643
 rbind(mdgc       = get_rmse(thresh_dat),
       missForest = get_rmse(miss_res$ximp))
@@ -1423,9 +1594,9 @@ system.time(
                    use_aprx = TRUE, method = "aug_Lagran", 
                    minvls = 1000L, iminvls = 1000L))
 #>    user  system elapsed 
-#>    4.15    0.00    1.04
+#>    4.14    0.00    1.04
 
-# some of the impuated values
+# some of the imputed values
 head(mdgc_res$ximp)
 #>   Sepal.Length Sepal.Width Petal.Length Petal.Width Species
 #> 1          5.1         3.5          1.4         0.2  setosa
@@ -1443,7 +1614,7 @@ system.time(miss_res <- missForest(dat))
 #>   missForest iteration 4 in progress...done!
 #>   missForest iteration 5 in progress...done!
 #>    user  system elapsed 
-#>   0.358   0.012   0.370
+#>   0.365   0.004   0.369
 
 # the errors
 rbind(
@@ -1465,7 +1636,7 @@ rbind(
 #> missForest        0.310       0.316        0.280       0.218
 ```
 
-## Chemotherapy for Stage B/C Colon Cancer
+### Chemotherapy for Stage B/C Colon Cancer
 
 ``` r
 # prepare the data
@@ -1522,10 +1693,10 @@ dat <- get_colon()
 # use the mdgc method
 system.time(
   mdgc_res <- mdgc(dat, maxpts = 5000L, n_threads = 4L, maxit = 100L, 
-                   use_aprx = TRUE, method = "aug_Lagran", 
-                   minvls = 1000L, iminvls = 5000L))
+                   use_aprx = TRUE, method = "svrg", batch_size = 100L,
+                   minvls = 1000L, iminvls = 5000L, lr = 1e-3))
 #>    user  system elapsed 
-#> 317.896   0.036  81.162
+#>  31.404   0.004   8.039
 
 # some of the imputed values
 head(mdgc_res$ximp)
@@ -1553,7 +1724,7 @@ system.time(miss_res <- missForest(miss_forest_arg))
 #>   missForest iteration 9 in progress...done!
 #>   missForest iteration 10 in progress...done!
 #>    user  system elapsed 
-#>   17.73    0.06   17.79
+#>  16.080   0.036  16.115
 
 # turn binary variables back to logicals
 miss_res$ximp[, is_log] <- lapply(
@@ -1566,7 +1737,7 @@ rbind(
   missForest = get_classif_error(
     impu_dat = miss_res$ximp, truth = colon_use, observed = dat))
 #>               rx   sex obstruct perfor adhere differ extent  surg
-#> mdgc       0.609 0.491    0.185 0.0303 0.0928  0.290  0.149 0.210
+#> mdgc       0.592 0.474    0.185 0.0303 0.0928  0.290  0.149 0.210
 #> missForest 0.462 0.286    0.141 0.0202 0.1082  0.331  0.264 0.256
 
 rbind(

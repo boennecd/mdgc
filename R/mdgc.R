@@ -3,7 +3,18 @@
 #' Creates a mdgc object which is needed for estimation of the
 #' covariance matrix and to perform imputation.
 #'
-#' @param dat \code{\link{data.frame}} with continuous, ordinal, and binary
+#' @details
+#' It is important to use appropriate classes for the \code{\link{data.frame}}
+#' columns:
+#'
+#' \itemize{
+#'   \item{Continous variables: }{should be \code{\link{numeric}} or \code{\link{integer}}.}
+#'   \item{Binary variables: }{should be \code{\link{logical}}.}
+#'   \item{Multinomial variables: }{should be a \code{\link{factor}}.}
+#'   \item{Ordinal variables: }{should be a \code{\link{ordered}}.}
+#' }
+#'
+#' @param dat \code{\link{data.frame}} with continuous, multinomial, ordinal, and binary
 #' data.
 #' @importFrom stats na.omit
 #' @importFrom utils head
@@ -491,7 +502,6 @@ mdgc_fit <- function(ptr, vcov, mea, lr = 1e-3, rel_eps = 1e-3,
 
   multinomial <- attr(ptr, "multinomial")
   any_multinomial <- length(multinomial[[1L]]) > 0
-  stopifnot(!any_multinomial || method == "aug_Lagran")
 
   #####
   # assign functions to use
@@ -605,14 +615,16 @@ mdgc_fit <- function(ptr, vcov, mea, lr = 1e-3, rel_eps = 1e-3,
       val_mea = mea,
       batch_size = batch_size, maxit = maxit, seed = seed,
       epsilon = epsilon, alpha = lr, beta_1 = beta_1, beta_2 = beta_2,
-      maxpts = maxpts_use))
+      maxpts = maxpts_use, rescale_vcov = rescale_vcov,
+      get_free_vcov_inv = get_free_vcov_inv))
   else if(method == "svrg")
     return(svrg(
       par_fn = par_fn, nobs = nobs, val_vcov = .get_lchol(vcov),
       val_mea = mea,
       batch_size = batch_size, maxit = maxit, seed = seed, lr = lr,
       verbose = verbose, maxpts = maxpts_use, decay = decay,
-      conv_crit = conv_crit, rel_eps = rel_eps))
+      conv_crit = conv_crit, rel_eps = rel_eps, rescale_vcov = rescale_vcov,
+      get_free_vcov_inv = get_free_vcov_inv))
   else if(method != "aug_Lagran")
     stop(sprintf("Method '%s' is not implemented", method))
 
@@ -740,9 +752,13 @@ mdgc_fit <- function(ptr, vcov, mea, lr = 1e-3, rel_eps = 1e-3,
 #   seed: seed to use.
 #   epsilon, alpha, beta_1, beta_2: ADAM parameters.
 #   maxpts: maximum number of samples to draw.
+#   rescale_vcov: function to rescale the covariance matrix.
+#   get_free_vcov_inv: function to get the full covariance matrix which includes
+#   fixed parameters.
 adam <- function(par_fn, nobs, val_vcov, val_mea, batch_size, maxit = 10L,
                  seed = 1L, epsilon = 1e-8, alpha = .001, beta_1 = .9,
-                 beta_2 = .999, maxpts){
+                 beta_2 = .999, maxpts, rescale_vcov,
+                 get_free_vcov_inv){
   indices <- sample.int(nobs, replace = FALSE) - 1L
   blocks <- tapply(indices, (seq_along(indices) - 1L) %/% batch_size,
                    identity, simplify = FALSE)
@@ -796,15 +812,14 @@ adam <- function(par_fn, nobs, val_vcov, val_mea, batch_size, maxit = 10L,
       val <- val + alpha * m_hat / (sqrt(v_hat) + epsilon)
 
       # alter the covariance matrix part
-      # TODO: this has to change with multinomial variables
-      val[is_vcov] <- .get_lchol(cov2cor(.get_lchol_inv(val[is_vcov])))
+      val[is_vcov] <- .get_lchol(rescale_vcov(.get_lchol_inv(val[is_vcov])))
     }
 
     estimates[, k] <- val
   }
 
   list(result = list(
-    vcov = .get_lchol_inv(get_par_vcov(val)),
+    vcov = get_free_vcov_inv(.get_lchol_inv(get_par_vcov(val))),
     mea = get_par_mea(val)), estimates = estimates)
 }
 
@@ -826,9 +841,13 @@ adam <- function(par_fn, nobs, val_vcov, val_mea, batch_size, maxit = 10L,
 #   decay: numeric scalar used to decrease the learning rate.
 #   conv_crit: relative convergence threshold.
 #   rel_eps: relative error for each term.
+#   rescale_vcov: function to rescale the covariance matrix.
+#   get_free_vcov_inv: function to get the full covariance matrix which includes
+#   fixed parameters.
 svrg <- function(par_fn, nobs, val_vcov, val_mea, batch_size, maxit = 10L,
                  seed = 1L, lr, verbose = FALSE, maxpts, decay,
-                 conv_crit, rel_eps){
+                 conv_crit, rel_eps, rescale_vcov,
+                 get_free_vcov_inv){
   indices <- sample.int(nobs, replace = FALSE) - 1L
   blocks <- tapply(indices, (seq_along(indices) - 1L) %/% batch_size,
                    identity, simplify = FALSE)
@@ -887,8 +906,7 @@ svrg <- function(par_fn, nobs, val_vcov, val_mea, batch_size, maxit = 10L,
       val <- val + lr_use * dir
 
       # alter the covariance matrix part
-      # TODO: this has to change with multinomial variables
-      val[is_vcov] <- .get_lchol(cov2cor(.get_lchol_inv(val[is_vcov])))
+      val[is_vcov] <- .get_lchol(rescale_vcov(.get_lchol_inv(val[is_vcov])))
     }
 
     estimates[, k] <- val
@@ -909,7 +927,7 @@ svrg <- function(par_fn, nobs, val_vcov, val_mea, batch_size, maxit = 10L,
   }
 
   list(result = list(
-    vcov = .get_lchol_inv(get_par_vcov(val)),
+    vcov = get_free_vcov_inv(.get_lchol_inv(get_par_vcov(val))),
     mea = get_par_mea(val)), fun_vals = fun_vals[2:k],
     estimates = estimates[, 2:k, drop = FALSE])
 }
@@ -1089,11 +1107,11 @@ mdgc_impute <- function(object, vcov, mea, rel_eps = 1e-3, maxit = 10000L,
 #'                    n_threads = 1L, method = "aug_Lagran")
 #'
 #'   # compare the log-likelihood estimate
-#'   # TODO: add means
-#'   # obj <- get_mdgc_log_ml(retinopathy)
-#'   # cat(sprintf("Maximum log likelihood with SVRG vs. augmented Lagrangian:\n  %.2f vs. %.2f\n",
-#'   #             mdgc_log_ml(obj, vcov = impu    $vcov, rel_eps = 1e-3),
-#'   #             mdgc_log_ml(obj, vcov = impu_aug$vcov, rel_eps = 1e-3)))
+#'   obj <- get_mdgc_log_ml(retinopathy)
+#'   cat(sprintf(
+#'     "Maximum log likelihood with SVRG vs. augmented Lagrangian:\n  %.2f vs. %.2f\n",
+#'     mdgc_log_ml(obj, vcov = impu    $vcov, mea = impu    $mea, rel_eps = 1e-3),
+#'     mdgc_log_ml(obj, vcov = impu_aug$vcov, mea = impu_aug$mea, rel_eps = 1e-3)))
 #'
 #'   # show correlation matrix
 #'   cat("\nEstimated correlation matrix (augmented Lagrangian)\n")
@@ -1135,7 +1153,6 @@ mdgc <- function(dat, lr = 1e-3, maxit = 10L, batch_size = NULL,
   if(verbose)
     cat("Performing imputation...\n")
   impu <- mdgc_impute(mdgc_obj, vcov,
-                      # TODO: this has to change when the means are estimated
                       mea = mea,
                       rel_eps = irel_eps,
                       maxit = imaxit, abs_eps = iabs_eps,

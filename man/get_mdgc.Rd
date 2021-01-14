@@ -7,12 +7,23 @@
 get_mdgc(dat)
 }
 \arguments{
-\item{dat}{\code{\link{data.frame}} with continuous, ordinal, and binary
+\item{dat}{\code{\link{data.frame}} with continuous, multinomial, ordinal, and binary
 data.}
 }
 \description{
 Creates a mdgc object which is needed for estimation of the
 covariance matrix and to perform imputation.
+}
+\details{
+It is important to use appropriate classes for the \code{\link{data.frame}}
+columns:
+
+\itemize{
+  \item{Continous variables: }{should be \code{\link{numeric}} or \code{\link{integer}}.}
+  \item{Binary variables: }{should be \code{\link{logical}}.}
+  \item{Multinomial variables: }{should be a \code{\link{factor}}.}
+  \item{Ordinal variables: }{should be a \code{\link{ordered}}.}
+}
 }
 \seealso{
 \code{\link{get_mdgc_log_ml}}, \code{\link{mdgc_impute}}

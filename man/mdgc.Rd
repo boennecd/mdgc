@@ -32,7 +32,7 @@ mdgc(
 )
 }
 \arguments{
-\item{dat}{\code{\link{data.frame}} with continuous, ordinal, and binary
+\item{dat}{\code{\link{data.frame}} with continuous, multinomial, ordinal, and binary
 data.}
 
 \item{lr}{learning rate.}
@@ -135,11 +135,11 @@ if(require(catdata)){
                    n_threads = 1L, method = "aug_Lagran")
 
   # compare the log-likelihood estimate
-  # TODO: add means
-  # obj <- get_mdgc_log_ml(retinopathy)
-  # cat(sprintf("Maximum log likelihood with SVRG vs. augmented Lagrangian:\n  \%.2f vs. \%.2f\n",
-  #             mdgc_log_ml(obj, vcov = impu    $vcov, rel_eps = 1e-3),
-  #             mdgc_log_ml(obj, vcov = impu_aug$vcov, rel_eps = 1e-3)))
+  obj <- get_mdgc_log_ml(retinopathy)
+  cat(sprintf(
+    "Maximum log likelihood with SVRG vs. augmented Lagrangian:\n  \%.2f vs. \%.2f\n",
+    mdgc_log_ml(obj, vcov = impu    $vcov, mea = impu    $mea, rel_eps = 1e-3),
+    mdgc_log_ml(obj, vcov = impu_aug$vcov, mea = impu_aug$mea, rel_eps = 1e-3)))
 
   # show correlation matrix
   cat("\nEstimated correlation matrix (augmented Lagrangian)\n")
