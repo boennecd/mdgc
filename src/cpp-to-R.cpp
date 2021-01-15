@@ -256,16 +256,17 @@ Rcpp::NumericMatrix get_z_hat
          *  scale conditional on it being the greatest value. We set the
          *  other values to the median of a truncated normal distribution.
          */
-        int const obs_lvl = multinomial_j.at(0, k) - 1,
-              idx_obs_lvl = obs_lvl + i,
-                   n_lvls = multinomial_j.at(1, k);
-        bool const is_first = obs_lvl == 0L;
+        int const n_lvls = multinomial_j.at(1, k);
 
         if(code.at(i, j) == 1L)
           // the value is missing
           for(int l = 0; l < n_lvls; ++l, ++i, ++oj)
             *oj = upper.at(i, j);
         else {
+          int const obs_lvl = multinomial_j.at(0, k) - 1,
+                idx_obs_lvl = obs_lvl + i;
+          bool const is_first = obs_lvl == 0L;
+
           double const val_obs = qnorm_w(
             static_cast<double>(n_lvls) / (n_lvls + 1.),
             -upper.at(idx_obs_lvl, j), is_first ? 1e-8 : 1., 1L, 0L);

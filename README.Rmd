@@ -1,5 +1,7 @@
 ---
-output: github_document
+output:
+  github_document:
+    pandoc_args: --webtex=https://render.githubusercontent.com/render/math?math=
 bibliography: ref.bib
 ---
 
@@ -19,11 +21,13 @@ Travis](https://travis-ci.org/boennecd/mdgc.svg?branch=master,osx)](https://trav
 
 This package contains a marginal likelihood approach to estimating the 
 model discussed by @hoff07 and @zhao19. That is, a missing data approach
-where one uses Gaussian copulas. We have modified the Fortran
+where one uses Gaussian copulas in the latter case. 
+We have modified the Fortran
 code by @Genz02 to supply an approximation of the gradient for the log 
 marginal likelihood and to use an approximation of the marginal likelihood 
 similar to the CDF approximation in @Genz02. We have also used the same 
-Fortran code to perform the imputation conditional on a correlation matrix.
+Fortran code to perform the imputation conditional on a covariance matrix
+and the observed data.
 Slides from a presentation on the packages is provided at 
 [rpubs.com/boennecd/Gaussian-copula-KTH](https://rpubs.com/boennecd/Gaussian-copula-KTH)
 and paper has not been published yet. 
@@ -37,7 +41,62 @@ the methods are directly applicable to other Gaussian copula models and some
 mixed effect models. All methods are implemented in C++, support computation 
 in parallel, and should easily be able to be ported to other languages. 
 
-## Example
+## Installation
+The packages can be installed from Github by calling:
+
+```{r, eval = FALSE}
+remotes::install_github("boennecd/mdgc")
+```
+
+## The Model
+We observe four types of variables for each observation: continuous, 
+binary, ordinal, and multinomial variables. Let $\vec X_i$ be a K
+dimensional vector for the i'th observation. The variables $X_{ij}$ are 
+continuous 
+if $j\in\mathcal C$, binary if $j\in\mathcal B$ with probability $p_j$ of 
+being true, ordinal if $j\in\mathcal O$ with $m_j$ levels and borders 
+$\alpha_{j0} = -\infty < \alpha_1<\cdots < \alpha_{m_j} = \infty$, and 
+multinomial if $j\in\mathcal M$ with $m_j$ levels. $\mathcal C$, 
+$\mathcal B$, $\mathcal O$, and $\mathcal M$ are mutually exclusive.
+
+We assume that there is
+a latent variable $\vec Z_i$ which is multivariate normally distributed such 
+that:
+
+<!-- $$ -->
+<!-- \begin{align*} -->
+<!-- \vec Z_i & \sim N\left(\vec\mu, -->
+<!--   \Sigma\right) \nonumber\\ -->
+<!-- X_{ij} &= f_j(Z_{ih(j)}) & j &\in \mathcal C \\ -->
+<!-- X_{ij} &= \begin{cases} -->
+<!--   1 & Z_{ij} > \underbrace{-\Phi^{-1}(p_{j})}_{\mu_{h(j)}} \\ -->
+<!--   0 & \text{otherwise}   -->
+<!-- \end{cases} & j &\in \mathcal B \\ -->
+<!-- X_{ij} &= k\Leftrightarrow \alpha_{jk} < Z_{ih(j)} \leq \alpha_{j,k + 1} -->
+<!--   & j &\in \mathcal O\wedge k = 0,\dots m_j -1 \\ -->
+<!-- X_{ij} &= k \Leftrightarrow Z_{i,h(j) + k} \geq -->
+<!--   \max(Z_{ih(j)},\cdots,Z_{i,h(j) + m_j - 1}) -->
+<!--   & j&\in \mathcal M \wedge k = 0,\dots m_j -1 -->
+<!-- \end{align*} -->
+<!-- $$ -->
+
+$$\begin{align*}  \vec Z_i & \sim N\left(\vec\mu,    \Sigma\right) \nonumber\\  X_{ij} &= f_j(Z_{ih(j)}) & j &\in \mathcal C \\  X_{ij} &= 1_{\{Z_{ih(j)} > \underbrace{-\Phi^{-1}(p_{j})}_{\mu_{h(j)}}\}} & j &\in \mathcal B \\  X_{ij} &= k\Leftrightarrow \alpha_{jk} < Z_{ih(j)} \leq \alpha_{j,k + 1}    & j &\in \mathcal O\wedge k = 0,\dots m_j -1 \\  X_{ij} &= k \Leftrightarrow Z_{i,h(j) + k} \geq    \max(Z_{ih(j)},\cdots,Z_{i,h(j) + m_j - 1})    & j&\in \mathcal M \wedge k = 0,\dots m_j -1  \end{align*}$$
+
+where $1_{\{\cdot\}}$ is one if the condition in the subscript is true and zero 
+otherwise, $h(j)$ is a map to the index of the first latent variable associated with 
+the j'th variable in $\vec X_i$ and $f_j$ is a bijective function. We only 
+estimate some of the means, the $\vec\mu$, and some of the covariance 
+parameters. Furthermore, we set $Z_{ih(j)} = 0$ if $j\in\mathcal M$ and assume
+that the variable is uncorrelated with all the other $\vec Z_i$'s.
+
+In principle, we could use other distributions than a multivariate normal 
+distribution for $\vec Z_i$. However, the multivariate normal distribution
+has the advantage that it is very easy to marginalize which is convenient when 
+we have to estimate the model with missing entries and it is also has some 
+computational advantages for approximating the log marginal likelihood as 
+similar intractable problem have been thoroughly studied.
+
+## Examples
 Below, we provide an example similar to @zhao19 [Section 7.1]. The authors 
 use a data set with a random correlation matrix, 5 continuous variables, 
 5 binary variables, and 5 ordinal variables with 5 levels. There is a total 
@@ -63,13 +122,6 @@ suggested by @zhao19.
 
 The last section called [adding multinomial variables](#adding-multinomial-variables)
 covers data sets which also have multinomial variables.
-
-## Installation
-The packages can be installed from Github by calling:
-
-```{r, eval = FALSE}
-remotes::install_github("boennecd/mdgc")
-```
 
 ## Quick Example
 

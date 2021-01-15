@@ -6,13 +6,14 @@ Travis](https://travis-ci.org/boennecd/mdgc.svg?branch=master,osx)](https://trav
 
 This package contains a marginal likelihood approach to estimating the
 model discussed by Hoff (2007) and Zhao and Udell (2019). That is, a
-missing data approach where one uses Gaussian copulas. We have modified
-the Fortran code by Genz and Bretz (2002) to supply an approximation of
-the gradient for the log marginal likelihood and to use an approximation
-of the marginal likelihood similar to the CDF approximation in Genz and
-Bretz (2002). We have also used the same Fortran code to perform the
-imputation conditional on a correlation matrix. Slides from a
-presentation on the packages is provided at
+missing data approach where one uses Gaussian copulas in the latter
+case. We have modified the Fortran code by Genz and Bretz (2002) to
+supply an approximation of the gradient for the log marginal likelihood
+and to use an approximation of the marginal likelihood similar to the
+CDF approximation in Genz and Bretz (2002). We have also used the same
+Fortran code to perform the imputation conditional on a covariance
+matrix and the observed data. Slides from a presentation on the packages
+is provided at
 [rpubs.com/boennecd/Gaussian-copula-KTH](https://rpubs.com/boennecd/Gaussian-copula-KTH)
 and paper has not been published yet.
 
@@ -27,7 +28,131 @@ mixed effect models. All methods are implemented in C++, support
 computation in parallel, and should easily be able to be ported to other
 languages.
 
-## Example
+## Installation
+
+The packages can be installed from Github by calling:
+
+``` r
+remotes::install_github("boennecd/mdgc")
+```
+
+## The Model
+
+We observe four types of variables for each observation: continuous,
+binary, ordinal, and multinomial variables. Let ![\\vec
+X\_i](https://render.githubusercontent.com/render/math?math=%5Cvec%20X_i
+"\\vec X_i") be a K dimensional vector for the i’th observation. The
+variables
+![X\_{ij}](https://render.githubusercontent.com/render/math?math=X_%7Bij%7D
+"X_{ij}") are continuous if ![j\\in\\mathcal
+C](https://render.githubusercontent.com/render/math?math=j%5Cin%5Cmathcal%20C
+"j\\in\\mathcal C"), binary if ![j\\in\\mathcal
+B](https://render.githubusercontent.com/render/math?math=j%5Cin%5Cmathcal%20B
+"j\\in\\mathcal B") with probability
+![p\_j](https://render.githubusercontent.com/render/math?math=p_j "p_j")
+of being true, ordinal if ![j\\in\\mathcal
+O](https://render.githubusercontent.com/render/math?math=j%5Cin%5Cmathcal%20O
+"j\\in\\mathcal O") with
+![m\_j](https://render.githubusercontent.com/render/math?math=m_j "m_j")
+levels and borders ![\\alpha\_{j0} = -\\infty \< \\alpha\_1\<\\cdots \<
+\\alpha\_{m\_j} =
+\\infty](https://render.githubusercontent.com/render/math?math=%5Calpha_%7Bj0%7D%20%3D%20-%5Cinfty%20%3C%20%5Calpha_1%3C%5Ccdots%20%3C%20%5Calpha_%7Bm_j%7D%20%3D%20%5Cinfty
+"\\alpha_{j0} = -\\infty \< \\alpha_1\<\\cdots \< \\alpha_{m_j} = \\infty"),
+and multinomial if ![j\\in\\mathcal
+M](https://render.githubusercontent.com/render/math?math=j%5Cin%5Cmathcal%20M
+"j\\in\\mathcal M") with
+![m\_j](https://render.githubusercontent.com/render/math?math=m_j "m_j")
+levels. ![\\mathcal
+C](https://render.githubusercontent.com/render/math?math=%5Cmathcal%20C
+"\\mathcal C"), ![\\mathcal
+B](https://render.githubusercontent.com/render/math?math=%5Cmathcal%20B
+"\\mathcal B"), ![\\mathcal
+O](https://render.githubusercontent.com/render/math?math=%5Cmathcal%20O
+"\\mathcal O"), and ![\\mathcal
+M](https://render.githubusercontent.com/render/math?math=%5Cmathcal%20M
+"\\mathcal M") are mutually exclusive.
+
+We assume that there is a latent variable ![\\vec
+Z\_i](https://render.githubusercontent.com/render/math?math=%5Cvec%20Z_i
+"\\vec Z_i") which is multivariate normally distributed such that:
+
+<!-- $$ -->
+
+<!-- \begin{align*} -->
+
+<!-- \vec Z_i & \sim N\left(\vec\mu, -->
+
+<!--   \Sigma\right) \nonumber\\ -->
+
+<!-- X_{ij} &= f_j(Z_{ih(j)}) & j &\in \mathcal C \\ -->
+
+<!-- X_{ij} &= \begin{cases} -->
+
+<!--   1 & Z_{ij} > \underbrace{-\Phi^{-1}(p_{j})}_{\mu_{h(j)}} \\ -->
+
+<!--   0 & \text{otherwise}   -->
+
+<!-- \end{cases} & j &\in \mathcal B \\ -->
+
+<!-- X_{ij} &= k\Leftrightarrow \alpha_{jk} < Z_{ih(j)} \leq \alpha_{j,k + 1} -->
+
+<!--   & j &\in \mathcal O\wedge k = 0,\dots m_j -1 \\ -->
+
+<!-- X_{ij} &= k \Leftrightarrow Z_{i,h(j) + k} \geq -->
+
+<!--   \max(Z_{ih(j)},\cdots,Z_{i,h(j) + m_j - 1}) -->
+
+<!--   & j&\in \mathcal M \wedge k = 0,\dots m_j -1 -->
+
+<!-- \end{align*} -->
+
+<!-- $$ -->
+
+  
+![\\begin{align\*} \\vec Z\_i & \\sim N\\left(\\vec\\mu, \\Sigma\\right)
+\\nonumber\\\\ X\_{ij} &= f\_j(Z\_{ih(j)}) & j &\\in \\mathcal C \\\\
+X\_{ij} &= 1\_{\\{Z\_{ih(j)} \>
+\\underbrace{-\\Phi^{-1}(p\_{j})}\_{\\mu\_{h(j)}}\\}} & j &\\in
+\\mathcal B \\\\ X\_{ij} &= k\\Leftrightarrow \\alpha\_{jk} \<
+Z\_{ih(j)} \\leq \\alpha\_{j,k + 1} & j &\\in \\mathcal O\\wedge k
+= 0,\\dots m\_j -1 \\\\ X\_{ij} &= k \\Leftrightarrow Z\_{i,h(j) + k}
+\\geq \\max(Z\_{ih(j)},\\cdots,Z\_{i,h(j) + m\_j - 1}) & j&\\in
+\\mathcal M \\wedge k = 0,\\dots m\_j -1
+\\end{align\*}](https://render.githubusercontent.com/render/math?math=%5Cbegin%7Balign%2A%7D%20%20%5Cvec%20Z_i%20%26%20%5Csim%20N%5Cleft%28%5Cvec%5Cmu%2C%20%20%20%20%5CSigma%5Cright%29%20%5Cnonumber%5C%5C%20%20X_%7Bij%7D%20%26%3D%20f_j%28Z_%7Bih%28j%29%7D%29%20%26%20j%20%26%5Cin%20%5Cmathcal%20C%20%5C%5C%20%20X_%7Bij%7D%20%26%3D%201_%7B%5C%7BZ_%7Bih%28j%29%7D%20%3E%20%5Cunderbrace%7B-%5CPhi%5E%7B-1%7D%28p_%7Bj%7D%29%7D_%7B%5Cmu_%7Bh%28j%29%7D%7D%5C%7D%7D%20%26%20j%20%26%5Cin%20%5Cmathcal%20B%20%5C%5C%20%20X_%7Bij%7D%20%26%3D%20k%5CLeftrightarrow%20%5Calpha_%7Bjk%7D%20%3C%20Z_%7Bih%28j%29%7D%20%5Cleq%20%5Calpha_%7Bj%2Ck%20%2B%201%7D%20%20%20%20%26%20j%20%26%5Cin%20%5Cmathcal%20O%5Cwedge%20k%20%3D%200%2C%5Cdots%20m_j%20-1%20%5C%5C%20%20X_%7Bij%7D%20%26%3D%20k%20%5CLeftrightarrow%20Z_%7Bi%2Ch%28j%29%20%2B%20k%7D%20%5Cgeq%20%20%20%20%5Cmax%28Z_%7Bih%28j%29%7D%2C%5Ccdots%2CZ_%7Bi%2Ch%28j%29%20%2B%20m_j%20-%201%7D%29%20%20%20%20%26%20j%26%5Cin%20%5Cmathcal%20M%20%5Cwedge%20k%20%3D%200%2C%5Cdots%20m_j%20-1%20%20%5Cend%7Balign%2A%7D
+"\\begin{align*}  \\vec Z_i & \\sim N\\left(\\vec\\mu,    \\Sigma\\right) \\nonumber\\\\  X_{ij} &= f_j(Z_{ih(j)}) & j &\\in \\mathcal C \\\\  X_{ij} &= 1_{\\{Z_{ih(j)} \> \\underbrace{-\\Phi^{-1}(p_{j})}_{\\mu_{h(j)}}\\}} & j &\\in \\mathcal B \\\\  X_{ij} &= k\\Leftrightarrow \\alpha_{jk} \< Z_{ih(j)} \\leq \\alpha_{j,k + 1}    & j &\\in \\mathcal O\\wedge k = 0,\\dots m_j -1 \\\\  X_{ij} &= k \\Leftrightarrow Z_{i,h(j) + k} \\geq    \\max(Z_{ih(j)},\\cdots,Z_{i,h(j) + m_j - 1})    & j&\\in \\mathcal M \\wedge k = 0,\\dots m_j -1  \\end{align*}")  
+
+where
+![1\_{\\{\\cdot\\}}](https://render.githubusercontent.com/render/math?math=1_%7B%5C%7B%5Ccdot%5C%7D%7D
+"1_{\\{\\cdot\\}}") is one if the condition in the subscript is true and
+zero otherwise,
+![h(j)](https://render.githubusercontent.com/render/math?math=h%28j%29
+"h(j)") is a map to the index of the first latent variable associated
+with the j’th variable in ![\\vec
+X\_i](https://render.githubusercontent.com/render/math?math=%5Cvec%20X_i
+"\\vec X_i") and
+![f\_j](https://render.githubusercontent.com/render/math?math=f_j "f_j")
+is a bijective function. We only estimate some of the means, the
+![\\vec\\mu](https://render.githubusercontent.com/render/math?math=%5Cvec%5Cmu
+"\\vec\\mu"), and some of the covariance parameters. Furthermore, we set
+![Z\_{ih(j)}
+= 0](https://render.githubusercontent.com/render/math?math=Z_%7Bih%28j%29%7D%20%3D%200
+"Z_{ih(j)} = 0") if ![j\\in\\mathcal
+M](https://render.githubusercontent.com/render/math?math=j%5Cin%5Cmathcal%20M
+"j\\in\\mathcal M") and assume that the variable is uncorrelated with
+all the other ![\\vec
+Z\_i](https://render.githubusercontent.com/render/math?math=%5Cvec%20Z_i
+"\\vec Z_i")’s.
+
+In principle, we could use other distributions than a multivariate
+normal distribution for ![\\vec
+Z\_i](https://render.githubusercontent.com/render/math?math=%5Cvec%20Z_i
+"\\vec Z_i"). However, the multivariate normal distribution has the
+advantage that it is very easy to marginalize which is convenient when
+we have to estimate the model with missing entries and it is also has
+some computational advantages for approximating the log marginal
+likelihood as similar intractable problem have been thoroughly studied.
+
+## Examples
 
 Below, we provide an example similar to Zhao and Udell (2019 Section
 7.1). The authors use a data set with a random correlation matrix, 5
@@ -54,14 +179,6 @@ we compare with the method suggested by Zhao and Udell (2019).
 The last section called [adding multinomial
 variables](#adding-multinomial-variables) covers data sets which also
 have multinomial variables.
-
-## Installation
-
-The packages can be installed from Github by calling:
-
-``` r
-remotes::install_github("boennecd/mdgc")
-```
 
 ## Quick Example
 
