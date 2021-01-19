@@ -127,14 +127,13 @@ class cdf {
   arma::ivec infin;
   arma::ivec indices;
 
-  arma::vec lower = arma::vec(dmem.get_mem() , ndim, false),
-            upper = arma::vec(lower.end()    , ndim, false),
-       sigma_chol = arma::vec(upper.end()    , (ndim * (ndim + 1L)) / 2L,
-                           false),
-                           draw = arma::vec(sigma_chol.end(), ndim, false);
+  double * const lower = dmem.get_mem(),
+         * const upper = lower + ndim,
+    * const sigma_chol = upper + ndim,
+    * const draw       = sigma_chol + (ndim * (ndim + 1L)) / 2L,
+    * const dtmp_mem   = draw + ndim;
   // memory that can be used
   int * const itmp_mem = indices.end();
-  double * const dtmp_mem = draw.end();
 
 public:
   /**
@@ -197,20 +196,12 @@ public:
       return out;
     };
 
-    arma::vec sds(get_dmem(ndim), ndim, false),
-    mu (get_dmem(ndim), ndim, false);
+    double * sds = get_dmem(ndim);
     for(int i = 0; i < ndim; ++i){
       sds[i] = std::sqrt(sigma_in.at(i, i));
-      mu [i] = mu_in[i] / sds[i];
+      lower[i] = (lower_in[i] - mu_in[i]) / sds[i];
+      upper[i] = (upper_in[i] - mu_in[i]) / sds[i];
     }
-
-    lower  = lower_in;
-    lower /= sds;
-    lower -= mu;
-
-    upper  = upper_in;
-    upper /= sds;
-    upper -= mu;
 
     is_permutated = false;
     {
@@ -220,12 +211,12 @@ public:
     }
 
     if(do_reorder and ndim > 1L){
-      double * const y     = draw.begin(),
+      double * const y     = draw,
              * const A     = get_dmem(ndim),
              * const B     = get_dmem(ndim),
-             * const DL    = sds.begin(),
-             * const delta = mu.begin();
-      sds.zeros();
+             * const DL    = sds,
+             * const delta = get_dmem(ndim);
+      std::fill(sds, sds + ndim, 0.);
 
       auto const correl = pmvnorm::get_cor_vec(sigma_in);
       int const pivot = 1L, doscale = 1L;
@@ -235,9 +226,9 @@ public:
       arma::ivec infi(itmp_mem, ndim, false);
 
       F77_CALL(mvsort)(
-        &ndim, lower.memptr(), upper.memptr(), delta,
+        &ndim, lower, upper, delta,
         correl.cor_vec.memptr(), infin.begin(), y, &pivot, &nddim, A, B,
-        DL, sigma_chol.memptr(), infi.memptr(), &F_inform, indices.begin(),
+        DL, sigma_chol, infi.memptr(), &F_inform, indices.begin(),
         &doscale);
 
       if(F_inform != 0)
@@ -252,8 +243,8 @@ public:
 
       if(is_permutated){
         for(int i = 0; i < ndim; ++i){
-          lower[i] = *(A + i);
-          upper[i] = *(B + i);
+          lower[i] = A[i];
+          upper[i] = B[i];
           infin[i] = infi[i];
         }
 
@@ -261,31 +252,34 @@ public:
         for(int j = 0; j < ndim; ++j)
           for(int i = 0; i < ndim; ++i)
             sigma_permu.at(i, j) = sigma_in.at(indices[i], indices[j]);
-        functor.prep_permutated(sigma_permu, indices.begin());
+        functor.prep_sim(sigma_permu, indices.begin(), true);
         return;
 
       } else
         for(int i = 0; i < ndim; ++i){
-          lower[i] = *(A + i);
-          upper[i] = *(B + i);
+          lower[i] = A[i];
+          upper[i] = B[i];
         }
 
     } else if(!do_reorder and ndim > 1L) {
       arma::mat tmp(get_dmem(ndim * ndim), ndim, ndim, false);
 
       tmp = sigma_in;
-      tmp.each_row() /= sds.t();
-      tmp.each_col() /= sds;
+      for(int i = 0; i < ndim; ++i)
+        for(int j = 0; j <ndim; ++j)
+          tmp.at(i, j) /= sds[i] * sds[j];
+
       if(!arma::chol(tmp, tmp)) // TODO: memory allocation
-        sigma_chol.fill(std::numeric_limits<double>::infinity());
+        std::fill(sigma_chol, sigma_chol + (ndim * (ndim + 1L)) / 2L,
+                  std::numeric_limits<double>::infinity());
       else
-        copy_upper_tri(tmp, sigma_chol.memptr());
+        copy_upper_tri(tmp, sigma_chol);
 
       if(ndim > 1L){
-        /* rescale such that choleksy decomposition has ones in the diagonal */
-        double * sc = sigma_chol.begin();
+        /* re-scale such that Cholesky decomposition has ones in the diagonal */
+        double * sc = sigma_chol;
         for(int i = 0; i < ndim; ++i){
-          double const scal = *(sc + i);
+          double const scal = sc[i];
           lower[i] /= scal;
           upper[i] /= scal;
           double * const sc_end = sc + i + 1L;
@@ -293,7 +287,10 @@ public:
             *sc /= scal;
         }
       }
-    }
+    } else
+      *sigma_chol = 1.;
+
+    functor.prep_sim(sigma_in, indices.begin(), false);
   }
 
   /**
@@ -315,12 +312,12 @@ public:
 #endif
 
     double * const __restrict__ out = integrand_val,
-           * const __restrict__ dr  = draw.begin();
+           * const __restrict__ dr  = draw;
 
     double w(1.);
-    double const * __restrict__ sc   = sigma_chol.begin(),
-                 * __restrict__ lw   = lower.begin(),
-                 * __restrict__ up   = upper.begin(),
+    double const * __restrict__ sc   = sigma_chol,
+                 * __restrict__ lw   = lower,
+                 * __restrict__ up   = upper,
                  * __restrict__ unif = unifs;
     int const *infin_j = infin.begin();
     /* loop over variables and transform them to truncated normal
@@ -350,7 +347,7 @@ public:
         w *= lim_u - lim_l;
         if(needs_last_unif() or j + 1 < ndim){
           double const quant_val = lim_l + *unif * (lim_u - lim_l);
-          *(dr + j) =
+          dr[j] =
             use_aprx ?
             safe_qnorm_aprx(quant_val) :
             safe_qnorm_w   (quant_val);
@@ -364,7 +361,7 @@ public:
       }
     }
 
-    /* evaluate the integrand and weigth the result. */
+    /* evaluate the integrand and weight the result. */
     functor(dr, out, indices.begin(), is_permutated);
 
     double * o = out;
@@ -424,8 +421,8 @@ public:
       return functor.get_output(int_apprx, 0, 0, 0,
                                 indices.begin());
 
-    } else if(std::isinf(*sigma_chol.begin()))
-      throw std::runtime_error("std::isinf(*sigma_chol.begin())");
+    } else if(std::isinf(*sigma_chol))
+      throw std::runtime_error("std::isinf(*sigma_chol)");
 
     /* perform the approximation */
     auto res = rand_Korobov<cdf<T_Functor> >::comp(
@@ -504,7 +501,7 @@ public:
                       int const *){
     return out_type { minvls, inform, abserr, *res };
   }
-  inline void prep_permutated(arma::mat const&, int const *) { }
+  inline void prep_sim(arma::mat const&, int const *, bool const) { }
 };
 
 /**
@@ -520,11 +517,11 @@ class deriv {
    * points to the upper triangular part of the inverse of the Cholesky
    * decomposition.
    */
-  double * sigma_chol_inv;
+  double * const sigma_chol_inv = dmem.get_mem() + 2L * ndim * ndim;
   /// points to the upper triangular part of the inverse.
-  double * sig_inv;
+  double * const sig_inv = sigma_chol_inv + (ndim * (ndim + 1)) / 2;
   /// working memory to be used by cdf
-  double * cdf_mem;
+  double * const cdf_mem = sig_inv + (ndim * (ndim + 1)) / 2;
 
   inline void deriv_integrand_inner_loop
     (double * __restrict__ o, double const * __restrict__ lhs,
@@ -555,37 +552,21 @@ public:
    Note that alloc_mem must have been called before calling this method.
    */
   deriv(arma::vec const &mu, arma::mat const &sig):
-  ndim(mu.n_elem) {
-    // create the objects we need
-    arma::mat t1(dmem.get_mem(), ndim, ndim, false),
-              t2(t1.end()      , ndim, ndim, false);
-    if(!arma::chol(t1, sig))
-      throw std::runtime_error("deriv::deriv: chol failed");
-    if(!arma::inv(t2, t1))
-      throw std::runtime_error("deriv::deriv: inv failed");
-    sigma_chol_inv = t2.end();
-    copy_upper_tri(t2, sigma_chol_inv);
+  ndim(mu.n_elem) { }
 
-    if(!arma::inv_sympd(t1, sig))
-      throw std::runtime_error("deriv::deriv: inv_sympd failed");
-    sig_inv = sigma_chol_inv + (ndim * (ndim + 1)) / 2;
-    copy_upper_tri(t1, sig_inv);
-
-    cdf_mem = sig_inv + (ndim * (ndim + 1)) / 2;
-  }
-
-  void prep_permutated(arma::mat const &sigma_permu, int const *) {
+  void prep_sim(arma::mat const &sigma_permu, int const *,
+                bool const is_permuted) {
     // need to re-compute the inverse of the Cholesky decomposition
     arma::mat t1(dmem.get_mem(), ndim, ndim, false),
               t2(t1.end()      , ndim, ndim, false);
     if(!arma::chol(t1, sigma_permu))
-      throw std::runtime_error("deriv::prep_permutated: chol failed");
+      throw std::runtime_error("deriv::prep_sim: chol failed");
     if(!arma::inv(t2, t1))
-      throw std::runtime_error("deriv::prep_permutated: inv failed");
+      throw std::runtime_error("deriv::prep_sim: inv failed");
     copy_upper_tri(t2, sigma_chol_inv);
 
     if(!arma::inv_sympd(t1, sigma_permu))
-      throw std::runtime_error("deriv::prep_permutated: inv_sympd failed");
+      throw std::runtime_error("deriv::prep_sim: inv_sympd failed");
     copy_upper_tri(t1, sig_inv);
   }
 
@@ -614,14 +595,13 @@ public:
     *out = 1.;
     std::fill(out + 1L, out + n_elem, 0.);
 
-
     double * const mean_part_begin = out + 1L;
     /* Multiplying by the inverse matrix is fast but not smart
      * numerically. */
     double const * sigma_chol_inv_ck = sigma_chol_inv;
     for(unsigned c = 0; c < p; ++c){
       double const mult = *(draw + c),
-        * const end = mean_part_begin + c + 1L;
+            * const end = mean_part_begin + c + 1L;
       for(double *rhs = mean_part_begin; rhs != end;
           ++rhs, ++sigma_chol_inv_ck)
         *rhs += mult * *sigma_chol_inv_ck;
@@ -710,7 +690,7 @@ public:
       return r + (c * (c + 1L)) / 2L;
     };
 
-    /* permutate back and return */
+    /* permute back and return */
     for(int c = 0; c < ndim; ++c){
       int const org_c = indices[c];
       cmu[org_c] = dmu[c];
@@ -923,26 +903,23 @@ public:
   imputation(std::vector<type_base const *> const &cur_list,
              arma::vec const &mu, arma::mat const &Sig):
     cur_list(cur_list), ndim(mu.n_elem) {
-    /* set the mean vector and the Cholesky decomposition of the random
-     * of the random effects. */
+    /* set the mean vector. */
     std::copy(mu.begin(), mu.end(), mu_vec);
-
-    arma::mat tmp_mat(xtr_mem, ndim, ndim, false, true);
-    if(!arma::chol(tmp_mat, Sig))
-      throw std::runtime_error("imputation::imputation: chol failed");
-    copy_upper_tri(tmp_mat, sig_chol);
   }
 
-  void prep_permutated
-    (arma::mat const &sigma_permu, int const *indices){
+  void prep_sim
+    (arma::mat const &sigma_permu, int const *indices, bool const is_permuted){
     // permute the mean vector, the covariance matrix, and the cur_list
     arma::mat tmp_mat(xtr_mem, ndim, ndim, false, true);
     if(!arma::chol(tmp_mat, sigma_permu))
-      throw std::runtime_error("imputation::prep_permutated: chol failed");
+      throw std::runtime_error("imputation::prep_sim: chol failed");
     copy_upper_tri(tmp_mat, sig_chol);
 
+    if(!is_permuted)
+      return;
+
     for(int i = 0; i < ndim; ++i)
-      // we do not use this memory now as of this writting
+      // we do not use this memory now as of this writing
       cdf_mem[i] = mu_vec[indices[i]];
     std::copy(cdf_mem, cdf_mem + ndim, mu_vec);
   }
@@ -971,7 +948,7 @@ public:
   (double const * __restrict__ draw, double * __restrict__ out,
    int const *indices, bool const is_permutated){
     double *scale_draw = xtr_mem;
-    std::copy(mu_vec, mu_vec + ndim, scale_draw);
+    std::fill(scale_draw, scale_draw + ndim, 0.);
 
     {
       // re-scale
@@ -984,7 +961,11 @@ public:
       }
     }
 
-    // permutate
+    // re-locate
+    for(int i = 0; i < ndim; ++i)
+      scale_draw[i] += mu_vec[i];
+
+    // permute
     double *scale_draw_permu = nullptr;
     if(is_permutated){
       scale_draw_permu = scale_draw + ndim;
