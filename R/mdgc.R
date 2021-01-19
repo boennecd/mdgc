@@ -167,8 +167,13 @@ get_mdgc <- function(dat){
     # a multinomial variable
     idx + seq_along(meas)
   }, meas = means, idx = idx, SIMPLIFY = FALSE)
+
   means <- unlist(means)
+  if(is.null(means))
+    means <- numeric()
   idx_non_zero_mean <- unlist(idx_non_zero_mean)
+  if(is.null(idx_non_zero_mean))
+    idx_non_zero_mean <- integer()
 
   structure(list(
     lower = lower, upper = upper, code = code, margs = margs,
@@ -666,10 +671,13 @@ mdgc_fit <- function(ptr, vcov, mea, lr = 1e-3, rel_eps = 1e-3,
 
   # functions to return the parameters for the mean and the covariance
   # matrix
+  n_mea <- length(idx_non_zero_mean)
   get_par_vcov <- function(par)
-    head(par, -length(idx_non_zero_mean))
+    if(n_mea > 0)
+      head(par, -n_mea) else par
   get_par_mea <- function(par)
-    tail(par,  length(idx_non_zero_mean))
+    if(n_mea > 0)
+      tail(par,  n_mea) else numeric()
 
   # assign function for the augmented problem
   indices <- 0:(nobs - 1L)
@@ -770,9 +778,11 @@ adam <- function(par_fn, nobs, val_vcov, val_mea, batch_size, maxit = 10L,
   # assign function to get the mean and covariance matrix parameters
   n_mea <- length(val_mea)
   get_par_vcov <- function(par)
-    head(par, -n_mea)
+    if(n_mea > 0)
+      head(par, -n_mea) else par
   get_par_mea <- function(par)
-    tail(par,  n_mea)
+    if(n_mea > 0)
+      tail(par,  n_mea) else numeric()
 
   # assign wrapper for par_fn
   par_fn_wrap <- function(val, comp_derivs, ...){
@@ -859,9 +869,11 @@ svrg <- function(par_fn, nobs, val_vcov, val_mea, batch_size, maxit = 10L,
   # assign function to get the mean and covariance matrix parameters
   n_mea <- length(val_mea)
   get_par_vcov <- function(par)
-    head(par, -n_mea)
+    if(n_mea > 0)
+      head(par, -n_mea) else par
   get_par_mea <- function(par)
-    tail(par,  n_mea)
+    if(n_mea > 0)
+      tail(par,  n_mea) else numeric()
 
   # assign wrapper for par_fn
   par_fn_wrap <- function(val, comp_derivs, ...){
