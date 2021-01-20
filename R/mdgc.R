@@ -146,8 +146,8 @@ get_mdgc <- function(dat){
   }
 
   # get the true values (needed for imputation)
-  truth <- t(matrix(as.numeric(unlist(dat)), NROW(dat), NCOL(dat),
-                    dimnames = dimnames(dat)))
+  truth <- t(sapply(dat, as.numeric))
+  dimnames(truth) <- rev(dimnames(dat))
 
   # get the non-zero means
   means <- sapply(
