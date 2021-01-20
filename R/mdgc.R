@@ -771,9 +771,12 @@ adam <- function(par_fn, nobs, val_vcov, val_mea, batch_size, maxit = 10L,
                  seed = 1L, epsilon = 1e-8, alpha = .001, beta_1 = .9,
                  beta_2 = .999, maxpts, rescale_vcov,
                  get_free_vcov_inv){
-  indices <- sample.int(nobs, replace = FALSE) - 1L
-  blocks <- tapply(indices, (seq_along(indices) - 1L) %/% batch_size,
-                   identity, simplify = FALSE)
+  n_blocks <- max(1L, ceiling(nobs / batch_size))
+  get_blocks <- function(){
+    indices <- sample.int(nobs, replace = FALSE) - 1L
+    blocks <- tapply(indices, (seq_along(indices) - 1L) %% n_blocks,
+                     identity, simplify = FALSE)
+  }
 
   # assign function to get the mean and covariance matrix parameters
   n_mea <- length(val_mea)
@@ -797,7 +800,6 @@ adam <- function(par_fn, nobs, val_vcov, val_mea, batch_size, maxit = 10L,
   val <- c(val_vcov, val_mea)
   is_vcov <- seq_along(val_vcov)
 
-  n_blocks <- length(blocks)
   n_par <- length(val)
   m <- v <- numeric(n_par)
   fun_vals <- numeric(maxit)
@@ -805,6 +807,7 @@ adam <- function(par_fn, nobs, val_vcov, val_mea, batch_size, maxit = 10L,
   i <- -1L
 
   for(k in 1:maxit){
+    blocks <- get_blocks()
     for(ii in 1:n_blocks){
       i <- i + 1L
       idx_b <- (i %% n_blocks) + 1L
@@ -862,9 +865,12 @@ svrg <- function(par_fn, nobs, val_vcov, val_mea, batch_size, maxit = 10L,
                  seed = 1L, lr, verbose = FALSE, maxpts, decay,
                  conv_crit, rel_eps, rescale_vcov,
                  get_free_vcov_inv){
-  indices <- sample.int(nobs, replace = FALSE) - 1L
-  blocks <- tapply(indices, (seq_along(indices) - 1L) %/% batch_size,
-                   identity, simplify = FALSE)
+  n_blocks <- max(1L, ceiling(nobs / batch_size))
+  get_blocks <- function(){
+    indices <- sample.int(nobs, replace = FALSE) - 1L
+    blocks <- tapply(indices, (seq_along(indices) - 1L) %% n_blocks,
+                     identity, simplify = FALSE)
+  }
 
   # assign function to get the mean and covariance matrix parameters
   n_mea <- length(val_mea)
@@ -884,11 +890,10 @@ svrg <- function(par_fn, nobs, val_vcov, val_mea, batch_size, maxit = 10L,
     out
   }
 
-  # assign parameter vector and other needed quantites
+  # assign parameter vector and other needed quantities
   val <- c(val_vcov, val_mea)
   is_vcov <- seq_along(val_vcov)
 
-  n_blocks <- length(blocks)
   n_par <- length(val)
   estimates <- matrix(NA_real_, n_par, maxit + 1L)
   fun_vals <- numeric(maxit + 1L)
@@ -898,6 +903,7 @@ svrg <- function(par_fn, nobs, val_vcov, val_mea, batch_size, maxit = 10L,
   V_mult <- qnorm(1 - .99 / maxit)
 
   for(k in 1:maxit + 1L){
+    blocks <- get_blocks()
     old_val <- estimates[, k - 1L]
     old_grs <- sapply(1:n_blocks - 1L, function(ii){
       idx_b <- (ii %% n_blocks) + 1L
