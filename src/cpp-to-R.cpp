@@ -859,6 +859,7 @@ Rcpp::List impute
             // the level is unknown
             type_i.emplace_back(type_list_it.get());
 
+          ++k; // move to the next multinomial variable
           j += type_i.back()->n_latent();
           continue;
         }
@@ -882,6 +883,7 @@ Rcpp::List impute
 
     double *o = out_dat.colptr(i);
     double const *rval = res.imputations.begin();
+
     {
       arma::uword const *cur_idx_obs = a_idx_obs.begin();
       int j(0);
