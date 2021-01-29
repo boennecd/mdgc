@@ -137,6 +137,7 @@ library(mdgc)
 library(missForest, quietly = TRUE)
 # remotes::install_github("udellgroup/mixedgcImp", ref = "5ad6d523d")
 library(mixedgcImp)
+library(doParallel)
 ```
 
 ```{r sim_dat, cache = 1, fig.height = 3, fig.width = 7}
@@ -987,15 +988,29 @@ mask it. Then we compare the imputation method in this package with
 missForest.
 
 ```{r comp_w_iris, cache=1}
+# re-scales continuous variables to have scale 1.
+#
+# Args:
+#   dat: data to rescale.
+re_scale <- function(dat){
+  is_num <- sapply(dat, is.numeric)
+  if(!any(is_num))
+    return(dat)
+  dat[is_num] <- lapply(dat[is_num], scale)
+  dat[is_num] <- lapply(dat[is_num], c)
+  dat
+}
+
 # load the iris data set
 data(iris)
+iris <- re_scale(iris)
 
 # assign function to produce iris data set with NAs.
 # 
 # Args:
 #   dat: data set to mask.
 #   p_na: chance of missing a value.
-mask_dat <- function(dat, p_na = .1){
+mask_dat <- function(dat, p_na = .3){
   is_miss <- matrix(p_na > runif(NROW(dat) * NCOL(dat)), 
                     NROW(dat), NCOL(dat))
   while(any(all_missing <- apply(is_miss, 1, all)))
@@ -1014,9 +1029,11 @@ dat <- mask_dat(iris)
 
 # use the mdgc method
 system.time(
-  mdgc_res <- mdgc(dat, maxpts = 5000L, n_threads = 4L, maxit = 100L, 
-                   use_aprx = TRUE, method = "aug_Lagran", 
-                   minvls = 1000L, iminvls = 1000L))
+  mdgc_res <- mdgc(dat, maxpts = 10000L, minvls = 500L, n_threads = 4L, 
+                   maxit = 50L, use_aprx = TRUE, conv_crit = 1e-8, 
+                   method = "svrg", rel_eps = 1e-2, batch_size = 100L, 
+                   iminvls = 2000L, imaxit = 20000L, irel_eps = 1e-3, 
+                   lr = 1e-3))
 
 # some of the imputed values
 head(mdgc_res$ximp)
@@ -1047,25 +1064,30 @@ We repeat this a few times to get Monte Carlo estimates of the errors:
 #   dat: data set to use. 
 #   seeds: seeds to use.
 get_err_n_time <- function(dat, seeds){
+  cl <- makeCluster(4L)
+  registerDoParallel(cl)
+  on.exit(stopCluster(cl))
+    
   sapply(seeds, function(s){
     # mask data
     set.seed(s)
     dat_mask <- mask_dat(dat)
     
     # fit models
-    
     mdgc_time <- system.time(
-      mdgc_res <- mdgc(dat_mask, maxpts = 5000L, n_threads = 4L, maxit = 100L, 
-                       use_aprx = TRUE, minvls = 1000L, iminvls = 1000L,
-                       method = if(NROW(dat) > 1000L) "svrg" else "aug_Lagran", 
-                       lr = 1e-3, batch_size = 100L))
+      mdgc_res <- mdgc(dat_mask, maxpts = 10000L, minvls = 500L, n_threads = 4L, 
+                       maxit = 50L, use_aprx = TRUE, conv_crit = 1e-8, 
+                       method = "svrg", rel_eps = 1e-2, batch_size = 100L, 
+                       iminvls = 2000L, imaxit = 20000L, irel_eps = 1e-3, 
+                       lr = 1e-3))
     
     # compare with missForest
     miss_forest_arg <- dat_mask
     is_log <- sapply(miss_forest_arg, is.logical)
     miss_forest_arg[, is_log] <- lapply(miss_forest_arg[, is_log], as.factor)
     sink(tempfile())
-    miss_time <- system.time(miss_res <- missForest(miss_forest_arg))
+    miss_time <- system.time(miss_res <- missForest(
+      miss_forest_arg, parallelize = "forests"))
     sink()
     
     # turn binary variables back to logicals
@@ -1151,6 +1173,7 @@ colon_use <- within(colon_use, {
   surg <- surg > 0
 })
 colon_use <- colon_use[complete.cases(colon_use), ]
+colon_use <- re_scale(colon_use)
 
 # stats for the data set
 summary(colon_use)
@@ -1161,9 +1184,11 @@ dat <- mask_dat(colon_use)
 
 # use the mdgc method
 system.time(
-  mdgc_res <- mdgc(dat, maxpts = 5000L, n_threads = 4L, maxit = 100L, 
-                   use_aprx = TRUE, method = "svrg", batch_size = 100L,
-                   minvls = 1000L, iminvls = 5000L, lr = 1e-3))
+  mdgc_res <- mdgc(dat, maxpts = 10000L, minvls = 500L, n_threads = 4L, 
+                   maxit = 50L, use_aprx = TRUE, conv_crit = 1e-8, 
+                   method = "svrg", rel_eps = 1e-2, batch_size = 100L, 
+                   iminvls = 2000L, imaxit = 20000L, irel_eps = 1e-3, 
+                   lr = 1e-3))
 
 # some of the imputed values
 head(mdgc_res$ximp)
@@ -1217,6 +1242,7 @@ nhanes_use <- within(nhanes, {
   RIAGENDR <- RIAGENDR > 1
 })[, c("HI_CHOL", "race", "agecat", "RIAGENDR")]
 nhanes_use <- nhanes_use[complete.cases(nhanes_use), ]
+nhanes_use <- re_scale(nhanes_use)
 
 # summary stats for the data
 summary(nhanes_use)
@@ -1227,9 +1253,11 @@ dat <- mask_dat(nhanes_use)
 
 # use the mdgc method
 system.time(
-  mdgc_res <- mdgc(dat, maxpts = 5000L, n_threads = 4L, maxit = 100L, 
-                   use_aprx = TRUE, method = "svrg", batch_size = 100L,
-                   minvls = 1000L, iminvls = 5000L, lr = 1e-3))
+  mdgc_res <- mdgc(dat, maxpts = 10000L, minvls = 500L, n_threads = 4L, 
+                   maxit = 50L, use_aprx = TRUE, conv_crit = 1e-8, 
+                   method = "svrg", rel_eps = 1e-2, batch_size = 100L, 
+                   iminvls = 2000L, imaxit = 20000L, irel_eps = 1e-3, 
+                   lr = 1e-3))
 
 # some of the imputed values
 head(mdgc_res$ximp)
