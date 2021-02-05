@@ -26,7 +26,7 @@ public:
   static rand_Korobov_output comp
     (Func &f, int const ndim, size_t const minvls, size_t const maxvls,
      int const nf, double const abseps, double const releps,
-     double * const __restrict__ finest, parallelrng::unif_drawer &sampler){
+     double * const MDGC_RESTRICT finest, parallelrng::unif_drawer &sampler){
     /* constants */
     constexpr int const plim(28L),
                         klim(100L),
@@ -67,14 +67,14 @@ public:
     int * const pr = imem.get_mem();
     std::fill(pr, pr + ndim, 0L); // not needed?
 
-    double * const __restrict__ finval     = dmem.get_mem(),
-           * const __restrict__ M          = finval + nf,
-           * const __restrict__ finest_var = M + nf,
-           * const __restrict__ x          = finest_var + nf,
-           * const __restrict__ r          = x + ndim,
-           * const __restrict__ vk         = r + ndim,
-           * const __restrict__ values     = vk + ndim,
-           * const __restrict__ fs         = values + nf;
+    double * const MDGC_RESTRICT finval     = dmem.get_mem(),
+           * const MDGC_RESTRICT M          = finval + nf,
+           * const MDGC_RESTRICT finest_var = M + nf,
+           * const MDGC_RESTRICT x          = finest_var + nf,
+           * const MDGC_RESTRICT r          = x + ndim,
+           * const MDGC_RESTRICT vk         = r + ndim,
+           * const MDGC_RESTRICT values     = vk + ndim,
+           * const MDGC_RESTRICT fs         = values + nf;
 
     // initalize
     std::fill(finest    , finest     + nf, 0.);
@@ -120,12 +120,12 @@ public:
       std::fill(M     , M      + nf, 0.);
 
       auto mvkrsv =
-        [&](double * __restrict__ const values, int const prime,
-            double const * __restrict__ const vk,
-            double * __restrict__ const x,
-            double * __restrict__ const r,
-            int * __restrict__  const pr,
-            double * __restrict__  const fs){
+        [&](double * MDGC_RESTRICT const values, int const prime,
+            double const * MDGC_RESTRICT const vk,
+            double * MDGC_RESTRICT const x,
+            double * MDGC_RESTRICT const r,
+            int * MDGC_RESTRICT  const pr,
+            double * MDGC_RESTRICT  const fs){
           std::fill(values, values + nf, 0.);
 
           // random shift

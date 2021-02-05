@@ -16,7 +16,7 @@
 
 namespace multinomial {
 /** evaluates the log of the normal distribution density. */
-inline double eval_log_dnrm(double const x) noexcept {
+inline double eval_log_dnrm(double const x) MDGC_NOEXCEPT {
   // log(2 * pi) / 2
   constexpr double const log2pi_half = 0.918938533204673;
   return -log2pi_half - x * x / 2.;
@@ -137,8 +137,8 @@ public:
     return out;
   }
 
-  double grad(double const * __restrict__ val,
-              double       * __restrict__ gr){
+  double grad(double const * MDGC_RESTRICT val,
+              double       * MDGC_RESTRICT gr){
     double out(0.);
     std::fill(gr, gr + nvars - 1, 0.);
     double * const g = wk_mem.get(),

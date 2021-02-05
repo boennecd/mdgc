@@ -18,7 +18,7 @@ class cache_mem {
 public:
   /// set the size of the memory to hold
   inline void set_n_mem(size_t n_mem, size_t const max_threads){
-    constexpr size_t const mult = cacheline_size() / sizeof(T);
+    constexpr size_t const mult = mdgc::cacheline_size() / sizeof(T);
     n_mem  = std::max(n_mem, mult) + mult;
     n_mem  = (n_mem + mult - 1L) / mult;
     n_mem *= mult;
@@ -35,11 +35,11 @@ public:
   }
 
   /// returns a pointer to the memory to use
-  inline T * get_mem(int const thread_num) noexcept {
+  inline T * get_mem(int const thread_num) MDGC_NOEXCEPT {
     return mem.get() + thread_num * cur_n_mem;
   }
 
-  inline T * get_mem() noexcept {
+  inline T * get_mem() MDGC_NOEXCEPT {
 #ifdef _OPENMP
     return get_mem(omp_get_thread_num());
 #else

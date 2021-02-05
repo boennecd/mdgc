@@ -13,7 +13,7 @@ constexpr double const d_xmy[3L * n_pts] = {
 };
 
 inline double
-fastncdf_pos(double const x) noexcept {
+fastncdf_pos(double const x) MDGC_NOEXCEPT {
     int const i = static_cast<int>((x - xmin) * hinv),
             inc = i * 3L;
 
@@ -43,7 +43,7 @@ fastncdf_pos(double const x) noexcept {
 }
 } // namespace
 
-double pnorm_approx(double const x) noexcept {
+double pnorm_approx(double const x) MDGC_NOEXCEPT {
   return x >= 0. ? .5 - fastncdf_pos(-x) + .5 : fastncdf_pos(x);
 }
 

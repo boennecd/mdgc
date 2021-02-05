@@ -10,8 +10,8 @@
  * @param wk working memory with up k x p elements.
  */
 inline void X_kron_X_dot_x
-(arma::mat const &X, arma::vec const &x, double * const __restrict__ out,
- double * const __restrict__ wk) MDGC_NOEXCEPT {
+(arma::mat const &X, arma::vec const &x, double * const MDGC_RESTRICT out,
+ double * const MDGC_RESTRICT wk) MDGC_NOEXCEPT {
   size_t const k = X.n_rows,
                p = X.n_cols,
               kk = k * k;
@@ -58,8 +58,8 @@ inline void X_kron_X_dot_x
  */
 inline void x_kron_X_dot_y
   (arma::vec const &x, arma::mat const &X, arma::vec const &y,
-   double * const __restrict__ out,
-   double * const __restrict__ wk) MDGC_NOEXCEPT {
+   double * const MDGC_RESTRICT out,
+   double * const MDGC_RESTRICT wk) MDGC_NOEXCEPT {
   size_t const l = x.n_elem,
                k = X.n_rows,
               lk = k * l;
@@ -96,7 +96,7 @@ inline void x_kron_X_dot_y
  */
 inline void X_kron_I_dot_x
   (arma::mat const &X, size_t const l, arma::vec const &x,
-   double * const __restrict__ out, bool const set_zero) MDGC_NOEXCEPT {
+   double * const MDGC_RESTRICT out, bool const set_zero) MDGC_NOEXCEPT {
   size_t const k = X.n_rows,
                p = X.n_cols,
               kl = k * l;
@@ -126,7 +126,7 @@ inline void X_kron_I_dot_x
  */
 inline void I_kron_X_dot_x
   (arma::mat const &X, size_t const l, arma::vec const &x,
-   double * const __restrict__ out) MDGC_NOEXCEPT {
+   double * const MDGC_RESTRICT out) MDGC_NOEXCEPT {
   size_t const k = X.n_rows,
                p = X.n_cols,
               kl = k * l;
@@ -157,7 +157,7 @@ inline void I_kron_X_dot_x
  */
 inline void x_dot_X_kron_I
   (arma::vec const &x, arma::mat const &X, size_t const l,
-   double * const __restrict__ out) MDGC_NOEXCEPT {
+   double * const MDGC_RESTRICT out) MDGC_NOEXCEPT {
   size_t const k = X.n_rows,
                p = X.n_cols,
               pl = p * l;

@@ -13,7 +13,7 @@ using std::log;
 namespace {
 static cache_mem<double> log_ml_mem;
 
-inline double * get_working_memory_log_ml() noexcept {
+inline double * get_working_memory_log_ml() MDGC_NOEXCEPT {
   return log_ml_mem.get_mem();
 }
 

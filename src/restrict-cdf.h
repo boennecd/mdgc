@@ -57,7 +57,7 @@ extern "C"
       int* /* idx */, int const* /* doscale */);
 }
 
-inline double safe_qnorm_w(double const x) noexcept {
+inline double safe_qnorm_w(double const x) MDGC_NOEXCEPT {
   constexpr double const eps =
     std::numeric_limits<double>::epsilon() *
     std::numeric_limits<double>::epsilon() *
@@ -70,7 +70,7 @@ inline double safe_qnorm_w(double const x) noexcept {
   return qnorm_w   (x  , 0, 1, 1L, 0L);
 }
 
-inline double safe_qnorm_aprx(double const x) noexcept {
+inline double safe_qnorm_aprx(double const x) MDGC_NOEXCEPT {
   constexpr double const eps =
     std::numeric_limits<double>::epsilon() *
     std::numeric_limits<double>::epsilon() *
@@ -90,7 +90,7 @@ inline double safe_qnorm_aprx(double const x) noexcept {
  * @param x Pointer to copy to.
  */
 inline void copy_upper_tri
-  (arma::mat const &X, double * __restrict__ x) noexcept {
+  (arma::mat const &X, double * MDGC_RESTRICT x) MDGC_NOEXCEPT {
   int const p = X.n_cols;
   for(int c = 0; c < p; c++)
     for(int r = 0; r <= c; r++, x++)
@@ -98,7 +98,7 @@ inline void copy_upper_tri
 }
 
 inline void copy_lower_tri
-  (arma::mat const &X, double * __restrict__ x) noexcept {
+  (arma::mat const &X, double * MDGC_RESTRICT x) MDGC_NOEXCEPT {
   int const p = X.n_cols;
   for(int c = 0; c < p; c++)
     for(int r = c; r < p; r++, x++)
@@ -303,7 +303,7 @@ public:
    */
   void operator()(
       int const *ndim_in, double const * unifs, int const *n_integrands_in,
-      double * __restrict__ integrand_val) MDGC_NOEXCEPT {
+      double * MDGC_RESTRICT integrand_val) MDGC_NOEXCEPT {
 #ifdef DO_CHECKS
     if(*ndim_in         != ndim)
       throw std::invalid_argument("cdf::eval_integrand: invalid 'ndim_in'");
@@ -311,14 +311,14 @@ public:
       throw std::invalid_argument("cdf::eval_integrand: invalid 'n_integrands_in'");
 #endif
 
-    double * const __restrict__ out = integrand_val,
-           * const __restrict__ dr  = draw;
+    double * const MDGC_RESTRICT out = integrand_val,
+           * const MDGC_RESTRICT dr  = draw;
 
     double w(1.);
-    double const * __restrict__ sc   = sigma_chol,
-                 * __restrict__ lw   = lower,
-                 * __restrict__ up   = upper,
-                 * __restrict__ unif = unifs;
+    double const * MDGC_RESTRICT sc   = sigma_chol,
+                 * MDGC_RESTRICT lw   = lower,
+                 * MDGC_RESTRICT up   = upper,
+                 * MDGC_RESTRICT unif = unifs;
     int const *infin_j = infin.begin();
     /* loop over variables and transform them to truncated normal
      * variables */
@@ -524,8 +524,8 @@ class deriv {
   double * const cdf_mem = sig_inv + (ndim * (ndim + 1)) / 2;
 
   inline void deriv_integrand_inner_loop
-    (double * __restrict__ o, double const * __restrict__ lhs,
-     unsigned const c) noexcept {
+    (double * MDGC_RESTRICT o, double const * MDGC_RESTRICT lhs,
+     unsigned const c) MDGC_NOEXCEPT {
     double const * const end = lhs + c + 1;
     double const mult = *(lhs + c);
     for(; lhs != end; ++o, ++lhs)
@@ -570,11 +570,11 @@ public:
     copy_upper_tri(t1, sig_inv);
   }
 
-  inline static int get_n_integrands(int const x) noexcept {
+  inline static int get_n_integrands(int const x) MDGC_NOEXCEPT {
     return 1 + x + (x * (x + 1)) / 2L;
   }
 
-  inline int get_n_integrands() noexcept{
+  inline int get_n_integrands() MDGC_NOEXCEPT {
     return get_n_integrands(ndim);
   }
 
@@ -587,7 +587,7 @@ public:
   }
 
   inline void operator()
-  (double const * __restrict__ draw, double * __restrict__ out,
+  (double const * MDGC_RESTRICT draw, double * MDGC_RESTRICT out,
    int const *indices, bool const is_permutated) {
     arma::uword const p = ndim;
 
@@ -713,40 +713,40 @@ class imputation {
 public:
   class type_base {
   public:
-    virtual int n_latent() const noexcept = 0;
-    virtual int n_ele() const noexcept = 0;
-    virtual void set_val(double const *, double * __restrict__)
-      const noexcept = 0;
+    virtual int n_latent() const MDGC_NOEXCEPT = 0;
+    virtual int n_ele() const MDGC_NOEXCEPT = 0;
+    virtual void set_val(double const *, double * MDGC_RESTRICT)
+      const MDGC_NOEXCEPT = 0;
     virtual ~type_base() = default;
   };
 
   class known final : public type_base {
     int const n_latent_val;
   public:
-    inline int n_latent() const noexcept {
+    inline int n_latent() const MDGC_NOEXCEPT {
       return n_latent_val;
     }
-    inline int n_ele() const noexcept {
+    inline int n_ele() const MDGC_NOEXCEPT {
       return 0L;
     };
-    inline void set_val(double const *, double * __restrict__)
-      const noexcept { };
+    inline void set_val(double const *, double * MDGC_RESTRICT)
+      const MDGC_NOEXCEPT { };
 
     known(int const n_latent_val = 1): n_latent_val(n_latent_val) { }
   };
 
   class contin final : public type_base {
   public:
-    inline int n_latent() const noexcept {
+    inline int n_latent() const MDGC_NOEXCEPT {
       return 1L;
     }
 
-    inline int n_ele() const noexcept {
+    inline int n_ele() const MDGC_NOEXCEPT {
       return 1L;
     }
 
-    inline void set_val(double const *v, double * __restrict__ res)
-    const noexcept {
+    inline void set_val(double const *v, double * MDGC_RESTRICT res)
+    const MDGC_NOEXCEPT {
       *res = *v;
     }
   };
@@ -757,16 +757,16 @@ public:
 
     binary(double const border): border(border) { }
 
-    inline int n_latent() const noexcept {
+    inline int n_latent() const MDGC_NOEXCEPT {
       return 1L;
     }
 
-    inline int n_ele() const noexcept {
+    inline int n_ele() const MDGC_NOEXCEPT {
       return 2L;
     }
 
-    inline void set_val(double const *v, double * __restrict__ res)
-      const noexcept {
+    inline void set_val(double const *v, double * MDGC_RESTRICT res)
+      const MDGC_NOEXCEPT {
       if(*v < border){
         *res++ = 1.;
         *res   = 0.;
@@ -806,16 +806,16 @@ public:
       return out;
     })()) { }
 
-    inline int n_latent() const noexcept {
+    inline int n_latent() const MDGC_NOEXCEPT {
       return 1L;
     }
 
-    inline int n_ele() const noexcept {
+    inline int n_ele() const MDGC_NOEXCEPT {
       return n_bs + 1L;
     }
 
-    inline void set_val(double const *v, double * __restrict__ res)
-    const noexcept {
+    inline void set_val(double const *v, double * MDGC_RESTRICT res)
+    const MDGC_NOEXCEPT {
       int i = 0L;
       double const *b = borders.get();
       for(; i < n_bs; ++i, ++b)
@@ -841,15 +841,15 @@ public:
 
     multinomial(int const n_lvls): n_lvls(n_lvls) { }
 
-    int n_latent() const noexcept {
+    int n_latent() const MDGC_NOEXCEPT {
       return n_lvls;
     }
-    int n_ele() const noexcept {
+    int n_ele() const MDGC_NOEXCEPT {
       return n_lvls;
     };
 
     void set_val
-      (double const *v, double * __restrict__ res) const noexcept {
+      (double const *v, double * MDGC_RESTRICT res) const MDGC_NOEXCEPT {
       int max_lvl(0);
       double max_val = *v;
       res[0] = 1.;
@@ -872,10 +872,10 @@ private:
   static cache_mem<double> dmem;
   int const n_integrands_val = get_n_integrands(cur_list),
             ndim;
-  double * __restrict__ const mu_vec   = dmem.get_mem(),
-         * __restrict__ const sig_chol = mu_vec + ndim,
-         * __restrict__ const cdf_mem  = sig_chol + (ndim * (ndim + 1)) / 2,
-         * __restrict__ const xtr_mem  = cdf_mem + n_integrands_val;
+  double * MDGC_RESTRICT const mu_vec   = dmem.get_mem(),
+         * MDGC_RESTRICT const sig_chol = mu_vec + ndim,
+         * MDGC_RESTRICT const cdf_mem  = sig_chol + (ndim * (ndim + 1)) / 2,
+         * MDGC_RESTRICT const xtr_mem  = cdf_mem + n_integrands_val;
 
 public:
   /**
@@ -925,14 +925,14 @@ public:
   }
 
   static inline int
-  get_n_integrands(std::vector<type_base const *> const &ls) noexcept {
+  get_n_integrands(std::vector<type_base const *> const &ls) MDGC_NOEXCEPT {
     int out(1L);
     for(auto &x : ls)
       out += x->n_ele();
     return out;
   }
 
-  inline int get_n_integrands() noexcept {
+  inline int get_n_integrands() MDGC_NOEXCEPT {
     return n_integrands_val;
   }
 
@@ -945,7 +945,7 @@ public:
   }
 
   inline void operator()
-  (double const * __restrict__ draw, double * __restrict__ out,
+  (double const * MDGC_RESTRICT draw, double * MDGC_RESTRICT out,
    int const *indices, bool const is_permutated){
     double *scale_draw = xtr_mem;
     std::fill(scale_draw, scale_draw + ndim, 0.);

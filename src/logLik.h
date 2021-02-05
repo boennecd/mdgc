@@ -1,5 +1,6 @@
 #ifndef LOGLIK_H
 #define LOGLIK_H
+#include "config.h"
 #include "arma-wrap.h"
 #include "mvtnorm-wrapper.h"
 
@@ -13,10 +14,10 @@ class log_ml_term {
   arma::uvec const idx_int, idx_obs;
 
   /// number of censored and observed values.
-  inline arma::uword n_int() const noexcept {
+  inline arma::uword n_int() const MDGC_NOEXCEPT {
      return idx_int.n_elem;
   }
-  inline arma::uword n_obs() const noexcept {
+  inline arma::uword n_obs() const MDGC_NOEXCEPT {
      return idx_obs.n_elem;
   }
 
@@ -32,11 +33,11 @@ class log_ml_term {
    */
   arma::imat const multinomial;
   /// true if there are any multinomial variables
-  inline bool any_mult() const noexcept {
+  inline bool any_mult() const MDGC_NOEXCEPT {
      return multinomial.n_cols > 0;
   }
   /// number of multinomial outcomes
-  inline arma::uword n_cate() const noexcept {
+  inline arma::uword n_cate() const MDGC_NOEXCEPT {
      return multinomial.n_cols;
   }
   /** indices for the latent variables of the observed multinomial levels.

@@ -13,13 +13,14 @@ double qnorm_w(double const p, double const mu, double const sigma,
 #ifdef __cplusplus
 }
 
+#include "config.h"
 #include <limits>
 
 /***
  * 7 digits precision approximation from:
  *    ALGORITHM AS241 APPL. STATIST. (1988) VOL. 37, NO. 3
  */
-inline double qnorm_aprx(double const p) noexcept {
+inline double qnorm_aprx(double const p) MDGC_NOEXCEPT {
   constexpr double const split1 = .425,
                          split2 = 5,
                          const1 = .180625,
