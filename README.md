@@ -1,8 +1,7 @@
 
 # mdgc
 
-[![Build Status on
-Travis](https://travis-ci.org/boennecd/mdgc.svg?branch=master,osx)](https://travis-ci.org/boennecd/mdgc)
+[![R-CMD-check](https://github.com/boennecd/mdgc/workflows/R-CMD-check/badge.svg)](https://github.com/boennecd/mdgc/actions)
 
 This package contains a marginal likelihood approach to estimating the
 model discussed by Hoff (2007), Zhao and Udell (2020b), and Zhao and
