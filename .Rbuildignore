@@ -5,3 +5,5 @@
 ^sim-res
 ^README_cache
 ^\.github$
+^cran-comments\.md
+^README\.md

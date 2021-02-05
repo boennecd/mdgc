@@ -17,13 +17,13 @@ test_that("mdgc examples gives the same", {
                method = "svrg")
 
   expect_known_value(impu, "mdgc-man-test.RDS", update = FALSE,
-                     tolerance = 1e-5)
+                     tolerance = 1e-3)
 
   impu <- mdgc(retinopathy, maxit = 25L, rel_eps = 1e-3, maxpts = 5000L,
                n_threads = 1L, method = "aug_Lagran")
 
   expect_known_value(impu, "mdgc-man-Lagran-test.RDS", update = FALSE,
-                     tolerance = 1e-5)
+                     tolerance = 1e-3)
 })
 
 test_that("iris examples give the same", {

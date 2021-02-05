@@ -15,7 +15,7 @@ functions.
 Examples are provided at \url{https://github.com/boennecd/mdgc}.
 }
 \references{
-Christoffersen, B., Clements, M., Humphreys, K., & Kjellstrom, H. (2021).
+Christoffersen, B., Clements, M., Humphreys, K., & Kjellström, H. (2021).
 \emph{Asymptotically Exact and Fast Gaussian Copula Models for Imputation of Mixed Data Types}.
 \url{https://arxiv.org/abs/2102.02642}.
 }
