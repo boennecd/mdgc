@@ -17,13 +17,16 @@ Authors@R: c(
   person("R-core", email = "R-core@R-project.org",
          role = "cph"))
 Description: Provides functions to impute missing values using Gaussian 
-    copulas for mixed data types. The method is related to 
-    Hoff (2007) <doi:10.1214/07-AOAS107> and Zhao and Udell (2019) 
-    <arXiv:1910.12845> but differs by making a direct 
-    approximation of the log marginal likelihood using an extended version 
-    of the Fortran code created by <doi:10.1198/106186002394>. The model 
-    supports binary, ordinal, multinomial, and continuous variables.
+    copulas for mixed data types as described by Christoffersen et al. 
+    (2021) <arXiv:2102.02642>. The method is related to Hoff (2007) 
+    <doi:10.1214/07-AOAS107> and Zhao and Udell (2019) <arXiv:1910.12845> 
+    but differs by making a direct approximation of the log marginal likelihood 
+    using an extended version of the Fortran code created by Genz and Bretz 
+    (2002) <doi:10.1198/106186002394> in addition to also support multinomial 
+    variables.
 License: GPL-2
+BugReports: https://github.com/boennecd/mdgc/issues
+URL: https://github.com/boennecd/mdgc
 Encoding: UTF-8
 LazyData: true
 RoxygenNote: 7.1.1

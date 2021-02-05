@@ -33,7 +33,7 @@ mdgc(
 }
 \arguments{
 \item{dat}{\code{\link{data.frame}} with continuous, multinomial, ordinal, and binary
-data.}
+variables.}
 
 \item{lr}{learning rate.}
 
@@ -96,7 +96,12 @@ See \code{\link{mdgc_fit}}.
 
 See the README at \url{https://github.com/boennecd/mdgc} for examples.
 }
+\details{
+It is important that the input for \code{data} has the appropriate types and
+classes. See \code{\link{get_mdgc}}.
+}
 \examples{
+\dontrun{
 if(require(catdata)){
   data(retinopathy)
 
@@ -151,6 +156,8 @@ if(require(catdata)){
   cat("\nImputed values (augmented Lagrangian):\n")
   print(head(impu_aug$ximp, 10))
 }
+}
+
 }
 \references{
 Kingma, D.P., & Ba, J. (2015). \emph{Adam: A Method for Stochastic Optimization}. abs/1412.6980.

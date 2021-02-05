@@ -15,14 +15,25 @@
 #' }
 #'
 #' @param dat \code{\link{data.frame}} with continuous, multinomial, ordinal, and binary
-#' data.
+#' variables.
 #' @importFrom stats na.omit
 #' @importFrom utils head
 #' @export
 #' @importFrom stats qnorm ecdf quantile
 #'
+#' @examples
+#' # randomly mask data
+#' set.seed(11)
+#' masked_data <- iris
+#' masked_data[matrix(runif(prod(dim(iris))) < .10, NROW(iris))] <- NA
+#'
+#' # use the functions in the package
+#' library(mdgc)
+#' obj <- get_mdgc(masked_data)
+#' class(obj)
+#'
 #' @seealso
-#' \code{\link{get_mdgc_log_ml}}, \code{\link{mdgc_impute}}
+#' \code{\link{get_mdgc_log_ml}}, \code{\link{mdgc_start_value}}
 get_mdgc <- function(dat){
   # checks
   stopifnot(is.data.frame(dat), NROW(dat) > 0L)
@@ -190,15 +201,16 @@ get_mdgc <- function(dat){
 #' @param object mdgc object from \code{\link{get_mdgc}} or a
 #' \code{\link{data.frame}} to pass to \code{\link{get_mdgc}}. Ignored by
 #' the default method.
-#' @param lower #variables x #observation matrix with lower bounds
+#' @param lower [# variables]x[# observations] matrix with lower bounds
 #' for each variable on the normal scale.
-#' @param upper #variables x #observation matrix with upper bounds
+#' @param upper [# variables]x[# observations] matrix with upper bounds
 #' for each variable on the normal scale.
-#' @param code #variables x #observation matrix integer code for the
+#' @param code [# variables]x[# observations] matrix integer code for the
 #' each variable on the normal scale. Zero implies an observed value (the
 #' value in \code{upper}), one implies a missing value, and two implies an
 #' interval.
-#' @param multinomial \code{\link{list}} with 3xn \code{\link{matrix}} with
+#' @param multinomial \code{\link{list}} where each element is
+#' 3x[# multinomial variables] \code{\link{matrix}} with
 #' multinomial outcomes. The first index is the outcome as an integer code,
 #' the second index is the number of categories, and the third index is the
 #' index of each multinomial variable (this is zero-based).
@@ -212,6 +224,17 @@ get_mdgc <- function(dat){
 #'
 #' \code{idx_non_zero_mean} indices with terms with \code{code} equal to zero
 #' (observed values) are ignored.
+#'
+#' @examples
+#' # randomly mask data
+#' set.seed(11)
+#' masked_data <- iris
+#' masked_data[matrix(runif(prod(dim(iris))) < .10, NROW(iris))] <- NA
+#'
+#' # use the functions in the package
+#' library(mdgc)
+#' obj <- get_mdgc(masked_data)
+#' ptr <- get_mdgc_log_ml(obj)
 #'
 #' @seealso
 #' \code{\link{mdgc_fit}}, \code{\link{mdgc_log_ml}}
@@ -265,11 +288,16 @@ get_mdgc_log_ml.default <- function(object, lower, upper, code, multinomial,
 #'
 #' @description
 #' Approximates the log marginal likelihood and the derivatives using
-#' quasi-random numbers. The method uses a generalization of the Fortran
+#' randomized quasi-Monte Carlo. The method uses a generalization of the Fortran
 #' code by Genz and Bretz (2002).
 #'
 #' Mean terms for observed continuous variables are always assumed to be
 #' zero.
+#'
+#' The returned log marginal likelihood is not a proper log marginal likelihood
+#' if the \code{ptr} object is constructed from a mdgc object from
+#' \code{\link{get_mdgc}} as it does not include the log of the determinants of
+#' the Jacobians for the transformation of the continuous variables.
 #'
 #' @return
 #' A numeric vector with a single element with the log marginal likelihood
@@ -308,6 +336,21 @@ get_mdgc_log_ml.default <- function(object, lower, upper, code, multinomial,
 #' Genz, A., & Bretz, F. (2008).
 #' \emph{Computation of Multivariate Normal and t Probabilities}.
 #' Springer-Verlag, Heidelberg.
+#'
+#' @examples
+#' # randomly mask data
+#' set.seed(11)
+#' masked_data <- iris
+#' masked_data[matrix(runif(prod(dim(iris))) < .10, NROW(iris))] <- NA
+#'
+#' # use the functions in the package
+#' library(mdgc)
+#' obj <- get_mdgc(masked_data)
+#' ptr <- get_mdgc_log_ml(obj)
+#' start_vals <- mdgc_start_value(obj)
+#' mdgc_log_ml(ptr, start_vals, obj$means)
+#' mdgc_log_ml(ptr, start_vals, obj$means, use_aprx = TRUE)
+#' mdgc_log_ml(ptr, start_vals, obj$means, use_aprx = TRUE, comp_derivs = TRUE)
 #'
 #' @export
 mdgc_log_ml <- function(ptr, vcov, mea, rel_eps = 1e-2, n_threads = 1L,
@@ -364,20 +407,38 @@ mdgc_log_ml <- function(ptr, vcov, mea, rel_eps = 1e-2, n_threads = 1L,
 #' @inheritParams mdgc_fit
 #' @param mea vector with non-zero mean entries.
 #' @param n_threads number of threads to use.
+#' @param object mdgc object from \code{\link{get_mdgc}}. Ignored by
+#' the default method.
+#'
+#' @examples
+#' # randomly mask data
+#' set.seed(11)
+#' masked_data <- iris
+#' masked_data[matrix(runif(prod(dim(iris))) < .10, NROW(iris))] <- NA
+#'
+#' # use the functions in the package
+#' library(mdgc)
+#' obj <- get_mdgc(masked_data)
+#' ptr <- get_mdgc_log_ml(obj)
+#' start_vals <- mdgc_start_value(obj)
+#' start_vals # starting value for the covariance matrix
+#'
+#' @importFrom stats cov cov2cor
 #' @export
-mdgc_start_value <- function(...)
+mdgc_start_value <- function(object, ...)
   UseMethod("mdgc_start_value")
 
 #' @rdname mdgc_start_value
+#' @method mdgc_start_value mdgc
 #' @export
-mdgc_start_value <- function(object, ...)
+mdgc_start_value.mdgc <- function(object, ...)
   mdgc_start_value.default(
     lower = object$lower, upper = object$upper, code = object$code,
     multinomial = object$multinomial,
     idx_non_zero_mean = object$idx_non_zero_mean, mea = object$means, ...)
 
 #' @rdname mdgc_start_value
-#' @importFrom stats cov cov2cor
+#' @method mdgc_start_value default
 #' @export
 mdgc_start_value.default <- function(object, lower, upper, code,
                                      multinomial, idx_non_zero_mean, mea,
@@ -418,7 +479,7 @@ mdgc_start_value.default <- function(object, lower, upper, code,
   out
 }
 
-#' Estimate the Covariance Matrix
+#' Estimate the Model Parameters
 #'
 #' @description
 #' Estimates the covariance matrix and the non-zero mean terms.
@@ -457,6 +518,26 @@ mdgc_start_value.default <- function(object, lower, upper, code,
 #' Kingma, D.P., & Ba, J. (2015). \emph{Adam: A Method for Stochastic Optimization}. abs/1412.6980.
 #'
 #' Johnson, R., & Zhang, T. (2013). \emph{Accelerating stochastic gradient descent using predictive variance reduction}. In Advances in neural information processing systems.
+#'
+#' @examples
+#' \dontrun{
+#' # randomly mask data
+#' set.seed(11)
+#' masked_data <- iris
+#' masked_data[matrix(runif(prod(dim(iris))) < .10, NROW(iris))] <- NA
+#'
+#' # use the functions in the package
+#' library(mdgc)
+#' obj <- get_mdgc(masked_data)
+#' ptr <- get_mdgc_log_ml(obj)
+#' start_vals <- mdgc_start_value(obj)
+#'
+#' fit <- mdgc_fit(ptr, start_vals, obj$means, rel_eps = 1e-2, maxpts = 10000L,
+#'                 minvls = 1000L, use_aprx = TRUE, batch_size = 100L, lr = .001,
+#'                 maxit = 100L, n_threads = 2L)
+#' fit$result$vcov
+#' fit$result$mea
+#' }
 #'
 #' @importFrom stats optim
 #' @importFrom utils tail
@@ -986,14 +1067,43 @@ svrg <- function(par_fn, nobs, val_vcov, val_mea, batch_size, maxit = 10L,
 #' @param object returned object from \code{\link{get_mdgc}}.
 #' @param vcov covariance matrix to condition on in the imputation.
 #' @param mea vector with non-zero mean entries to condition on.
+#' @param abs_eps absolute convergence threshold for each term in the approximation.
+#' @param rel_eps relative convergence threshold for each term in the approximation.
+#' @param maxit maximum number of samples
 #' @inheritParams mdgc_fit
 #' @inheritParams mdgc_log_ml
-#' @export
 #'
 #' @return
 #' A list with imputed values for the continuous variables and a vector with
 #' probabilities for each level for the ordinal, binary, and multinomial
 #' variables.
+#'
+#' @examples
+#' \dontrun{
+#' # randomly mask data
+#' set.seed(11)
+#' masked_data <- iris
+#' masked_data[matrix(runif(prod(dim(iris))) < .10, NROW(iris))] <- NA
+#'
+#' # use the functions in the package
+#' library(mdgc)
+#' obj <- get_mdgc(masked_data)
+#' ptr <- get_mdgc_log_ml(obj)
+#' start_vals <- mdgc_start_value(obj)
+#'
+#' fit <- mdgc_fit(ptr, start_vals, obj$means, rel_eps = 1e-2, maxpts = 10000L,
+#'                 minvls = 1000L, use_aprx = TRUE, batch_size = 100L, lr = .001,
+#'                 maxit = 100L, n_threads = 2L)
+#'
+#' # impute using the estimated values
+#' imputed <- mdgc_impute(obj, fit$result$vcov, fit$result$mea, minvls = 1000L,
+#'                        maxit = 10000L, n_threads = 2L, use_aprx = TRUE)
+#' imputed[1:5] # first 5 observations
+#' head(masked_data, 5) # observed
+#' head(iris       , 5) # truth
+#' }
+#'
+#' @export
 mdgc_impute <- function(object, vcov, mea, rel_eps = 1e-3, maxit = 10000L,
                         abs_eps = -1, n_threads = 1L, do_reorder = TRUE,
                         minvls = 1000L, use_aprx = FALSE){
@@ -1081,7 +1191,10 @@ mdgc_impute <- function(object, vcov, mea, rel_eps = 1e-3, maxit = 10000L,
 #' @param iminvls minimum number of samples in the imputation.
 #' @param start_val starting value for the covariance matrix. Use
 #' \code{NULL} if unspecified.
-#' @export
+#'
+#' @details
+#' It is important that the input for \code{data} has the appropriate types and
+#' classes. See \code{\link{get_mdgc}}.
 #'
 #' @references
 #' Kingma, D.P., & Ba, J. (2015). \emph{Adam: A Method for Stochastic Optimization}. abs/1412.6980.
@@ -1089,6 +1202,7 @@ mdgc_impute <- function(object, vcov, mea, rel_eps = 1e-3, maxit = 10000L,
 #' Johnson, R., & Zhang, T. (2013). \emph{Accelerating stochastic gradient descent using predictive variance reduction}. In Advances in neural information processing systems.
 #'
 #' @examples
+#' \dontrun{
 #' if(require(catdata)){
 #'   data(retinopathy)
 #'
@@ -1143,6 +1257,9 @@ mdgc_impute <- function(object, vcov, mea, rel_eps = 1e-3, maxit = 10000L,
 #'   cat("\nImputed values (augmented Lagrangian):\n")
 #'   print(head(impu_aug$ximp, 10))
 #' }
+#' }
+#'
+#' @export
 mdgc <- function(dat, lr = 1e-3, maxit = 10L, batch_size = NULL,
                  rel_eps = 1e-3, method = c("svrg", "adam", "aug_Lagran"),
                  seed = 1L, epsilon = 1e-8,

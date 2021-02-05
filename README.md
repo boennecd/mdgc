@@ -5,19 +5,18 @@
 Travis](https://travis-ci.org/boennecd/mdgc.svg?branch=master,osx)](https://travis-ci.org/boennecd/mdgc)
 
 This package contains a marginal likelihood approach to estimating the
-model discussed by Hoff (2007) and Zhao and Udell (2019). That is, a
-missing data approach where one uses Gaussian copulas in the latter
-case. We have modified the Fortran code by Genz and Bretz (2002) to
-supply an approximation of the gradient for the log marginal likelihood
-and to use an approximation of the marginal likelihood similar to the
-CDF approximation in Genz and Bretz (2002). We have also used the same
-Fortran code to perform the imputation conditional on a covariance
-matrix and the observed data. Slides from a presentation on the packages
-is provided at
-[rpubs.com/boennecd/Gaussian-copula-KTH](https://rpubs.com/boennecd/Gaussian-copula-KTH)
-and paper has not been published yet.
+model discussed by Hoff (2007), Zhao and Udell (2020b), and Zhao and
+Udell (2020a). That is, a missing data approach where one uses Gaussian
+copulas in the latter case. We have modified the Fortran code by Genz
+and Bretz (2002) to supply an approximation of the gradient for the log
+marginal likelihood and to use an approximation of the marginal
+likelihood similar to the CDF approximation in Genz and Bretz (2002). We
+have also used the same Fortran code to perform the imputation
+conditional on a covariance matrix and the observed data. The method is
+described by Christoffersen et al. (2021) which can be found at
+[arxiv.org](https://arxiv.org/abs/2102.02642).
 
-Importantly, we also extend the model used by Zhao and Udell (2019) to
+Importantly, we also extend the model used by Zhao and Udell (2020b) to
 support multinomial variables. Thus, our model supports both continuous,
 binary, ordinal, and multinomial variables which makes it applicable to
 a large number of data sets.
@@ -154,27 +153,27 @@ likelihood as similar intractable problem have been thoroughly studied.
 
 ## Examples
 
-Below, we provide an example similar to Zhao and Udell (2019 Section
+Below, we provide an example similar to Zhao and Udell (2020b Section
 7.1). The authors use a data set with a random correlation matrix, 5
 continuous variables, 5 binary variables, and 5 ordinal variables with 5
 levels. There is a total of 2000 observations and 30% of the variables
 are missing completely at random.
 
-To summarize Zhao and Udell (2019) results, they show that their
+To summarize Zhao and Udell (2020b) results, they show that their
 approximate EM algorithm converges in what seems to be 20-25 seconds
 (this is with a pure R implementation to be fair) while it takes more
 than 150 seconds for the MCMC algorithm used by Hoff (2007). These
 figures should be kept in mind when looking at the results below.
-Importantly, Zhao and Udell (2019) use an approximation in the E-step of
-an EM algorithm which is fast but might be crude in some settings. Using
-a potentially arbitrarily precise approximation of the log marginal
-likelihood is useful if this can be done quickly enough.
+Importantly, Zhao and Udell (2020b) use an approximation in the E-step
+of an EM algorithm which is fast but might be crude in some settings.
+Using a potentially arbitrarily precise approximation of the log
+marginal likelihood is useful if this can be done quickly enough.
 
 We will provide a [quick example](#quick-example) and [an even shorter
 example](#an-even-shorter-example) where we show how to use the methods
 in the package to estimate the correlation matrix and to perform the
 imputation. We then show a [simulation study](#simulation-study) where
-we compare with the method suggested by Zhao and Udell (2019).
+we compare with the method suggested by Zhao and Udell (2020b).
 
 The last section called [adding multinomial
 variables](#adding-multinomial-variables) covers data sets which also
@@ -827,7 +826,7 @@ get_rmse(res$ximp)
 ```
 
 We can compare this with the `mixedgcImp` which uses the method
-described in Zhao and Udell (2019):
+described in Zhao and Udell (2020b):
 
 ``` r
 # turn the data to a format that can be based
@@ -1141,7 +1140,7 @@ model.
 
 ## Adding Multinomial Variables
 
-We extend the model suggested by Zhao and Udell (2019) in this section.
+We extend the model suggested by Zhao and Udell (2020b) in this section.
 The example is very similar to the previous one but with multinomial
 variables.
 
@@ -1299,7 +1298,7 @@ system.time(
                    n_threads = 4L, rel_eps = 1e-2, maxpts = 1000L, 
                    minvls = 200L, use_aprx = TRUE, conv_crit = 1e-8))
 #>    user  system elapsed 
-#>   233.1     0.0    58.3
+#> 229.864   0.001  57.487
 
 # refine the estimates
 system.time(
@@ -1310,7 +1309,7 @@ system.time(
                    minvls = 1000L, mu = ests$mu, lambda = ests$lambda, 
                    use_aprx = TRUE, conv_crit = 1e-8))
 #>    user  system elapsed 
-#>   207.6     0.0    53.8
+#> 208.588   0.008  54.079
 
 # use ADAM
 system.time(
@@ -1320,7 +1319,7 @@ system.time(
     method = "adam", rel_eps = 1e-3, maxpts = 5000L, 
     use_aprx = TRUE))
 #>    user  system elapsed 
-#>   32.68    0.00    8.17
+#>   33.59    0.00    8.41
 
 # use SVRG
 system.time(
@@ -1429,7 +1428,7 @@ system.time(
 #> Log marginal likelihood approximation is    -13110.80
 #> Previous approximate gradient norm was          75.24
 #>    user  system elapsed 
-#>  64.901   0.004  16.234
+#>  64.650   0.004  16.173
 
 # compare log marginal likelihood
 print(rbind(
@@ -1503,13 +1502,12 @@ do_plot_rescale(fit_svrg$result$vcov, "Estimates (SVRG)")
 <img src="man/figures/README-mult_sim-7.png" width="100%" />
 
 ``` r
-
 # perform the imputation
 system.time(
   imp_res <- mdgc_impute(obj, ests$result$vcov, mea = ests$result$mea, 
                          rel_eps = 1e-3, maxit = 10000L, n_threads = 4L))
 #>    user  system elapsed 
-#>  14.737   0.008   3.907
+#>    14.4     0.0     3.8
 
 # look at the result for one of the observations
 imp_res[1L]
@@ -1665,7 +1663,7 @@ system.time(miss_res <- missForest(miss_forest_arg))
 #>   missForest iteration 7 in progress...done!
 #>   missForest iteration 8 in progress...done!
 #>    user  system elapsed 
-#>   9.885   0.024   9.909
+#>   9.995   0.024  10.018
 
 # turn binary variables back to logical variables
 miss_res$ximp[, is_log] <- lapply(
@@ -2186,6 +2184,14 @@ show_res(res, nhanes_use)
 
 <div id="refs" class="references">
 
+<div id="ref-Christoffersen21">
+
+Christoffersen, Benjamin, Mark Clements, Keith Humphreys, and Hedvig
+Kjellström. 2021. “Asymptotically Exact and Fast Gaussian Copula Models
+for Imputation of Mixed Data Types.” <http://arxiv.org/abs/2102.02642>.
+
+</div>
+
 <div id="ref-Genz02">
 
 Genz, Alan, and Frank Bretz. 2002. “Comparison of Methods for the
@@ -2203,10 +2209,22 @@ Copula Estimation.” *Ann. Appl. Stat.* 1 (1): 265–83.
 
 </div>
 
-<div id="ref-zhao19">
+<div id="ref-zhao20Mat">
 
-Zhao, Yuxuan, and Madeleine Udell. 2019. “Missing Value Imputation for
-Mixed Data via Gaussian Copula.” <http://arxiv.org/abs/1910.12845>.
+Zhao, Yuxuan, and Madeleine Udell. 2020a. “Matrix Completion with
+Quantified Uncertainty Through Low Rank Gaussian Copula.” In *Advances
+in Neural Information Processing Systems (Neurips)*.
+<http://arxiv.org/abs/2006.10829>.
+
+</div>
+
+<div id="ref-zhao20">
+
+———. 2020b. “Missing Value Imputation for Mixed Data via Gaussian
+Copula.” In *Proceedings of the 26th Acm Sigkdd International Conference
+on Knowledge Discovery & Data Mining*, 636–46. KDD ’20. New York, NY,
+USA: Association for Computing Machinery.
+<https://doi.org/10.1145/3394486.3403106>.
 
 </div>
 

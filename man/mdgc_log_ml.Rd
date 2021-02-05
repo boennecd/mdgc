@@ -59,11 +59,32 @@ approximation with respect to \code{mea}.
 }
 \description{
 Approximates the log marginal likelihood and the derivatives using
-quasi-random numbers. The method uses a generalization of the Fortran
+randomized quasi-Monte Carlo. The method uses a generalization of the Fortran
 code by Genz and Bretz (2002).
 
 Mean terms for observed continuous variables are always assumed to be
 zero.
+
+The returned log marginal likelihood is not a proper log marginal likelihood
+if the \code{ptr} object is constructed from a mdgc object from
+\code{\link{get_mdgc}} as it does not include the log of the determinants of
+the Jacobians for the transformation of the continuous variables.
+}
+\examples{
+# randomly mask data
+set.seed(11)
+masked_data <- iris
+masked_data[matrix(runif(prod(dim(iris))) < .10, NROW(iris))] <- NA
+
+# use the functions in the package
+library(mdgc)
+obj <- get_mdgc(masked_data)
+ptr <- get_mdgc_log_ml(obj)
+start_vals <- mdgc_start_value(obj)
+mdgc_log_ml(ptr, start_vals, obj$means)
+mdgc_log_ml(ptr, start_vals, obj$means, use_aprx = TRUE)
+mdgc_log_ml(ptr, start_vals, obj$means, use_aprx = TRUE, comp_derivs = TRUE)
+
 }
 \references{
 Genz, A., & Bretz, F. (2002). \emph{Comparison of Methods for the

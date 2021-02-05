@@ -1,10 +1,37 @@
-@misc{zhao19,
-    title={Missing Value Imputation for Mixed Data via Gaussian Copula},
-    author={Yuxuan Zhao and Madeleine Udell},
-    year={2019},
-    eprint={1910.12845},
-    archivePrefix={arXiv},
-    primaryClass={stat.ME}
+@misc{Christoffersen21,
+      title={Asymptotically Exact and Fast Gaussian Copula Models for Imputation of Mixed Data Types},
+      author={Benjamin Christoffersen and Mark Clements and Keith Humphreys and Hedvig Kjellström},
+      year={2021},
+      eprint={2102.02642},
+      archivePrefix={arXiv},
+      primaryClass={stat.ML}
+}
+
+@inproceedings{zhao20Mat,
+	title={Matrix Completion with Quantified Uncertainty through Low Rank {G}aussian Copula},
+	author={Yuxuan Zhao and Madeleine Udell},
+	year={2020},
+	eprint={2006.10829},
+	archivePrefix={arXiv},
+	primaryClass={stat.ML},
+	booktitle	= {Advances in Neural Information Processing Systems (NeurIPS)},
+}
+
+@inproceedings{zhao20,
+author = {Zhao, Yuxuan and Udell, Madeleine},
+title = {Missing Value Imputation for Mixed Data via {G}aussian Copula},
+year = {2020},
+isbn = {9781450379984},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+doi = {10.1145/3394486.3403106},
+abstract = {Missing data imputation forms the first critical step of many data analysis pipelines. The challenge is greatest for mixed data sets, including real, Boolean, and ordinal data, where standard techniques for imputation fail basic sanity checks: for example, the imputed values may not follow the same distributions as the data. This paper proposes a new semiparametric algorithm to impute missing values, with no tuning parameters. The algorithm models mixed data as a Gaussian copula. This model can fit arbitrary marginals for continuous variables and can handle ordinal variables with many levels, including Boolean variables as a special case. We develop an efficient approximate EM algorithm to estimate copula parameters from incomplete mixed data. The resulting model reveals the statistical associations among variables. Experimental results on several synthetic and real datasets show the superiority of our proposed algorithm to state-of-the-art imputation algorithms for mixed data.},
+booktitle = {Proceedings of the 26th ACM SIGKDD International Conference on Knowledge Discovery \& Data Mining},
+pages = {636–646},
+numpages = {11},
+keywords = {missing values, mixed data, ordinal data, Gaussian copula, imputation},
+location = {Virtual Event, CA, USA},
+series = {KDD '20}
 }
 
 @article{Kingma15,

@@ -30,18 +30,19 @@ the default method.}
 
 \item{...}{used to pass arguments to S3 methods.}
 
-\item{lower}{#variables x #observation matrix with lower bounds
+\item{lower}{[# variables]x[# observations] matrix with lower bounds
 for each variable on the normal scale.}
 
-\item{upper}{#variables x #observation matrix with upper bounds
+\item{upper}{[# variables]x[# observations] matrix with upper bounds
 for each variable on the normal scale.}
 
-\item{code}{#variables x #observation matrix integer code for the
+\item{code}{[# variables]x[# observations] matrix integer code for the
 each variable on the normal scale. Zero implies an observed value (the
 value in \code{upper}), one implies a missing value, and two implies an
 interval.}
 
-\item{multinomial}{\code{\link{list}} with 3xn \code{\link{matrix}} with
+\item{multinomial}{\code{\link{list}} where each element is
+3x[# multinomial variables] \code{\link{matrix}} with
 multinomial outcomes. The first index is the outcome as an integer code,
 the second index is the number of categories, and the third index is the
 index of each multinomial variable (this is zero-based).}
@@ -59,6 +60,18 @@ variables.
 
 \code{idx_non_zero_mean} indices with terms with \code{code} equal to zero
 (observed values) are ignored.
+}
+\examples{
+# randomly mask data
+set.seed(11)
+masked_data <- iris
+masked_data[matrix(runif(prod(dim(iris))) < .10, NROW(iris))] <- NA
+
+# use the functions in the package
+library(mdgc)
+obj <- get_mdgc(masked_data)
+ptr <- get_mdgc_log_ml(obj)
+
 }
 \seealso{
 \code{\link{mdgc_fit}}, \code{\link{mdgc_log_ml}}

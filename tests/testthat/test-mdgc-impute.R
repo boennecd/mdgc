@@ -80,6 +80,8 @@ test_that("mdgc_impute gives the same as before and with and without reordering"
 })
 
 test_that("imputation with ordinal variables yields the correct probabilities", {
+  skip_on_cran()
+
   #####
   # test with two binary variables and a ordinal variable
   probs <- c(.2, .3, .3, .2)

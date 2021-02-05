@@ -2,7 +2,7 @@
 % Please edit documentation in R/mdgc.R
 \name{mdgc_fit}
 \alias{mdgc_fit}
-\title{Estimate the Covariance Matrix}
+\title{Estimate the Model Parameters}
 \usage{
 mdgc_fit(
   ptr,
@@ -89,6 +89,27 @@ Convergence should be monitored e.g. by using \code{verbose = TRUE}
 with \code{method = "svrg"}.
 
 See the README at \url{https://github.com/boennecd/mdgc} for examples.
+}
+\examples{
+\dontrun{
+# randomly mask data
+set.seed(11)
+masked_data <- iris
+masked_data[matrix(runif(prod(dim(iris))) < .10, NROW(iris))] <- NA
+
+# use the functions in the package
+library(mdgc)
+obj <- get_mdgc(masked_data)
+ptr <- get_mdgc_log_ml(obj)
+start_vals <- mdgc_start_value(obj)
+
+fit <- mdgc_fit(ptr, start_vals, obj$means, rel_eps = 1e-2, maxpts = 10000L,
+                minvls = 1000L, use_aprx = TRUE, batch_size = 100L, lr = .001,
+                maxit = 100L, n_threads = 2L)
+fit$result$vcov
+fit$result$mea
+}
+
 }
 \references{
 Kingma, D.P., & Ba, J. (2015). \emph{Adam: A Method for Stochastic Optimization}. abs/1412.6980.

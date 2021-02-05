@@ -24,12 +24,11 @@ mdgc_impute(
 
 \item{mea}{vector with non-zero mean entries to condition on.}
 
-\item{rel_eps}{relative error for each marginal likelihood factor.}
+\item{rel_eps}{relative convergence threshold for each term in the approximation.}
 
-\item{maxit}{maximum number of iteration.}
+\item{maxit}{maximum number of samples}
 
-\item{abs_eps}{absolute convergence threshold for each marginal likelihood
-factor.}
+\item{abs_eps}{absolute convergence threshold for each term in the approximation.}
 
 \item{n_threads}{number of threads to use.}
 
@@ -50,4 +49,30 @@ variables.
 \description{
 Imputes missing values given a covariance matrix and mean vector using a
 similar quasi-random numbers method as \code{\link{mdgc_log_ml}}.
+}
+\examples{
+\dontrun{
+# randomly mask data
+set.seed(11)
+masked_data <- iris
+masked_data[matrix(runif(prod(dim(iris))) < .10, NROW(iris))] <- NA
+
+# use the functions in the package
+library(mdgc)
+obj <- get_mdgc(masked_data)
+ptr <- get_mdgc_log_ml(obj)
+start_vals <- mdgc_start_value(obj)
+
+fit <- mdgc_fit(ptr, start_vals, obj$means, rel_eps = 1e-2, maxpts = 10000L,
+                minvls = 1000L, use_aprx = TRUE, batch_size = 100L, lr = .001,
+                maxit = 100L, n_threads = 2L)
+
+# impute using the estimated values
+imputed <- mdgc_impute(obj, fit$result$vcov, fit$result$mea, minvls = 1000L,
+                       maxit = 10000L, n_threads = 2L, use_aprx = TRUE)
+imputed[1:5] # first 5 observations
+head(masked_data, 5) # observed
+head(iris       , 5) # truth
+}
+
 }

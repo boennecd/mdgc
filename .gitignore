@@ -3,5 +3,6 @@
 .RData
 .Ruserdata
 README_cache
-sim-res
+sim-res/*
+!sim-res/.placeholder
 sim-res-old

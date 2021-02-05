@@ -8,7 +8,7 @@ get_mdgc(dat)
 }
 \arguments{
 \item{dat}{\code{\link{data.frame}} with continuous, multinomial, ordinal, and binary
-data.}
+variables.}
 }
 \description{
 Creates a mdgc object which is needed for estimation of the
@@ -25,6 +25,18 @@ columns:
   \item{Ordinal variables: }{should be \code{\link{ordered}}.}
 }
 }
+\examples{
+# randomly mask data
+set.seed(11)
+masked_data <- iris
+masked_data[matrix(runif(prod(dim(iris))) < .10, NROW(iris))] <- NA
+
+# use the functions in the package
+library(mdgc)
+obj <- get_mdgc(masked_data)
+class(obj)
+
+}
 \seealso{
-\code{\link{get_mdgc_log_ml}}, \code{\link{mdgc_impute}}
+\code{\link{get_mdgc_log_ml}}, \code{\link{mdgc_start_value}}
 }
