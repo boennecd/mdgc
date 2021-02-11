@@ -50,6 +50,9 @@ index of each multinomial variable (this is zero-based).}
 \item{idx_non_zero_mean}{indices for non-zero mean variables. Indices
 should be sorted.}
 }
+\value{
+A \code{Rcpp::XPtr} to pass to e.g. \code{\link{mdgc_log_ml}}.
+}
 \description{
 Creates a C++ object which is needed to approximate the log marginal
 likelihood. The object cannot be saved.

@@ -14,6 +14,18 @@
 #'   \item{Ordinal variables: }{should be \code{\link{ordered}}.}
 #' }
 #'
+#' @return
+#' An object of class \code{mdgc}. It has the following elements:
+#' \item{lower,upper,code,multinomial,idx_non_zero_mean}{arguments to pass to
+#' \code{\link{get_mdgc_log_ml}}.}
+#' \item{margs}{functions to get \code{lower} and \code{upper} bounds for each
+#' column of \code{dat}.}
+#' \item{reals,bins,ords}{indices of continuous, binary, and ordinal variables,
+#' respectively.}
+#' \item{truth}{the numeric version of \code{dat}.}
+#' \item{means}{starting values for the non-zero mean terms
+#' (see e.g. \code{\link{mdgc_fit}}).}
+#'
 #' @param dat \code{\link{data.frame}} with continuous, multinomial, ordinal, and binary
 #' variables.
 #' @importFrom stats na.omit
@@ -236,6 +248,9 @@ get_mdgc <- function(dat){
 #' obj <- get_mdgc(masked_data)
 #' ptr <- get_mdgc_log_ml(obj)
 #'
+#' @return
+#' A \code{Rcpp::XPtr} to pass to e.g. \code{\link{mdgc_log_ml}}.
+#'
 #' @seealso
 #' \code{\link{mdgc_fit}}, \code{\link{mdgc_log_ml}}
 #'
@@ -410,6 +425,9 @@ mdgc_log_ml <- function(ptr, vcov, mea, rel_eps = 1e-2, n_threads = 1L,
 #' @param object mdgc object from \code{\link{get_mdgc}}. Ignored by
 #' the default method.
 #'
+#' @return
+#' The starting value for the covariance matrix.
+#'
 #' @examples
 #' # randomly mask data
 #' set.seed(11)
@@ -514,13 +532,26 @@ mdgc_start_value.default <- function(object, lower, upper, code,
 #' \code{NULL} yields a default.
 #' @inheritParams mdgc_log_ml
 #'
+#' @return
+#' An \code{\link{list}} with the following elements:
+#' \item{result}{\code{\link{list}} with two elements: \code{vcov} is the
+#' estimated covariance matrix and \code{mea} is the estimated non-zero mean
+#' terms.}
+#' \item{estimates}{If present, the estimated parameters after each iteration.}
+#' \item{fun_vals}{If present, the output of \code{\link{mdgc_log_ml}} after
+#' each iteration.}
+#' \item{mu,lambda}{If present, the \code{mu} and \code{lambda} values at the
+#' end.}
+#'
+#' The elements that may be present depending on the chosen \code{method}.
+#'
 #' @references
 #' Kingma, D.P., & Ba, J. (2015). \emph{Adam: A Method for Stochastic Optimization}. abs/1412.6980.
 #'
 #' Johnson, R., & Zhang, T. (2013). \emph{Accelerating stochastic gradient descent using predictive variance reduction}. In Advances in neural information processing systems.
 #'
 #' @examples
-#' \dontrun{
+#' \donttest{
 #' # randomly mask data
 #' set.seed(11)
 #' masked_data <- iris
@@ -1074,12 +1105,13 @@ svrg <- function(par_fn, nobs, val_vcov, val_mea, batch_size, maxit = 10L,
 #' @inheritParams mdgc_log_ml
 #'
 #' @return
-#' A list with imputed values for the continuous variables and a vector with
+#' A list of lists
+#' with imputed values for the continuous variables and a vector with
 #' probabilities for each level for the ordinal, binary, and multinomial
 #' variables.
 #'
 #' @examples
-#' \dontrun{
+#' \donttest{
 #' # randomly mask data
 #' set.seed(11)
 #' masked_data <- iris
@@ -1201,8 +1233,19 @@ mdgc_impute <- function(object, vcov, mea, rel_eps = 1e-3, maxit = 10000L,
 #'
 #' Johnson, R., & Zhang, T. (2013). \emph{Accelerating stochastic gradient descent using predictive variance reduction}. In Advances in neural information processing systems.
 #'
+#' @return
+#' A list with the following entries:
+#'
+#' \item{ximp}{\code{\link{data.frame}} with the observed and imputed values.}
+#' \item{imputed}{output from \code{\link{mdgc_impute}}.}
+#' \item{vcov}{the estimated covariance matrix.}
+#' \item{mea}{the estimated non-zero mean terms.}
+#'
+#' Additional elements may be present depending on the chosen \code{method}.
+#' See \code{\link{mdgc_fit}}.
+#'
 #' @examples
-#' \dontrun{
+#' \donttest{
 #' if(require(catdata)){
 #'   data(retinopathy)
 #'

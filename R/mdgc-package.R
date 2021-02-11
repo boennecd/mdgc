@@ -8,7 +8,8 @@
 #' of the functions in the package give the user access to lower level
 #' functions.
 #'
-#' Examples are provided at \url{https://github.com/boennecd/mdgc}.
+#' Examples are provided at \url{https://github.com/boennecd/mdgc}. The package
+#' is still in a development stage and the API may change.
 #'
 #' @references
 #' Christoffersen, B., Clements, M., Humphreys, K., & Kjellström, H. (2021).

@@ -52,6 +52,9 @@ should be sorted.}
 
 \item{n_threads}{number of threads to use.}
 }
+\value{
+The starting value for the covariance matrix.
+}
 \description{
 Uses a heuristic to get starting values for the covariance matrix. These
 can be passed e.g. to \code{\link{mdgc_fit}}.

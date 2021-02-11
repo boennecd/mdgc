@@ -89,6 +89,17 @@ term.}
 \code{\link{pnorm}} and \code{\link{qnorm}}. This may yield a
 noticeable reduction in the computation time.}
 }
+\value{
+A list with the following entries:
+
+\item{ximp}{\code{\link{data.frame}} with the observed and imputed values.}
+\item{imputed}{output from \code{\link{mdgc_impute}}.}
+\item{vcov}{the estimated covariance matrix.}
+\item{mea}{the estimated non-zero mean terms.}
+
+Additional elements may be present depending on the chosen \code{method}.
+See \code{\link{mdgc_fit}}.
+}
 \description{
 A convenience function to perform model estimation and imputation in one
 call. The learning rate is likely model specific and should be altered.
@@ -101,7 +112,7 @@ It is important that the input for \code{data} has the appropriate types and
 classes. See \code{\link{get_mdgc}}.
 }
 \examples{
-\dontrun{
+\donttest{
 if(require(catdata)){
   data(retinopathy)
 

@@ -42,7 +42,8 @@ reordering. \code{TRUE} is likely the best option.}
 noticeable reduction in the computation time.}
 }
 \value{
-A list with imputed values for the continuous variables and a vector with
+A list of lists
+with imputed values for the continuous variables and a vector with
 probabilities for each level for the ordinal, binary, and multinomial
 variables.
 }
@@ -51,7 +52,7 @@ Imputes missing values given a covariance matrix and mean vector using a
 similar quasi-random numbers method as \code{\link{mdgc_log_ml}}.
 }
 \examples{
-\dontrun{
+\donttest{
 # randomly mask data
 set.seed(11)
 masked_data <- iris

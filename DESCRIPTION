@@ -5,16 +5,17 @@ Version: 0.1.0
 Authors@R: c(
   person("Benjamin", "Christoffersen", 
          email = "boennecd@gmail.com", 
-         role = c("cre", "aut")), 
+         role = c("cre", "aut"), 
+         comment = c(ORCID = "0000-0002-7182-1346")), 
   person("Alan", "Genz", 
-         role = c("cph")),
+         role = "cph"),
   person("Frank", "Bretz", 
-         role = c("cph")),
-  person("Bjoern", "Bornkamp", 
-         role = c("cph")), 
+         role = "cph"),
   person("Torsten", "Hothorn", 
-         role = c("cph")),
+         role = "cph"),
   person("R-core", email = "R-core@R-project.org",
+         role = "cph"),
+  person("Ross", "Ihaka", 
          role = "cph"))
 Description: Provides functions to impute missing values using Gaussian 
     copulas for mixed data types as described by Christoffersen et al. 

@@ -12,7 +12,8 @@ imputations. The main function is the \code{\link{mdgc}} function. The rest
 of the functions in the package give the user access to lower level
 functions.
 
-Examples are provided at \url{https://github.com/boennecd/mdgc}.
+Examples are provided at \url{https://github.com/boennecd/mdgc}. The package
+is still in a development stage and the API may change.
 }
 \references{
 Christoffersen, B., Clements, M., Humphreys, K., & Kjellström, H. (2021).
@@ -28,15 +29,15 @@ Useful links:
 
 }
 \author{
-\strong{Maintainer}: Benjamin Christoffersen \email{boennecd@gmail.com}
+\strong{Maintainer}: Benjamin Christoffersen \email{boennecd@gmail.com} (\href{https://orcid.org/0000-0002-7182-1346}{ORCID})
 
 Other contributors:
 \itemize{
   \item Alan Genz [copyright holder]
   \item Frank Bretz [copyright holder]
-  \item Bjoern Bornkamp [copyright holder]
   \item Torsten Hothorn [copyright holder]
   \item R-core \email{R-core@R-project.org} [copyright holder]
+  \item Ross Ihaka [copyright holder]
 }
 
 }

@@ -81,6 +81,19 @@ method.}
 \item{lambda}{starting values for the Lagrange multiplier estimates.
 \code{NULL} yields a default.}
 }
+\value{
+An \code{\link{list}} with the following elements:
+\item{result}{\code{\link{list}} with two elements: \code{vcov} is the
+estimated covariance matrix and \code{mea} is the estimated non-zero mean
+terms.}
+\item{estimates}{If present, the estimated parameters after each iteration.}
+\item{fun_vals}{If present, the output of \code{\link{mdgc_log_ml}} after
+each iteration.}
+\item{mu,lambda}{If present, the \code{mu} and \code{lambda} values at the
+end.}
+
+The elements that may be present depending on the chosen \code{method}.
+}
 \description{
 Estimates the covariance matrix and the non-zero mean terms.
 The \code{lr} parameter and the \code{batch_size} parameter are likely
@@ -91,7 +104,7 @@ with \code{method = "svrg"}.
 See the README at \url{https://github.com/boennecd/mdgc} for examples.
 }
 \examples{
-\dontrun{
+\donttest{
 # randomly mask data
 set.seed(11)
 masked_data <- iris

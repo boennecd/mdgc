@@ -10,6 +10,18 @@ get_mdgc(dat)
 \item{dat}{\code{\link{data.frame}} with continuous, multinomial, ordinal, and binary
 variables.}
 }
+\value{
+An object of class \code{mdgc}. It has the following elements:
+\item{lower,upper,code,multinomial,idx_non_zero_mean}{arguments to pass to
+\code{\link{get_mdgc_log_ml}}.}
+\item{margs}{functions to get \code{lower} and \code{upper} bounds for each
+column of \code{dat}.}
+\item{reals,bins,ords}{indices of continuous, binary, and ordinal variables,
+respectively.}
+\item{truth}{the numeric version of \code{dat}.}
+\item{means}{starting values for the non-zero mean terms
+(see e.g. \code{\link{mdgc_fit}}).}
+}
 \description{
 Creates a mdgc object which is needed for estimation of the
 covariance matrix and the mean vector and to perform imputation.
