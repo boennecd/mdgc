@@ -2,6 +2,8 @@
 # mdgc
 
 [![R-CMD-check](https://github.com/boennecd/mdgc/workflows/R-CMD-check/badge.svg)](https://github.com/boennecd/mdgc/actions)
+<https://www.r-pkg.org/badges/version/mdgc> [![CRAN RStudio mirror
+downloads](http://cranlogs.r-pkg.org/badges/mdgc)](http://cran.rstudio.com/web/packages/mdgc/index.html)
 
 This package contains a marginal likelihood approach to estimating the
 model discussed by Hoff (2007), Zhao and Udell (2020b), and Zhao and
@@ -28,10 +30,16 @@ languages.
 
 ## Installation
 
-The packages can be installed from Github by calling:
+The package can be installed from Github by calling:
 
 ``` r
 remotes::install_github("boennecd/mdgc")
+```
+
+or from CRAN by calling:
+
+``` r
+install.packages("mdgc")
 ```
 
 ## The Model
