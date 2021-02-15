@@ -45,6 +45,7 @@ test_that("iris examples give the same", {
 
   # dput(mdgc_log_ml(ptr, start_vals, obj$means, rel_eps = 1e-5, maxpts = 1000000L))
   truth <- -622.142234979514
+  set.seed(111)
   expect_equal(mdgc_log_ml(ptr, start_vals, obj$means),
                truth, tolerance = 1e-4)
   expect_equal(mdgc_log_ml(ptr, start_vals, obj$means, use_aprx = TRUE),

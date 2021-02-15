@@ -12,6 +12,7 @@
 #include "lp_utils.h"
 #include "multinomial-probit.h"
 #include <map>
+#include "openmp-exception_ptr.h"
 
 using namespace mdgc;
 using namespace arma;
@@ -172,6 +173,8 @@ Rcpp::NumericVector eval_log_lm_terms(
 
   double out(0.);
   size_t const n_indices = indices.n_elem;
+  openmp_exception_ptr capture_err;
+
 #ifdef _OPENMP
 #pragma omp parallel
 #endif
@@ -186,9 +189,11 @@ Rcpp::NumericVector eval_log_lm_terms(
     for(size_t i = 0; i < n_indices; ++i){
       if(static_cast<size_t>(indices[i]) >= terms.size())
         continue;
-      out += terms[indices[i]].approximate(
-        vcov, mu_arg, my_derivs_vcov, my_derivs_mea, maxpts, abs_eps,
-        rel_eps, comp_derivs, do_reorder, minvls, use_aprx);
+      capture_err.run([&](){
+        out += terms[indices[i]].approximate(
+          vcov, mu_arg, my_derivs_vcov, my_derivs_mea, maxpts, abs_eps,
+          rel_eps, comp_derivs, do_reorder, minvls, use_aprx);
+      });
     }
 
     if(comp_derivs){
@@ -203,6 +208,8 @@ Rcpp::NumericVector eval_log_lm_terms(
 #endif
     }
   }
+
+  capture_err.rethrow_if_error();
 
   Rcpp::NumericVector res(1);
   res[0] = out;
@@ -239,74 +246,80 @@ Rcpp::NumericMatrix get_z_hat
 
   Rcpp::NumericMatrix out(p, n);
   double * const o = &out[0];
+  openmp_exception_ptr capture_err;
+
 #ifdef _OPENMP
 #pragma omp parallel for num_threads(n_threads) schedule(static) if(!any_cate)
 #endif
   for(size_t j = 0; j < n; ++j){
-    arma::imat multinomial_j;
-    if(any_cate)
-      multinomial_j = Rcpp::as<arma::imat>(multinomial[j]);
+    capture_err.run([&](){
+      arma::imat multinomial_j;
+      if(any_cate)
+        multinomial_j = Rcpp::as<arma::imat>(multinomial[j]);
 
-    size_t k(0);
-    double * oj = o + j * p;
-    for(size_t i = 0; i < p; ++i, ++oj){
-      if(any_cate and k < multinomial_j.n_cols and
-           i == static_cast<size_t>(multinomial_j.at(2, k))){
-        /** we will set the observed level value to the median on the latent
-         *  scale conditional on it being the greatest value. We set the
-         *  other values to the median of a truncated normal distribution.
-         */
-        int const n_lvls = multinomial_j.at(1, k);
+      size_t k(0);
+      double * oj = o + j * p;
+      for(size_t i = 0; i < p; ++i, ++oj){
+        if(any_cate and k < multinomial_j.n_cols and
+             i == static_cast<size_t>(multinomial_j.at(2, k))){
+          /** we will set the observed level value to the median on the latent
+           *  scale conditional on it being the greatest value. We set the
+           *  other values to the median of a truncated normal distribution.
+           */
+          int const n_lvls = multinomial_j.at(1, k);
 
-        if(code.at(i, j) == 1L)
-          // the value is missing
-          for(int l = 0; l < n_lvls; ++l, ++i, ++oj)
-            *oj = upper.at(i, j);
-        else {
-          int const obs_lvl = multinomial_j.at(0, k) - 1,
-                idx_obs_lvl = obs_lvl + i;
-          bool const is_first = obs_lvl == 0L;
+          if(code.at(i, j) == 1L)
+            // the value is missing
+            for(int l = 0; l < n_lvls; ++l, ++i, ++oj)
+              *oj = upper.at(i, j);
+          else {
+            int const obs_lvl = multinomial_j.at(0, k) - 1,
+                  idx_obs_lvl = obs_lvl + i;
+            bool const is_first = obs_lvl == 0L;
 
-          double const val_obs = qnorm_w(
-            static_cast<double>(n_lvls) / (n_lvls + 1.),
-            -upper.at(idx_obs_lvl, j), is_first ? 1e-8 : 1., 1L, 0L);
+            double const val_obs = qnorm_w(
+              static_cast<double>(n_lvls) / (n_lvls + 1.),
+              -upper.at(idx_obs_lvl, j), is_first ? 1e-8 : 1., 1L, 0L);
 
-          *oj++ = 0; // always zero for identification
-          ++i;
+            *oj++ = 0; // always zero for identification
+            ++i;
 
-          for(int l = 1; l < n_lvls; ++l, ++i, ++oj)
-            if(i == static_cast<size_t>(idx_obs_lvl))
-              // the observed level
-              *oj = val_obs;
-            else {
-              // median of the truncated distribution
-              double const mu = -upper.at(i, j);
+            for(int l = 1; l < n_lvls; ++l, ++i, ++oj)
+              if(i == static_cast<size_t>(idx_obs_lvl))
+                // the observed level
+                *oj = val_obs;
+              else {
+                // median of the truncated distribution
+                double const mu = -upper.at(i, j);
 
-              *oj = qnorm_w(
-                pnorm_std((val_obs - mu), 1L, 0L) / 2., mu, 1., 1L, 0L);
+                *oj = qnorm_w(
+                  pnorm_std((val_obs - mu), 1L, 0L) / 2., mu, 1., 1L, 0L);
 
-            }
+              }
+          }
+
+          ++k;
+          --oj; // increment in the for-loop
+          --i ; // increment in the for-loop
+          continue;
         }
 
-        ++k;
-        --oj; // increment in the for-loop
-        --i ; // increment in the for-loop
-        continue;
+        if(code.at(i, j) <= 1L){
+          *oj = upper.at(i, j);
+          continue;
+        }
+
+        double const l = lower.at(i, j),
+                     u = upper.at(i, j),
+                     a = std::isinf(l) ? 0 : pnorm_std(l, 1L, 0L),
+                     b = std::isinf(u) ? 1 : pnorm_std(u, 1L, 0L);
+
+        *oj = qnorm_w((b + a) / 2., 0., 1., 1L, 0L);
       }
-
-      if(code.at(i, j) <= 1L){
-        *oj = upper.at(i, j);
-        continue;
-      }
-
-      double const l = lower.at(i, j),
-                   u = upper.at(i, j),
-                   a = std::isinf(l) ? 0 : pnorm_std(l, 1L, 0L),
-                   b = std::isinf(u) ? 1 : pnorm_std(u, 1L, 0L);
-
-      *oj = qnorm_w((b + a) / 2., 0., 1., 1L, 0L);
-    }
+    });
   }
+
+  capture_err.rethrow_if_error();
 
   return out;
 }
@@ -671,6 +684,8 @@ Rcpp::List impute
     }
   }
 
+  openmp_exception_ptr capture_err;
+
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static) \
   firstprivate(w_idx_int, w_idx_obs, w_obs_val, w_upper, w_lower, \
@@ -679,232 +694,236 @@ Rcpp::List impute
           mu_use, type_i, a_idx_cat_obs, a_idx_cat_not_obs, D)
 #endif
   for(size_t i = 0; i < n_obs; ++i){
-    // create covariance matrix and bounds to pass
-    bool any_missing(false);
-    int n_i_all   (0L),
-           n_o    (0L),
-         n_cat_obs(0L),
-           n_i    (0L),
-           k      (0L),
-           n_D_col(0L);
-    arma::imat const &cate_mat_i = cate_mat[i];
-    constexpr double const inf =
-      std::numeric_limits<double>::infinity();
-    D.zeros(n_vars, cate_mat_i.n_cols);
+    capture_err.run([&](){
+      // create covariance matrix and bounds to pass
+      bool any_missing(false);
+      int n_i_all   (0L),
+             n_o    (0L),
+           n_cat_obs(0L),
+             n_i    (0L),
+             k      (0L),
+             n_D_col(0L);
+      arma::imat const &cate_mat_i = cate_mat[i];
+      constexpr double const inf =
+        std::numeric_limits<double>::infinity();
+      D.zeros(n_vars, cate_mat_i.n_cols);
 
-    for(int j = 0; j < n_vars; ++j){
-      if(static_cast<size_t>(k) < cate_mat_i.n_cols and
-           j == cate_mat_i.at(2, k)){
-        int const n_lvls = cate_mat_i.at(1, k);
-
-        if(code.at(j, i) == 1L){
-          // no information (missing and needs imputation)
-          for(int l = 0; l < n_lvls; ++l, ++j){
-            w_idx_int.at(n_i_all  ) = j;
-            mu       .at(n_i_all++) = mea[j];
-
-            w_idx_cat_not_obs.at(n_i  ) = j - n_o;
-            w_lower          .at(n_i  ) = -inf;
-            w_upper          .at(n_i++) =  inf;
-          }
-          any_missing = true;
-
-        } else {
-          // observed the level
-          int const idx_obs_lvl = cate_mat_i.at(0, k) - 1 + j;
-
-          for(int l = 0; l < n_lvls; ++l, ++j){
-            w_idx_int.at(n_i_all  ) = j;
-            mu       .at(n_i_all++) = mea[j];
-
-            if(j != idx_obs_lvl){
-              D                .at(n_i, n_D_col) = 1;
-              w_idx_cat_not_obs.at(n_i         ) = j - n_o;
-              w_lower          .at(n_i         ) = lower.at(j, i);
-              w_upper          .at(n_i++       ) =
-                upper.at(j, i) - upper.at(idx_obs_lvl, i);
-            } else
-              w_idx_cat_obs[n_cat_obs++] = j - n_o;
-          }
-
-          ++n_D_col;
-        }
-
-        ++k;
-        --j; // incremented in the for-loop
-        continue;
-      }
-
-      if       (code.at(j, i) == 0L){
-        /* observed value */
-        w_idx_obs.at(n_o  ) = j;
-        w_obs_val.at(n_o++) = upper.at(j, i);
-
-      } else if(code.at(j, i) == 1L) {
-        /* no information (missing and needs imputation) */
-        w_idx_int.at(n_i_all  ) = j;
-        mu       .at(n_i_all++) = mea[j];
-
-        w_idx_cat_not_obs.at(n_i  ) = j - n_o;
-        w_lower          .at(n_i  ) = -inf;
-        w_upper          .at(n_i++) =  inf;
-        any_missing = true;
-
-      } else if(code.at(j, i) == 2L){
-        /* Z is in an interval */
-        w_idx_int.at(n_i_all  ) = j;
-        mu       .at(n_i_all++) = mea[j];
-
-        w_idx_cat_not_obs.at(n_i  ) = j - n_o;
-        w_lower          .at(n_i  ) = lower.at(j, i);
-        w_upper          .at(n_i++) = upper.at(j, i);
-
-      } else
-        throw std::invalid_argument("impute: invalid code");
-    }
-
-    if(!any_missing)
-      continue;
-
-    if(n_i > 0){
-      a_idx_int = w_idx_int.subvec(0L, n_i_all - 1L);
-      a_upper   = w_upper  .subvec(0L, n_i     - 1L);
-      a_lower   = w_lower  .subvec(0L, n_i     - 1L);
-
-    } else
-      throw std::runtime_error("should not be reached");
-
-    if(n_o > 0){
-      a_idx_obs = w_idx_obs.subvec(0L, n_o - 1L);
-      a_obs_val = w_obs_val.subvec(0L, n_o - 1L);
-
-    } else {
-      a_idx_obs.set_size(0L);
-      a_obs_val.set_size(0L);
-
-    }
-
-    if(cate_mat_i.n_cols > 0){
-      if(n_cat_obs > 0)
-        a_idx_cat_obs = w_idx_cat_obs.subvec(0L, n_cat_obs - 1L);
-      else
-        a_idx_cat_obs.set_size(0L);
-      a_idx_cat_not_obs = w_idx_cat_not_obs.subvec(0L, n_i - 1L);
-
-      if(n_D_col > 0)
-        D = D.submat(0, 0, n_i - 1, n_D_col - 1);
-      else
-        D.set_size(0, 0);
-    }
-
-    mu_use = mu.subvec(0L, n_i_all - 1L);
-
-    mat Sigma_use;
-    if(n_o > 0){
-      // compute conditional mean and covariance matrix
-      arma::mat const S_oo = Sigma(a_idx_obs, a_idx_obs),
-                      S_oi = Sigma(a_idx_obs, a_idx_int),
-                      Mtmp = arma::solve(S_oo, S_oi,
-                                         arma::solve_opts::likely_sympd);
-      Sigma_use = Sigma(a_idx_int, a_idx_int);
-
-      Sigma_use -= S_oi.t() * Mtmp;
-      mu_use += Mtmp.t() * a_obs_val;
-
-    } else
-      // no observed continuous variables to condition on
-      Sigma_use = Sigma;
-
-    if(n_D_col > 0){
-      arma::mat const D_Sigma =
-        D * Sigma_use(a_idx_cat_obs, a_idx_cat_not_obs);
-      Sigma_use = Sigma_use(a_idx_cat_not_obs, a_idx_cat_not_obs) +
-        D * Sigma_use(a_idx_cat_obs, a_idx_cat_obs) * D.t() -
-        D_Sigma - D_Sigma.t();
-
-      mu_use = mu_use(a_idx_cat_not_obs) - D * mu_use(a_idx_cat_obs);
-    }
-
-    // create the type objects to pass
-    type_i.clear();
-    type_i.reserve(n_i);
-    {
-      arma::uword const *cur_idx_obs = a_idx_obs.begin();
-      int j = 0;
-      k = 0;
-      for(auto &type_list_it : type_list){
-        if(cur_idx_obs != a_idx_obs.end() and
-             static_cast<size_t>(j) == *cur_idx_obs){
-          // the outcome is known and continuous so we can use the value
-          // as is
-          ++cur_idx_obs;
-          ++j;
-          continue;
-        }
-
-        /* we know it is a latent variable which is multinomial, binary or
-         * ordinal. Thus, there will be a latent variable regardless of
-         * whether we observe the value or not. */
+      for(int j = 0; j < n_vars; ++j){
         if(static_cast<size_t>(k) < cate_mat_i.n_cols and
              j == cate_mat_i.at(2, k)){
-          // we have a multinomial outcome
           int const n_lvls = cate_mat_i.at(1, k);
 
-          if(code.at(j, i) == 2L) {
-            // the level is known. The number of variables we need to
-            // integrate out is one less
-            type_i.emplace_back(&known_objs.at(n_lvls - 1L));
-            ++j; // because of the n_lvls - 1L
-          } else
-            // the level is unknown
+          if(code.at(j, i) == 1L){
+            // no information (missing and needs imputation)
+            for(int l = 0; l < n_lvls; ++l, ++j){
+              w_idx_int.at(n_i_all  ) = j;
+              mu       .at(n_i_all++) = mea[j];
+
+              w_idx_cat_not_obs.at(n_i  ) = j - n_o;
+              w_lower          .at(n_i  ) = -inf;
+              w_upper          .at(n_i++) =  inf;
+            }
+            any_missing = true;
+
+          } else {
+            // observed the level
+            int const idx_obs_lvl = cate_mat_i.at(0, k) - 1 + j;
+
+            for(int l = 0; l < n_lvls; ++l, ++j){
+              w_idx_int.at(n_i_all  ) = j;
+              mu       .at(n_i_all++) = mea[j];
+
+              if(j != idx_obs_lvl){
+                D                .at(n_i, n_D_col) = 1;
+                w_idx_cat_not_obs.at(n_i         ) = j - n_o;
+                w_lower          .at(n_i         ) = lower.at(j, i);
+                w_upper          .at(n_i++       ) =
+                  upper.at(j, i) - upper.at(idx_obs_lvl, i);
+              } else
+                w_idx_cat_obs[n_cat_obs++] = j - n_o;
+            }
+
+            ++n_D_col;
+          }
+
+          ++k;
+          --j; // incremented in the for-loop
+          continue;
+        }
+
+        if       (code.at(j, i) == 0L){
+          /* observed value */
+          w_idx_obs.at(n_o  ) = j;
+          w_obs_val.at(n_o++) = upper.at(j, i);
+
+        } else if(code.at(j, i) == 1L) {
+          /* no information (missing and needs imputation) */
+          w_idx_int.at(n_i_all  ) = j;
+          mu       .at(n_i_all++) = mea[j];
+
+          w_idx_cat_not_obs.at(n_i  ) = j - n_o;
+          w_lower          .at(n_i  ) = -inf;
+          w_upper          .at(n_i++) =  inf;
+          any_missing = true;
+
+        } else if(code.at(j, i) == 2L){
+          /* Z is in an interval */
+          w_idx_int.at(n_i_all  ) = j;
+          mu       .at(n_i_all++) = mea[j];
+
+          w_idx_cat_not_obs.at(n_i  ) = j - n_o;
+          w_lower          .at(n_i  ) = lower.at(j, i);
+          w_upper          .at(n_i++) = upper.at(j, i);
+
+        } else
+          throw std::invalid_argument("impute: invalid code");
+      }
+
+      if(!any_missing)
+        return;
+
+      if(n_i > 0){
+        a_idx_int = w_idx_int.subvec(0L, n_i_all - 1L);
+        a_upper   = w_upper  .subvec(0L, n_i     - 1L);
+        a_lower   = w_lower  .subvec(0L, n_i     - 1L);
+
+      } else
+        throw std::runtime_error("should not be reached");
+
+      if(n_o > 0){
+        a_idx_obs = w_idx_obs.subvec(0L, n_o - 1L);
+        a_obs_val = w_obs_val.subvec(0L, n_o - 1L);
+
+      } else {
+        a_idx_obs.set_size(0L);
+        a_obs_val.set_size(0L);
+
+      }
+
+      if(cate_mat_i.n_cols > 0){
+        if(n_cat_obs > 0)
+          a_idx_cat_obs = w_idx_cat_obs.subvec(0L, n_cat_obs - 1L);
+        else
+          a_idx_cat_obs.set_size(0L);
+        a_idx_cat_not_obs = w_idx_cat_not_obs.subvec(0L, n_i - 1L);
+
+        if(n_D_col > 0)
+          D = D.submat(0, 0, n_i - 1, n_D_col - 1);
+        else
+          D.set_size(0, 0);
+      }
+
+      mu_use = mu.subvec(0L, n_i_all - 1L);
+
+      mat Sigma_use;
+      if(n_o > 0){
+        // compute conditional mean and covariance matrix
+        arma::mat const S_oo = Sigma(a_idx_obs, a_idx_obs),
+                        S_oi = Sigma(a_idx_obs, a_idx_int),
+                        Mtmp = arma::solve(S_oo, S_oi,
+                                           arma::solve_opts::likely_sympd);
+        Sigma_use = Sigma(a_idx_int, a_idx_int);
+
+        Sigma_use -= S_oi.t() * Mtmp;
+        mu_use += Mtmp.t() * a_obs_val;
+
+      } else
+        // no observed continuous variables to condition on
+        Sigma_use = Sigma;
+
+      if(n_D_col > 0){
+        arma::mat const D_Sigma =
+          D * Sigma_use(a_idx_cat_obs, a_idx_cat_not_obs);
+        Sigma_use = Sigma_use(a_idx_cat_not_obs, a_idx_cat_not_obs) +
+          D * Sigma_use(a_idx_cat_obs, a_idx_cat_obs) * D.t() -
+          D_Sigma - D_Sigma.t();
+
+        mu_use = mu_use(a_idx_cat_not_obs) - D * mu_use(a_idx_cat_obs);
+      }
+
+      // create the type objects to pass
+      type_i.clear();
+      type_i.reserve(n_i);
+      {
+        arma::uword const *cur_idx_obs = a_idx_obs.begin();
+        int j = 0;
+        k = 0;
+        for(auto &type_list_it : type_list){
+          if(cur_idx_obs != a_idx_obs.end() and
+               static_cast<size_t>(j) == *cur_idx_obs){
+            // the outcome is known and continuous so we can use the value
+            // as is
+            ++cur_idx_obs;
+            ++j;
+            continue;
+          }
+
+          /* we know it is a latent variable which is multinomial, binary or
+           * ordinal. Thus, there will be a latent variable regardless of
+           * whether we observe the value or not. */
+          if(static_cast<size_t>(k) < cate_mat_i.n_cols and
+               j == cate_mat_i.at(2, k)){
+            // we have a multinomial outcome
+            int const n_lvls = cate_mat_i.at(1, k);
+
+            if(code.at(j, i) == 2L) {
+              // the level is known. The number of variables we need to
+              // integrate out is one less
+              type_i.emplace_back(&known_objs.at(n_lvls - 1L));
+              ++j; // because of the n_lvls - 1L
+            } else
+              // the level is unknown
+              type_i.emplace_back(type_list_it.get());
+
+            ++k; // move to the next multinomial variable
+            j += type_i.back()->n_latent();
+            continue;
+          }
+
+          if(code.at(j, i) == 2L)
+            // the level is observed. Ordinal/binary so only one latent
+            // variable
+            type_i.emplace_back(&known_objs.at(1L));
+          else
             type_i.emplace_back(type_list_it.get());
-
-          ++k; // move to the next multinomial variable
           j += type_i.back()->n_latent();
-          continue;
         }
-
-        if(code.at(j, i) == 2L)
-          // the level is observed. Ordinal/binary so only one latent
-          // variable
-          type_i.emplace_back(&known_objs.at(1L));
-        else
-          type_i.emplace_back(type_list_it.get());
-        j += type_i.back()->n_latent();
       }
-    }
 
-    restrictcdf::imputation imputer(type_i, mu_use, Sigma_use);
-    auto res = restrictcdf::cdf<restrictcdf::imputation>
-      (imputer, a_lower, a_upper, mu_use, Sigma_use, do_reorder,
-       use_aprx).approximate(maxit, abs_eps, rel_eps, minvls);
+      restrictcdf::imputation imputer(type_i, mu_use, Sigma_use);
+      auto res = restrictcdf::cdf<restrictcdf::imputation>
+        (imputer, a_lower, a_upper, mu_use, Sigma_use, do_reorder,
+         use_aprx).approximate(maxit, abs_eps, rel_eps, minvls);
 
-    res.imputations /= res.likelihood;
+      res.imputations /= res.likelihood;
 
-    double *o = out_dat.colptr(i);
-    double const *rval = res.imputations.begin();
+      double *o = out_dat.colptr(i);
+      double const *rval = res.imputations.begin();
 
-    {
-      arma::uword const *cur_idx_obs = a_idx_obs.begin();
-      int j(0);
-      for(auto &type_j : type_list){
-        if(cur_idx_obs != a_idx_obs.end() and
-             static_cast<size_t>(j) == *cur_idx_obs){
-          // the variable is continuous and known. Do nothing.
-          ++cur_idx_obs;
-          o += impute_get_output_dim(type_j.get());
+      {
+        arma::uword const *cur_idx_obs = a_idx_obs.begin();
+        int j(0);
+        for(auto &type_j : type_list){
+          if(cur_idx_obs != a_idx_obs.end() and
+               static_cast<size_t>(j) == *cur_idx_obs){
+            // the variable is continuous and known. Do nothing.
+            ++cur_idx_obs;
+            o += impute_get_output_dim(type_j.get());
+            j += type_j->n_latent();
+            continue;
+          }
+
+          if(code.at(j, i) == 2L)
+            o += impute_get_output_dim(type_j.get());
+          else
+            impute_set_val(type_j.get(), o, rval);
           j += type_j->n_latent();
-          continue;
         }
-
-        if(code.at(j, i) == 2L)
-          o += impute_get_output_dim(type_j.get());
-        else
-          impute_set_val(type_j.get(), o, rval);
-        j += type_j->n_latent();
       }
-    }
+    });
   }
+
+  capture_err.rethrow_if_error();
 
   // format and return
   std::vector<Rcpp::Function> funcs;

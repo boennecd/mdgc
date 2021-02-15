@@ -97,3 +97,13 @@ test_that("svrg gives the same", {
     method = "svrg", minvls = 1000L, use_aprx = TRUE)
   expect_equal(fit_svrg, fit_svrg_3, tolerance = 1e-6)
 })
+
+test_that("R does not terminate when a non positive definite matrix is passed as a covariance matrix", {
+  dat <- data.frame(X1 = c(FALSE, FALSE, TRUE, NA   , FALSE),
+                    X2 = c(TRUE , FALSE, NA  , FALSE, TRUE))
+  obj <- get_mdgc(dat)
+  ptr <- get_mdgc_log_ml(dat)
+  Sigma <- matrix(c(1, 1.5, 1.5, 1), 2)
+
+  expect_error(mdgc_log_ml(ptr, Sigma, obj$means, n_threads = 2L))
+})
