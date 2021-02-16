@@ -1,7 +1,7 @@
 Package: mdgc
 Type: Package
 Title: Missing Data Imputation Using Gaussian Copulas
-Version: 0.2.0
+Version: 0.1.1
 Authors@R: c(
   person("Benjamin", "Christoffersen", 
          email = "boennecd@gmail.com", 

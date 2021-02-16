@@ -119,9 +119,9 @@ test_that("imputation with ordinal variables yields the correct probabilities", 
   outer_names <- c("B1", "B2", "O1")
   multinomial <- replicate(4L, matrix(0L, 0, 0), simplify = FALSE)
 
-  set.seed(1)
+  set.seed(old_seed <- 1)
   res <- mdgc:::impute(
-    lower = lower, upper = upper, code = code, Sigma = Sig, mea = qnorm(ps),
+    lower = lower, upper = upper, code = code, Sigma = Sig, mea = c(qnorm(ps), 0),
     truth = rbind(c(0., 0., 1., 1.),
                   c(0., 1., 0., 1.), c(NA, NA, NA, NA)),
     margs = margs, multinomial = multinomial, rel_eps = 1e-10, abs_eps = -1,
@@ -129,8 +129,20 @@ test_that("imputation with ordinal variables yields the correct probabilities", 
     outer_names = outer_names, n_threads = 1L, do_reorder = TRUE,
     use_aprx = TRUE)
 
-  expect_equal(t(sapply(res, `[[`, "O1")), truth, tolerance = 1e-3,
+  expect_equal(t(sapply(res, `[[`, "O1")), truth, tolerance = 1e-2,
                check.attributes = FALSE)
+
+  # should give the same
+  set.seed(old_seed)
+  res_again <- mdgc:::impute(
+    lower = lower, upper = upper, code = code, Sigma = Sig, mea = c(qnorm(ps), 0),
+    truth = rbind(c(0., 0., 1., 1.),
+                  c(0., 1., 0., 1.), c(NA, NA, NA, NA)),
+    margs = margs, multinomial = multinomial, rel_eps = 1e-10, abs_eps = -1,
+    maxit = 100000L, minvls = 10000L, passed_names = passed_names,
+    outer_names = outer_names, n_threads = 1L, do_reorder = TRUE,
+    use_aprx = TRUE)
+  expect_equal(res_again, res)
 
   #####
   # test with a continuous variable and two ordinal variables
@@ -182,7 +194,7 @@ test_that("imputation with ordinal variables yields the correct probabilities", 
 
   set.seed(1)
   res <- mdgc:::impute(
-    lower = lower, upper = upper, code = code, Sigma = Sig, mea = numeric(),
+    lower = lower, upper = upper, code = code, Sigma = Sig, mea = numeric(2),
     truth = rbind(upper[1, ], rep(NA, 9), rep(1:3, 3)),
     margs = margs, multinomial = multinomial, rel_eps = 1e-10, abs_eps = -1,
     maxit = 100000L, minvls = 10000L, passed_names = passed_names,

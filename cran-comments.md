@@ -78,7 +78,7 @@ In particular, notice the stack trace in the example in the reported issue:
 >     #5 0x516f88 in main /home/mgigg/Code/git/martyngigg/sandbox/cpp/asan/omp/omp.cpp:4:11
 >     #6 0x7f3bdf11cb96 in __libc_start_main /build/glibc-OTsEL5/glibc-2.27/csu/../csu/libc-start.c:310
 
-It is also the looping variable that is blamed: 
+It is also clang-6.0.0 and the looping variable is blamed: 
 
 >  This frame has 6 object(s):
 >     [32, 36) 'i' (line 5) <== Memory access at offset 32 is inside this variable
@@ -87,8 +87,6 @@ It is also the looping variable that is blamed:
 >     [80, 84) '.omp.stride' (line 4)
 >     [96, 100) '.omp.is_last' (line 4)
 >     [112, 136) '.kmpc_loc.addr'
-
-It is also clang-6.0.0.
 
 Regarding:
 

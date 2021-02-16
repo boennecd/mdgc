@@ -792,17 +792,15 @@ public:
         throw std::invalid_argument("ordinal: n_ele less than three");
 #endif
       std::unique_ptr<double[]> out(new double[n_bs]);
-      for(int i = 0; i < n_bs; ++i)
-        *(out.get() + i) = *(br + i + 1L);
+      std::copy(br + 1L, br + 1L + n_bs, out.get());
       return out;
     })()) { }
 
     ordinal(ordinal const &o):
     n_bs(o.n_bs),
     borders(([&](){
-      std::unique_ptr<double[]> out(new double[n_bs]);
-      for(int i = 0; i < n_bs; ++i)
-        *(out.get() + i) = *(o.borders.get() + i);
+      std::unique_ptr<double[]> out(new double[o.n_bs]);
+      std::copy(o.borders.get(), o.borders.get() + o.n_bs, out.get());
       return out;
     })()) { }
 
