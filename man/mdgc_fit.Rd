@@ -10,7 +10,7 @@ mdgc_fit(
   mea,
   lr = 0.001,
   rel_eps = 0.001,
-  maxit = 10L,
+  maxit = 25L,
   batch_size = NULL,
   method = c("svrg", "adam", "aug_Lagran"),
   seed = 1L,

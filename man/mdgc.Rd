@@ -7,7 +7,7 @@
 mdgc(
   dat,
   lr = 0.001,
-  maxit = 10L,
+  maxit = 25L,
   batch_size = NULL,
   rel_eps = 0.001,
   method = c("svrg", "adam", "aug_Lagran"),

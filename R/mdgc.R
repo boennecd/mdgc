@@ -574,7 +574,7 @@ mdgc_start_value.default <- function(object, lower, upper, code,
 #' @importFrom utils tail
 #' @export
 mdgc_fit <- function(ptr, vcov, mea, lr = 1e-3, rel_eps = 1e-3,
-                     maxit = 10L, batch_size = NULL,
+                     maxit = 25L, batch_size = NULL,
                      method = c("svrg", "adam", "aug_Lagran"), seed = 1L,
                      epsilon = 1e-8,
                      beta_1 = .9, beta_2 = .999, n_threads = 1L,
@@ -1303,7 +1303,7 @@ mdgc_impute <- function(object, vcov, mea, rel_eps = 1e-3, maxit = 10000L,
 #' }
 #'
 #' @export
-mdgc <- function(dat, lr = 1e-3, maxit = 10L, batch_size = NULL,
+mdgc <- function(dat, lr = 1e-3, maxit = 25L, batch_size = NULL,
                  rel_eps = 1e-3, method = c("svrg", "adam", "aug_Lagran"),
                  seed = 1L, epsilon = 1e-8,
                  beta_1 = .9, beta_2 = .999, n_threads = 1L,

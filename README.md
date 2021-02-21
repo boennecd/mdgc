@@ -2,7 +2,8 @@
 # mdgc
 
 [![R-CMD-check](https://github.com/boennecd/mdgc/workflows/R-CMD-check/badge.svg)](https://github.com/boennecd/mdgc/actions)
-<https://www.r-pkg.org/badges/version/mdgc> [![CRAN RStudio mirror
+[![](https://www.r-pkg.org/badges/version/mdgc)](http://cran.rstudio.com/web/packages/mdgc/index.html)
+[![CRAN RStudio mirror
 downloads](http://cranlogs.r-pkg.org/badges/mdgc)](http://cran.rstudio.com/web/packages/mdgc/index.html)
 
 This package contains a marginal likelihood approach to estimating the

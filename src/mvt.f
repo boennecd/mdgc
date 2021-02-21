@@ -95,6 +95,7 @@
       DOUBLE PRECISION W(*),F(*), LOWER(*),UPPER(*), CORREL(*), DELTA(*)
       PARAMETER ( NL = 1000 )
       INTEGER INFI(NL), NU, ND, INFORM, NY, IDX(NL)
+      INTEGER PIVOTARG, DOSCALEARG
       DOUBLE PRECISION COV(NL*(NL+1)/2), A(NL), B(NL), DL(NL), Y(NL)
       DOUBLE PRECISION MVCHNV, SNU, R, VL, ER, DI, EI
       SAVE NU, SNU, INFI, A, B, DL, COV
@@ -115,9 +116,12 @@
 *
 *     Initialization and computation of covariance Cholesky factor.
 *
-      CALL MVSORT( N, LOWER, UPPER, DELTA, CORREL, INFIN, Y, .TRUE.,
+      PIVOTARG = 1
+      DOSCALEARG = 1
+      CALL MVSORT( N, LOWER, UPPER, DELTA, CORREL, INFIN, Y,
+     &            PIVOTARG,
      &            ND,     A,     B,    DL,    COV,  INFI, INFORM,
-     &            IDX,  .TRUE.)
+     &            IDX,  DOSCALEARG)
       NU = NUIN
       CALL MVSPCL( ND, NU, A, B, DL, COV, INFI, SNU, VL, ER, INFORM )
       END
@@ -255,9 +259,10 @@
       END DO
       END
 *
-      SUBROUTINE MVSORT( N, LOWER, UPPER, DELTA, CORREL, INFIN, Y,PIVOT,
+      SUBROUTINE MVSORT( N, LOWER, UPPER, DELTA, CORREL, INFIN, Y,
+     &                  PIVOTARG,
      &                  ND,     A,     B,    DL,    COV,  INFI, INFORM,
-     &                  IDX, DOSCALE  )
+     &                  IDX, DOSCALEARG  )
 *
 *     Subroutine to sort integration limits and determine Cholesky factor.
 *
@@ -272,7 +277,10 @@
       INTEGER I, J, K, L, M, II, IJ, IL, JL, JMIN, IDX(*)
       DOUBLE PRECISION SUMSQ, AJ, BJ, SUM, EPS, EPSI, D, E
       DOUBLE PRECISION CVDIAG, AMIN, BMIN, DEMIN, MVTDNS
+      INTEGER PIVOTARG, DOSCALEARG
       PARAMETER ( EPS = 1D-10 )
+      PIVOT = PIVOTARG .NE. 0
+      DOSCALE = DOSCALEARG .NE. 0
       INFORM = 0
       IJ = 0
       II = 0
