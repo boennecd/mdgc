@@ -143,7 +143,7 @@ Rcpp::NumericVector eval_log_lm_terms(
     SEXP ptr, arma::ivec const &indices, arma::mat const &vcov,
     arma::vec const &mu,
     int const maxpts, double const abs_eps, double const rel_eps,
-    size_t const n_threads, bool const comp_derivs, unsigned const minvls,
+    int const n_threads, bool const comp_derivs, unsigned const minvls,
     bool const do_reorder = true, bool const use_aprx = false){
   Rcpp::XPtr<ml_terms> obj(ptr);
   std::vector<log_ml_term> const &terms = obj->terms;
@@ -597,6 +597,9 @@ Rcpp::List impute
    Rcpp::List passed_names, Rcpp::CharacterVector outer_names,
    int const n_threads, bool const do_reorder, int const minvls,
    bool const use_aprx = false){
+  if(n_threads < 1L)
+    throw std::invalid_argument("impute: invalid n_threads");
+
   // setup vector to pass to RQMC method
   std::vector<std::unique_ptr<impute_base> > const type_list = ([&](){
     std::vector<std::unique_ptr<impute_base> > out;

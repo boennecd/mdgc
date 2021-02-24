@@ -21,7 +21,7 @@ BEGIN_RCPP
 END_RCPP
 }
 // eval_log_lm_terms
-Rcpp::NumericVector eval_log_lm_terms(SEXP ptr, arma::ivec const& indices, arma::mat const& vcov, arma::vec const& mu, int const maxpts, double const abs_eps, double const rel_eps, size_t const n_threads, bool const comp_derivs, unsigned const minvls, bool const do_reorder, bool const use_aprx);
+Rcpp::NumericVector eval_log_lm_terms(SEXP ptr, arma::ivec const& indices, arma::mat const& vcov, arma::vec const& mu, int const maxpts, double const abs_eps, double const rel_eps, int const n_threads, bool const comp_derivs, unsigned const minvls, bool const do_reorder, bool const use_aprx);
 RcppExport SEXP _mdgc_eval_log_lm_terms(SEXP ptrSEXP, SEXP indicesSEXP, SEXP vcovSEXP, SEXP muSEXP, SEXP maxptsSEXP, SEXP abs_epsSEXP, SEXP rel_epsSEXP, SEXP n_threadsSEXP, SEXP comp_derivsSEXP, SEXP minvlsSEXP, SEXP do_reorderSEXP, SEXP use_aprxSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
@@ -33,7 +33,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int const >::type maxpts(maxptsSEXP);
     Rcpp::traits::input_parameter< double const >::type abs_eps(abs_epsSEXP);
     Rcpp::traits::input_parameter< double const >::type rel_eps(rel_epsSEXP);
-    Rcpp::traits::input_parameter< size_t const >::type n_threads(n_threadsSEXP);
+    Rcpp::traits::input_parameter< int const >::type n_threads(n_threadsSEXP);
     Rcpp::traits::input_parameter< bool const >::type comp_derivs(comp_derivsSEXP);
     Rcpp::traits::input_parameter< unsigned const >::type minvls(minvlsSEXP);
     Rcpp::traits::input_parameter< bool const >::type do_reorder(do_reorderSEXP);

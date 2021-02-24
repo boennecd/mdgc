@@ -9,6 +9,7 @@
 // see https://stackoverflow.com/q/11828539/5861244
 class openmp_exception_ptr {
   std::exception_ptr Ptr = nullptr;
+  bool is_set = false;
 public:
   inline void rethrow_if_error(){
 #ifdef _OPENMP
@@ -28,7 +29,12 @@ public:
     catch (...)
     {
 #pragma omp critical(openmp_exception_ptr)
-      this->Ptr = std::current_exception();
+      {
+        if(!is_set){
+          this->Ptr = std::current_exception();
+          is_set = true;
+        }
+      }
     }
 #else
    f(params...);
