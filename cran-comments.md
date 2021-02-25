@@ -20,6 +20,11 @@ There were no WARNINGs or ERRORs.
 
 There is a NOTE about the package size in some cases.
 
+For some reason, using `std::current_exception()` with Rcpp does not seem to 
+work Fedora with clang-11 using libc++. I have made a workaround. Details of the
+issue is provided at https://stackoverflow.com/q/66362932/5861244 and 
+https://github.com/RcppCore/Rcpp/issues/972#issuecomment-785670233.
+
 I have fixed the LTO issue.
 
 The ASAN and UBSAN checks with clang-6.0.0 yields a false positive I think. I 
