@@ -1,12 +1,13 @@
 #ifndef FAST_COM_H
 #define FAST_COM_H
 #include "arma-wrap.h"
+#include <memory>
 
 inline std::unique_ptr<size_t[]> get_commutation_unequal_vec
   (unsigned const n, unsigned const m, bool const transpose){
   unsigned const nm = n * m,
-            nnm_p1 = n * nm + 1L,
-             nm_pm = nm + m;
+             nnm_p1 = n * nm + 1L,
+              nm_pm = nm + m;
   std::unique_ptr<size_t[]> out(new size_t[nm]);
   size_t * const o_begin = out.get();
   size_t idx = 0L;

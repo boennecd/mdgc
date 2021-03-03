@@ -12,6 +12,8 @@
 #define ARMA_NO_DEBUG
 #endif
 
+#define ARMA_DONT_PRINT_ERRORS
+
 #include <RcppArmadillo.h>
 
 #endif

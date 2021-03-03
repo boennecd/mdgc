@@ -11,7 +11,7 @@
   R devel 2021-02-05 r79941 with ASAN and UBSAN
 * Github actions on windows-latest (release), macOS-latest (release), 
   ubuntu-20.04 (release), and ubuntu-20.04 (devel)
-* win-builder (devel and release)
+* win-builder (devel, oldrelease, and release)
 * `rhub::check_for_cran()`
 * `rhub::check(platform = c("fedora-clang-devel", "solaris-x86-patched", "macos-highsierra-release-cran"))`
 
@@ -20,12 +20,8 @@ There were no WARNINGs or ERRORs.
 
 There is a NOTE about the package size in some cases.
 
-For some reason, using `std::current_exception()` with Rcpp does not seem to 
-work Fedora with clang-11 using libc++. I have made a workaround. Details of the
-issue is provided at https://stackoverflow.com/q/66362932/5861244 and 
-https://github.com/RcppCore/Rcpp/issues/972#issuecomment-785670233.
-
-I have fixed the LTO issue.
+I have fixed the error on the older version of Windows which showed up on 
+2020-02-29. I am still working on the Solaris issue.
 
 The ASAN and UBSAN checks with clang-6.0.0 yields a false positive I think. I 
 get the following:	
