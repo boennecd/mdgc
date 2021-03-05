@@ -21,7 +21,22 @@ There were no WARNINGs or ERRORs.
 There is a NOTE about the package size in some cases.
 
 I have fixed the error on the older version of Windows which showed up on 
-2020-02-29. I am still working on the Solaris issue.
+2020-02-29. I am still working on the Solaris issue which I have not reproduced 
+yet.
+
+I have followed the guide here 
+https://github.com/r-hub/solarischeck/tree/master/packer#readme to create a 
+VirtualBox to reproduce results on CRAN's check with Solaris. Unfortanately, 
+I end up reproducing the results from `rhub::check("solaris-x86-patched")`
+(where there are no errors).
+The package is build with GCC as I am linking with Rcpp.
+Judging by the specifications at https://www.stats.ox.ac.uk/pub/bdr/Rconfig/r-patched-solaris-x86,
+then it may fail on CRAN's check because of a different GCC version (5.2.0 vs. 
+5.5.0).
+
+Nevertheless, I did have some calls to `std::abs`, `std::sqrt` etc. with floats 
+or integers where implicit casts may have been made. I have changed such calls 
+in this version and I hope that it will fix the errors on Solaris.
 
 The ASAN and UBSAN checks with clang-6.0.0 yields a false positive I think. I 
 get the following:	

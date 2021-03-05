@@ -8,8 +8,6 @@
 #include <omp.h>
 #endif
 
-using std::log;
-
 namespace {
 static cache_mem<double> log_ml_mem;
 
@@ -32,7 +30,7 @@ void set_working_memory_log_ml(size_t const n_int, size_t const n_obs,
 namespace mdgc {
 using namespace restrictcdf;
 
-static double const log_2_pi = log(2 * M_PI);
+static double const log_2_pi = std::log(2 * M_PI);
 
 double log_ml_term::approximate
 (arma::mat const &vcov, arma::vec const &mu, arma::mat &derivs_vcov,
@@ -167,7 +165,7 @@ double log_ml_term::approximate
                    use_aprx).approximate(
                        maxpts, abs_eps, rel_eps, minvls);
       double const p_hat = res.likelihood;
-      out += log(p_hat);
+      out += std::log(p_hat);
 
       arma::uword const dim_int = n_int() - n_cate();
       arma::vec d_mu(res.derivs.begin(), dim_int, false, true),
@@ -265,7 +263,7 @@ double log_ml_term::approximate
       auto res =
         cdf<likelihood>(functor, lower, upper, mea, V, do_reorder,
                         use_aprx).approximate(maxpts, abs_eps, rel_eps);
-      out += log(res.likelihood);
+      out += std::log(res.likelihood);
     }
   }
 

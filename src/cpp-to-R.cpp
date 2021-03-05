@@ -969,9 +969,10 @@ Rcpp::NumericVector lower_tri_inner
   if(idx.nrow() < 1)
     return Rcpp::NumericVector();
 
-  double const fdim = .5 * (std::sqrt(8 * x.size() + 1) - 1);
+  double const fdim = .5 * (std::sqrt(
+    8. * static_cast<double>(x.size()) + 1.) - 1.);
   int const dim = std::lround(fdim);
-  if(std::abs(fdim / dim - 1) >
+  if(std::fabs(fdim / static_cast<double>(dim) - 1) >
        std::numeric_limits<double>::epsilon() * 10)
     throw std::invalid_argument("lower_tri_outer: invalid x");
   if(idx.ncol() != 2L)
@@ -1047,7 +1048,7 @@ Rcpp::NumericVector multinomial_find_means
   (arma::vec const &probs, double const rel_eps = 3.000214e-13,
    int const max_it = 100, double const c1 = .0001,
    double const c2 = .9){
-  if(probs.size() < 2 or std::abs(arma::sum(probs) - 1) >= 1e-10)
+  if(probs.size() < 2 or std::fabs(arma::sum(probs) - 1) >= 1e-10)
     throw std::invalid_argument("multinomial_find_means: invalid probs");
 
   Rcpp::NumericVector mu(probs.size() - 1);

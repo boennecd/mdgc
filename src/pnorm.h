@@ -5,10 +5,15 @@
 
 #ifdef __cplusplus
 #include <cmath>
-using std::isinf;
-using std::isnan;
+#include <limits>
+#define PNORM_ISNAN std::isnan
+#define PNORM_ISINF std::isinf
+#define PNORM_NAN std::numeric_limits<double>::quiet_NaN();
 #else
 #include <math.h>
+#define PNORM_ISNAN isnan
+#define PNORM_ISINF isinf
+#define PNORM_NAN R_NaN
 #endif
 
 /**
@@ -16,8 +21,8 @@ using std::isnan;
  * R function.
  */
 static inline double pnorm_std(double const x, int lower, int is_log) {
-  if(isinf(x) || isnan(x))
-    return NAN;
+  if(PNORM_ISINF(x) || PNORM_ISNAN(x))
+    return PNORM_NAN;
 
   double p, cp;
   p = x;
@@ -32,5 +37,9 @@ static inline double pnorm_w(double const x, double const mu, double const sigma
                              int lower, int is_log) {
   return pnorm_std((x - mu) / sigma, lower, is_log);
 }
+
+#undef PNORM_ISNAN
+#undef PNORM_ISINF
+#undef PNORM_NAN
 
 #endif

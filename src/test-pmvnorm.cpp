@@ -51,8 +51,8 @@ context("pmvnorm unit tests") {
       auto res = pmvnorm::cdf(lower, upper, mean, sigma, 1000000L, abs_eps,
                               -1);
       expect_true(res.inform == 0L);
-      expect_true(res.error                                < 100. * abs_eps);
-      expect_true(std::abs(res.value - 0.0196461341023563) < 100. * abs_eps);
+      expect_true(res.error                                 < 100. * abs_eps);
+      expect_true(std::fabs(res.value - 0.0196461341023563) < 100. * abs_eps);
     }
 
     auto const infin = pmvnorm::get_infin(lower, upper);
@@ -66,8 +66,8 @@ context("pmvnorm unit tests") {
       auto res = pmvnorm::cdf(lower, upper, infin, mean,
                               cor_vec_res.cor_vec, 1000000L, abs_eps, -1);
       expect_true(res.inform == 0L);
-      expect_true(res.error                                < 100. * abs_eps);
-      expect_true(std::abs(res.value - 0.0196461341023563) < 100. * abs_eps);
+      expect_true(res.error                                 < 100. * abs_eps);
+      expect_true(std::fabs(res.value - 0.0196461341023563) < 100. * abs_eps);
     }
   }
 }

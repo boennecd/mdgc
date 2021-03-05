@@ -154,7 +154,7 @@ public:
                 *rj += vk[*prj];
                 if(*rj > 1.)
                   *rj -= 1.;
-                *xj = std::abs(2 * *rj - 1);
+                *xj = std::fabs(2 * *rj - 1);
               }
             }
 
@@ -215,7 +215,7 @@ public:
         // passes criteria
         abserr = 7 / 2 * std::sqrt(finest_var[k]);
         passes_conv_check = passes_conv_check and
-          abserr <= std::max(abseps, std::abs(finest[k]) * releps);
+          abserr <= std::max(abseps, std::fabs(finest[k]) * releps);
       }
 
       if(!passes_conv_check){

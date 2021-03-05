@@ -51,7 +51,7 @@ inline double qnorm_aprx(double const p) MDGC_NOEXCEPT {
   // if(p > 0 and p < 1){
     // ok branch
     double const q = p - .5;
-    if(std::abs(q) < split1){
+    if(std::fabs(q) < split1){
       double const r = const1 - q * q;
       return q * (((A3 * r + A2) * r + A1) * r + AO) /
         (((B3 * r + B2) * r + B1) * r + 1);

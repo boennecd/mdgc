@@ -47,8 +47,8 @@ context("restrictcdf unit tests") {
         functor, mean, sigma, false).approximate(1000000L, abs_eps, -1);
 
       expect_true(res.inform == 0L);
-      expect_true(res.abserr                        < 100. * abs_eps);
-      expect_true(std::abs(res.likelihood - E_prop) < 100. * abs_eps);
+      expect_true(res.abserr                         < 100. * abs_eps);
+      expect_true(std::fabs(res.likelihood - E_prop) < 100. * abs_eps);
     }
     {
       restrictcdf::likelihood functor;
@@ -56,8 +56,8 @@ context("restrictcdf unit tests") {
         functor, mean, sigma, true).approximate(1000000L, abs_eps, -1);
 
       expect_true(res.inform == 0L);
-      expect_true(res.abserr                        < 100. * abs_eps);
-      expect_true(std::abs(res.likelihood - E_prop) < 100. * abs_eps);
+      expect_true(res.abserr                         < 100. * abs_eps);
+      expect_true(std::fabs(res.likelihood - E_prop) < 100. * abs_eps);
     }
   }
 
@@ -108,8 +108,8 @@ context("restrictcdf unit tests") {
             1000000L, abs_eps, -1);
 
       expect_true(res.inform == 0L);
-      expect_true(res.abserr                        < 100. * abs_eps);
-      expect_true(std::abs(res.likelihood - E_prop) < 100. * abs_eps);
+      expect_true(res.abserr                         < 100. * abs_eps);
+      expect_true(std::fabs(res.likelihood - E_prop) < 100. * abs_eps);
     }
     {
       restrictcdf::likelihood functor;
@@ -118,8 +118,8 @@ context("restrictcdf unit tests") {
             1000000L, abs_eps, -1);
 
       expect_true(res.inform == 0L);
-      expect_true(res.abserr                        < 100. * abs_eps);
-      expect_true(std::abs(res.likelihood - E_prop) < 100. * abs_eps);
+      expect_true(res.abserr                         < 100. * abs_eps);
+      expect_true(std::fabs(res.likelihood - E_prop) < 100. * abs_eps);
     }
   }
 
@@ -160,8 +160,8 @@ context("restrictcdf unit tests") {
         functor, l, u, m, s, false, false).approximate(1000000L, 1e-8, -1);
 
       expect_true(res.inform == 0L);
-      expect_true(res.abserr                           <= 0);
-      expect_true(std::abs(res.likelihood - expect[i]) <  eps);
+      expect_true(res.abserr                            <= 0);
+      expect_true(std::fabs(res.likelihood - expect[i]) <  eps);
     }
 
     for(size_t i = 0; i < 3; ++i){
@@ -177,8 +177,8 @@ context("restrictcdf unit tests") {
         functor, l, u, m, s, true, false).approximate(1000000L, 1e-8, -1);
 
       expect_true(res.inform == 0L);
-      expect_true(res.abserr                           <= 0);
-      expect_true(std::abs(res.likelihood - expect[i]) <  eps);
+      expect_true(res.abserr                            <= 0);
+      expect_true(std::fabs(res.likelihood - expect[i]) <  eps);
     }
   }
 
@@ -225,10 +225,10 @@ context("restrictcdf unit tests") {
         functor, l, u, m, s, false, false).approximate(1000000L, 1e-8, -1);
 
       expect_true(res.inform == 0L);
-      expect_true(res.abserr                           <= 0);
-      expect_true(std::abs(res.likelihood - expect.at(0L, i)) <  eps);
-      expect_true(std::abs(res.derivs[0] - expect.at(1L, i)) <  eps);
-      expect_true(std::abs(res.derivs[1] - expect.at(2L, i)) <  eps);
+      expect_true(res.abserr                                   <= 0);
+      expect_true(std::fabs(res.likelihood - expect.at(0L, i)) <  eps);
+      expect_true(std::fabs(res.derivs[0] - expect.at(1L, i))  <  eps);
+      expect_true(std::fabs(res.derivs[1] - expect.at(2L, i))  <  eps);
     }
 
     for(size_t i = 0; i < 3; ++i){
@@ -244,10 +244,10 @@ context("restrictcdf unit tests") {
         functor, l, u, m, s, true, false).approximate(1000000L, 1e-8, -1);
 
       expect_true(res.inform == 0L);
-      expect_true(res.abserr                           <= 0);
-      expect_true(std::abs(res.likelihood - expect.at(0L, i)) <  eps);
-      expect_true(std::abs(res.derivs[0] - expect.at(1L, i)) <  eps);
-      expect_true(std::abs(res.derivs[1] - expect.at(2L, i)) <  eps);
+      expect_true(res.abserr                                   <= 0);
+      expect_true(std::fabs(res.likelihood - expect.at(0L, i)) <  eps);
+      expect_true(std::fabs(res.derivs[0] - expect.at(1L, i))  <  eps);
+      expect_true(std::fabs(res.derivs[1] - expect.at(2L, i))  <  eps);
     }
   }
 
@@ -313,9 +313,9 @@ context("restrictcdf unit tests") {
 
       expect_true(res.inform == 0L);
       expect_true(res.derivs.n_elem + 1 == expect.n_elem);
-      expect_true(std::abs(res.likelihood - expect[0]) < 1e-5);
+      expect_true(std::fabs(res.likelihood - expect[0]) < 1e-5);
       for(unsigned i = 1; i < expect.n_elem; ++i)
-        expect_true(std::abs(res.derivs[i - 1] - expect[i]) < 1e-5);
+        expect_true(std::fabs(res.derivs[i - 1] - expect[i]) < 1e-5);
     }
     {
       restrictcdf::deriv functor(mean, sigma);
@@ -324,11 +324,11 @@ context("restrictcdf unit tests") {
 
       expect_true(res.inform == 0L);
       expect_true(res.derivs.n_elem + 1 == expect.n_elem);
-      expect_true(std::abs(res.likelihood - expect[0]) < 1e-5);
+      expect_true(std::fabs(res.likelihood - expect[0]) < 1e-5);
       for(unsigned i = 1; i < 5L; ++i)
-        expect_true(std::abs(res.derivs[i - 1] - expect[i]) < 1e-5);
+        expect_true(std::fabs(res.derivs[i - 1] - expect[i]) < 1e-5);
       for(unsigned i = 5; i < expect.n_elem; ++i)
-        expect_true(std::abs(res.derivs[i - 1] - expect[i]) < 1e-5);
+        expect_true(std::fabs(res.derivs[i - 1] - expect[i]) < 1e-5);
     }
   }
 
@@ -398,9 +398,9 @@ context("restrictcdf unit tests") {
 
         expect_true(res.inform == 0L);
         expect_true(res.derivs.n_elem + 1 == expect.n_elem);
-        expect_true(std::abs(res.likelihood - expect[0]) < 1e-5);
+        expect_true(std::fabs(res.likelihood - expect[0]) < 1e-5);
         for(unsigned i = 1; i < expect.n_elem; ++i)
-          expect_true(std::abs(res.derivs[i - 1] - expect[i]) < 1e-5);
+          expect_true(std::fabs(res.derivs[i - 1] - expect[i]) < 1e-5);
     }
     {
       restrictcdf::deriv functor(mean, sigma);
@@ -410,11 +410,11 @@ context("restrictcdf unit tests") {
 
       expect_true(res.inform == 0L);
       expect_true(res.derivs.n_elem + 1 == expect.n_elem);
-      expect_true(std::abs(res.likelihood - expect[0]) < 1e-5);
+      expect_true(std::fabs(res.likelihood - expect[0]) < 1e-5);
       for(unsigned i = 1; i < 5L; ++i)
-        expect_true(std::abs(res.derivs[i - 1] - expect[i]) < 1e-5);
+        expect_true(std::fabs(res.derivs[i - 1] - expect[i]) < 1e-5);
       for(unsigned i = 5; i < expect.n_elem; ++i)
-        expect_true(std::abs(res.derivs[i - 1] - expect[i]) < 1e-5);
+        expect_true(std::fabs(res.derivs[i - 1] - expect[i]) < 1e-5);
     }
   }
 }

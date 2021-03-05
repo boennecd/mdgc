@@ -47,7 +47,8 @@
  */
 
 #include "qnorm.h"
-#include <math.h>
+#include <R_ext/Arith.h>
+#include <Rmath.h>
 
 double qnorm_w(double const p, double const mu, double const sigma,
                int const lower_tail, int const log_p){
@@ -58,22 +59,22 @@ double qnorm_w(double const p, double const mu, double const sigma,
 
     if (log_p) {
       if(p > 0)
-        return NAN;
+        return R_NaN;
       else if(p == 0) /* upper bound*/
-        return lower_tail ?  INFINITY : -INFINITY;
+        return lower_tail ? R_PosInf : R_NegInf;
       else if(isinf(p))
-        return lower_tail ? -INFINITY :  INFINITY;
+        return lower_tail ? R_NegInf  : R_PosInf;
     }
     else { /* !log_p */
       if(p < 0 || p > 1)
-        return NAN;
+        return R_NaN;
       else if(p == 0)
-        return lower_tail ? -INFINITY :  INFINITY;
+        return lower_tail ? R_NegInf : R_PosInf;
       else if(p == 1)
-        return lower_tail ?  INFINITY : -INFINITY;
+        return lower_tail ? R_PosInf : R_NegInf ;
     }
 
-    if(sigma  < 0)	return NAN;
+    if(sigma  < 0)	return R_NaN;
     else if(sigma == 0)	return mu;
 
     q = lower_tail ? p : 0.5 - p + 0.5;
