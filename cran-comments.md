@@ -21,16 +21,15 @@ There were no WARNINGs or ERRORs.
 There is a NOTE about the package size in some cases.
 
 I have fixed the error on the older version of Windows which showed up on 
-2020-02-29. I am still working on the Solaris issue which I have not reproduced 
-yet.
+2020-02-29.
 
 I have followed the guide here 
 https://github.com/r-hub/solarischeck/tree/master/packer#readme to create a 
-VirtualBox to reproduce results on CRAN's check with Solaris. Unfortanately, 
+VirtualBox to reproduce results on CRAN's check with Solaris. Unfortunately, 
 I end up reproducing the results from `rhub::check("solaris-x86-patched")`
 (where there are no errors).
-The package is build with GCC as I am linking with Rcpp.
-Judging by the specifications at https://www.stats.ox.ac.uk/pub/bdr/Rconfig/r-patched-solaris-x86,
+The package is build with GCC as I am linking with Rcpp. Judging on the 
+specifications at https://www.stats.ox.ac.uk/pub/bdr/Rconfig/r-patched-solaris-x86,
 then it may fail on CRAN's check because of a different GCC version (5.2.0 vs. 
 5.5.0).
 
