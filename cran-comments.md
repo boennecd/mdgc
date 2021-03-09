@@ -16,26 +16,30 @@
 * `rhub::check(platform = c("fedora-clang-devel", "solaris-x86-patched", "macos-highsierra-release-cran"))`
 
 ## R CMD check results
-There were no WARNINGs or ERRORs.
+There were no WARNINGs or ERRORs except with the ASAN and UBSAN checks with 
+clang-6.0.0 which I think are false positives (see below).
 
 There is a NOTE about the package size in some cases.
 
-I have fixed the error on the older version of Windows which showed up on 
-2020-02-29.
+I have attempted to reproduce and fix the ERRORs on Solaris. I have followed 
+the guide here https://github.com/r-hub/solarischeck/tree/master/packer#readme 
+to create a VirtualBox to reproduce results on CRAN's check with Solaris. 
+Unfortunately, I end up reproducing the results from 
+`rhub::check("solaris-x86-patched")` (where there are no ERRORs).
 
-I have followed the guide here 
-https://github.com/r-hub/solarischeck/tree/master/packer#readme to create a 
-VirtualBox to reproduce results on CRAN's check with Solaris. Unfortunately, 
-I end up reproducing the results from `rhub::check("solaris-x86-patched")`
-(where there are no errors).
-The package is build with GCC as I am linking with Rcpp. Judging on the 
-specifications at https://www.stats.ox.ac.uk/pub/bdr/Rconfig/r-patched-solaris-x86,
+The package is build with GCC on Solaris as I am linking with Rcpp. Judging by 
+the specifications at 
+https://www.stats.ox.ac.uk/pub/bdr/Rconfig/r-patched-solaris-x86,
 then it may fail on CRAN's check because of a different GCC version (5.2.0 vs. 
-5.5.0).
+5.5.0)? This seems somewhat unlikely though.
 
-Nevertheless, I did have some calls to `std::abs`, `std::sqrt` etc. with floats 
-or integers where implicit casts may have been made. I have changed such calls 
-in this version and I hope that it will fix the errors on Solaris.
+Nevertheless, I did have some calls to `std::abs`, `std::sqrt` etc. where 
+floats or integers are implicitly cast. I have changed such calls in this 
+version and I hope that it will fix the errors on Solaris.
+
+I am not sure about the WARNING on r-devel-windows-x86_64-gcc10-UCRT. There is 
+no object file in tar.gz file I submitted to CRAN and it works on all other
+platforms.
 
 The ASAN and UBSAN checks with clang-6.0.0 yields a false positive I think. I 
 get the following:	
@@ -85,6 +89,7 @@ get the following:
 >     [4080, 4104) '.kmpc_loc.addr.i' (line 924)	
 > HINT: this may be a false positive if your program uses some custom stack unwind mechanism or swapcontext	
 >       (longjmp and C++ exceptions *are* supported)	
+
 This seems very similar to the bug reported here: https://github.com/google/sanitizers/issues/994#issue-356441940.	
 In particular, notice the stack trace in the example in the reported issue:	
 
@@ -95,6 +100,7 @@ In particular, notice the stack trace in the example in the reported issue:
 >     #4 0x7f3bdf72e7be in __kmpc_fork_call (/usr/lib/x86_64-linux-gnu/libomp.so.5+0x2a7be)	
 >     #5 0x516f88 in main /home/mgigg/Code/git/martyngigg/sandbox/cpp/asan/omp/omp.cpp:4:11	
 >     #6 0x7f3bdf11cb96 in __libc_start_main /build/glibc-OTsEL5/glibc-2.27/csu/../csu/libc-start.c:310	
+
 It is also clang-6.0.0 and the looping variable is blamed: 	
 
 >  This frame has 6 object(s):	
