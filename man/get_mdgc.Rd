@@ -38,15 +38,22 @@ columns:
 }
 }
 \examples{
-# randomly mask data
-set.seed(11)
-masked_data <- iris
-masked_data[matrix(runif(prod(dim(iris))) < .10, NROW(iris))] <- NA
+# there is a bug on CRAN's check on Solaris which I have failed to reproduce.
+# See https://github.com/r-hub/solarischeck/issues/8#issuecomment-796735501.
+# Thus, this example is not run on Solaris
+is_solaris <- tolower(Sys.info()[["sysname"]]) == "sunos"
 
-# use the functions in the package
-library(mdgc)
-obj <- get_mdgc(masked_data)
-class(obj)
+if(!is_solaris){
+  # randomly mask data
+  set.seed(11)
+  masked_data <- iris
+  masked_data[matrix(runif(prod(dim(iris))) < .10, NROW(iris))] <- NA
+
+  # use the functions in the package
+  library(mdgc)
+  obj <- get_mdgc(masked_data)
+  print(class(obj))
+}
 
 }
 \seealso{

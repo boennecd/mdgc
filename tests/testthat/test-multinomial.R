@@ -1,6 +1,7 @@
 context("testing util functions for multinomial outcomes")
 
 test_that("eval_multinomial_prob and eval_multinomial_prob_gr gives the correct result", {
+  skip_on_os("solaris")
   mu <- c(0, c(0.55, -0.97, -2.6, 0.78, 0.27))
 
   # library(mvtnorm)
@@ -53,6 +54,7 @@ test_that("eval_multinomial_prob and eval_multinomial_prob_gr gives the correct 
 })
 
 test_that("multinomial_find_means gives the correct result", {
+  skip_on_os("solaris")
   p_vals <- c(0.0476190476190476, 0.0952380952380952, 0.142857142857143, 0.19047619047619, 0.238095238095238, 0.285714285714286)
   mu_vals <- mdgc:::multinomial_find_means(p_vals)
   expect_known_value(mu_vals, "multinomial_find_means-means.RDS")

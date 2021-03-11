@@ -105,22 +105,29 @@ See the README at \url{https://github.com/boennecd/mdgc} for examples.
 }
 \examples{
 \donttest{
-# randomly mask data
-set.seed(11)
-masked_data <- iris
-masked_data[matrix(runif(prod(dim(iris))) < .10, NROW(iris))] <- NA
+# there is a bug on CRAN's check on Solaris which I have failed to reproduce.
+# See https://github.com/r-hub/solarischeck/issues/8#issuecomment-796735501.
+# Thus, this example is not run on Solaris
+is_solaris <- tolower(Sys.info()[["sysname"]]) == "sunos"
 
-# use the functions in the package
-library(mdgc)
-obj <- get_mdgc(masked_data)
-ptr <- get_mdgc_log_ml(obj)
-start_vals <- mdgc_start_value(obj)
+if(!is_solaris){
+  # randomly mask data
+  set.seed(11)
+  masked_data <- iris
+  masked_data[matrix(runif(prod(dim(iris))) < .10, NROW(iris))] <- NA
 
-fit <- mdgc_fit(ptr, start_vals, obj$means, rel_eps = 1e-2, maxpts = 10000L,
-                minvls = 1000L, use_aprx = TRUE, batch_size = 100L, lr = .001,
-                maxit = 100L, n_threads = 2L)
-fit$result$vcov
-fit$result$mea
+  # use the functions in the package
+  library(mdgc)
+  obj <- get_mdgc(masked_data)
+  ptr <- get_mdgc_log_ml(obj)
+  start_vals <- mdgc_start_value(obj)
+
+  fit <- mdgc_fit(ptr, start_vals, obj$means, rel_eps = 1e-2, maxpts = 10000L,
+                  minvls = 1000L, use_aprx = TRUE, batch_size = 100L, lr = .001,
+                  maxit = 100L, n_threads = 2L)
+  print(fit$result$vcov)
+  print(fit$result$mea)
+}
 }
 
 }

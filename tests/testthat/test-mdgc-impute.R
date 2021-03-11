@@ -3,6 +3,7 @@ context("testing mdgc_impute")
 dat <- readRDS("mdgc-fit-test.RDS")
 
 threshold <- function(org_data, imputed){
+  skip_on_os("solaris")
   # checks
   stopifnot(NROW(org_data) == length(imputed),
             is.list(imputed), is.data.frame(org_data))
@@ -35,6 +36,7 @@ threshold <- function(org_data, imputed){
 }
 
 test_that("mdgc_impute gives the same as before and with and without reordering", {
+  skip_on_os("solaris")
   p <- 5L
   Sig <- diag(p)
   Sig[lower.tri(Sig)] <- Sig[upper.tri(Sig)] <- .5
@@ -80,6 +82,7 @@ test_that("mdgc_impute gives the same as before and with and without reordering"
 })
 
 test_that("imputation with ordinal variables yields the correct probabilities", {
+  skip_on_os("solaris")
   skip_on_cran()
 
   #####

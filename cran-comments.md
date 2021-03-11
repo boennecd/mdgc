@@ -21,25 +21,30 @@ clang-6.0.0 which I think are false positives (see below).
 
 There is a NOTE about the package size in some cases.
 
-I have attempted to reproduce and fix the ERRORs on Solaris. I have followed 
-the guide here https://github.com/r-hub/solarischeck/tree/master/packer#readme 
-to create a VirtualBox to reproduce results on CRAN's check with Solaris. 
-Unfortunately, I end up reproducing the results from 
-`rhub::check("solaris-x86-patched")` (where there are no ERRORs).
+I have attempted to closely follow the description of the Solaris setup on CRAN. 
+In particular, I build GCC 5.2.0 as the the archived version of OpenCSW do not 
+work with the math.h file that is updated on 27/02/16 (see 
+http://gcc.1065356.n8.nabble.com/the-mystery-of-math-h-in-lib-gcc-triple-name-gcc-version-include-fixed-td1524637.html). However, I still fail to reproduce any of the ERRORs 
+on CRAN. 
 
-The package is build with GCC on Solaris as I am linking with Rcpp. Judging by 
-the specifications at 
-https://www.stats.ox.ac.uk/pub/bdr/Rconfig/r-patched-solaris-x86,
-then it may fail on CRAN's check because of a different GCC version (5.2.0 vs. 
-5.5.0)? This seems somewhat unlikely though.
+My configurations for R are: 
 
-Nevertheless, I did have some calls to `std::abs`, `std::sqrt` etc. where 
-floats or integers are implicitly cast. I have changed such calls in this 
-version and I hope that it will fix the errors on Solaris.
-
-I am not sure about the WARNING on r-devel-windows-x86_64-gcc10-UCRT. There is 
-no object file in tar.gz file I submitted to CRAN and it works on all other
-platforms.
+./configure \
+  CC="/opt/gcc-5.2.0/bin/gcc" \
+  CXX="/opt/gcc-5.2.0/bin/g++" \
+  CPPFLAGS="-I/opt/gcc-5.2.0/include -I/opt/csw/include -I/usr/local/include" \
+  FC="/opt/gcc-5.2.0/bin/gfortran" \
+  CFLAGS="-O2" \
+  FFLAGS="-O2" \
+  CXXFLAGS="-O2" \
+  LDFLAGS="-L/opt/gcc-5.2.0/lib -L/usr/local/lib -L/opt/csw/lib" \
+  --with-internal-tzcode \
+  R_LD_LIBRARY_PATH="/opt/gcc-5.2.0/lib:/usr/local/lib:/opt/csw/lib:/opt/developerstudio12.6/lib:/usr/openwin/lib" \
+  --prefix=/opt/R-gcc-5-2
+  
+where /opt/gcc-5.2.0 contains the GCC-5.2.0 I build. As I have failed again to 
+reproduce the errors on Solaris, I have removed the examples and tests on 
+Solaris.
 
 The ASAN and UBSAN checks with clang-6.0.0 yields a false positive I think. I 
 get the following:	

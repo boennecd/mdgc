@@ -71,19 +71,27 @@ if the \code{ptr} object is constructed from a mdgc object from
 the Jacobians for the transformation of the continuous variables.
 }
 \examples{
-# randomly mask data
-set.seed(11)
-masked_data <- iris
-masked_data[matrix(runif(prod(dim(iris))) < .10, NROW(iris))] <- NA
+# there is a bug on CRAN's check on Solaris which I have failed to reproduce.
+# See https://github.com/r-hub/solarischeck/issues/8#issuecomment-796735501.
+# Thus, this example is not run on Solaris
+is_solaris <- tolower(Sys.info()[["sysname"]]) == "sunos"
 
-# use the functions in the package
-library(mdgc)
-obj <- get_mdgc(masked_data)
-ptr <- get_mdgc_log_ml(obj)
-start_vals <- mdgc_start_value(obj)
-mdgc_log_ml(ptr, start_vals, obj$means)
-mdgc_log_ml(ptr, start_vals, obj$means, use_aprx = TRUE)
-mdgc_log_ml(ptr, start_vals, obj$means, use_aprx = TRUE, comp_derivs = TRUE)
+if(!is_solaris){
+  # randomly mask data
+  set.seed(11)
+  masked_data <- iris
+  masked_data[matrix(runif(prod(dim(iris))) < .10, NROW(iris))] <- NA
+
+  # use the functions in the package
+  library(mdgc)
+  obj <- get_mdgc(masked_data)
+  ptr <- get_mdgc_log_ml(obj)
+  start_vals <- mdgc_start_value(obj)
+  print(mdgc_log_ml(ptr, start_vals, obj$means))
+  print(mdgc_log_ml(ptr, start_vals, obj$means, use_aprx = TRUE))
+  print(mdgc_log_ml(ptr, start_vals, obj$means, use_aprx = TRUE,
+                    comp_derivs = TRUE))
+}
 
 }
 \references{

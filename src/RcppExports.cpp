@@ -43,14 +43,14 @@ BEGIN_RCPP
 END_RCPP
 }
 // get_z_hat
-Rcpp::NumericMatrix get_z_hat(arma::mat const& lower, arma::mat const& upper, arma::imat const& code, unsigned const n_threads, Rcpp::List multinomial);
+Rcpp::NumericMatrix get_z_hat(arma::mat const& lower, arma::mat const& upper, arma::imat const& code, int const n_threads, Rcpp::List multinomial);
 RcppExport SEXP _mdgc_get_z_hat(SEXP lowerSEXP, SEXP upperSEXP, SEXP codeSEXP, SEXP n_threadsSEXP, SEXP multinomialSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::traits::input_parameter< arma::mat const& >::type lower(lowerSEXP);
     Rcpp::traits::input_parameter< arma::mat const& >::type upper(upperSEXP);
     Rcpp::traits::input_parameter< arma::imat const& >::type code(codeSEXP);
-    Rcpp::traits::input_parameter< unsigned const >::type n_threads(n_threadsSEXP);
+    Rcpp::traits::input_parameter< int const >::type n_threads(n_threadsSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type multinomial(multinomialSEXP);
     rcpp_result_gen = Rcpp::wrap(get_z_hat(lower, upper, code, n_threads, multinomial));
     return rcpp_result_gen;

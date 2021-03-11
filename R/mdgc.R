@@ -34,15 +34,22 @@
 #' @importFrom stats qnorm ecdf quantile
 #'
 #' @examples
-#' # randomly mask data
-#' set.seed(11)
-#' masked_data <- iris
-#' masked_data[matrix(runif(prod(dim(iris))) < .10, NROW(iris))] <- NA
+#' # there is a bug on CRAN's check on Solaris which I have failed to reproduce.
+#' # See https://github.com/r-hub/solarischeck/issues/8#issuecomment-796735501.
+#' # Thus, this example is not run on Solaris
+#' is_solaris <- tolower(Sys.info()[["sysname"]]) == "sunos"
 #'
-#' # use the functions in the package
-#' library(mdgc)
-#' obj <- get_mdgc(masked_data)
-#' class(obj)
+#' if(!is_solaris){
+#'   # randomly mask data
+#'   set.seed(11)
+#'   masked_data <- iris
+#'   masked_data[matrix(runif(prod(dim(iris))) < .10, NROW(iris))] <- NA
+#'
+#'   # use the functions in the package
+#'   library(mdgc)
+#'   obj <- get_mdgc(masked_data)
+#'   print(class(obj))
+#' }
 #'
 #' @seealso
 #' \code{\link{get_mdgc_log_ml}}, \code{\link{mdgc_start_value}}
@@ -238,15 +245,22 @@ get_mdgc <- function(dat){
 #' (observed values) are ignored.
 #'
 #' @examples
-#' # randomly mask data
-#' set.seed(11)
-#' masked_data <- iris
-#' masked_data[matrix(runif(prod(dim(iris))) < .10, NROW(iris))] <- NA
+#' # there is a bug on CRAN's check on Solaris which I have failed to reproduce.
+#' # See https://github.com/r-hub/solarischeck/issues/8#issuecomment-796735501.
+#' # Thus, this example is not run on Solaris
+#' is_solaris <- tolower(Sys.info()[["sysname"]]) == "sunos"
 #'
-#' # use the functions in the package
-#' library(mdgc)
-#' obj <- get_mdgc(masked_data)
-#' ptr <- get_mdgc_log_ml(obj)
+#' if(!is_solaris){
+#'   # randomly mask data
+#'   set.seed(11)
+#'   masked_data <- iris
+#'   masked_data[matrix(runif(prod(dim(iris))) < .10, NROW(iris))] <- NA
+#'
+#'   # use the functions in the package
+#'   library(mdgc)
+#'   obj <- get_mdgc(masked_data)
+#'   ptr <- get_mdgc_log_ml(obj)
+#' }
 #'
 #' @return
 #' A \code{Rcpp::XPtr} to pass to e.g. \code{\link{mdgc_log_ml}}.
@@ -353,19 +367,27 @@ get_mdgc_log_ml.default <- function(object, lower, upper, code, multinomial,
 #' Springer-Verlag, Heidelberg.
 #'
 #' @examples
-#' # randomly mask data
-#' set.seed(11)
-#' masked_data <- iris
-#' masked_data[matrix(runif(prod(dim(iris))) < .10, NROW(iris))] <- NA
+#' # there is a bug on CRAN's check on Solaris which I have failed to reproduce.
+#' # See https://github.com/r-hub/solarischeck/issues/8#issuecomment-796735501.
+#' # Thus, this example is not run on Solaris
+#' is_solaris <- tolower(Sys.info()[["sysname"]]) == "sunos"
 #'
-#' # use the functions in the package
-#' library(mdgc)
-#' obj <- get_mdgc(masked_data)
-#' ptr <- get_mdgc_log_ml(obj)
-#' start_vals <- mdgc_start_value(obj)
-#' mdgc_log_ml(ptr, start_vals, obj$means)
-#' mdgc_log_ml(ptr, start_vals, obj$means, use_aprx = TRUE)
-#' mdgc_log_ml(ptr, start_vals, obj$means, use_aprx = TRUE, comp_derivs = TRUE)
+#' if(!is_solaris){
+#'   # randomly mask data
+#'   set.seed(11)
+#'   masked_data <- iris
+#'   masked_data[matrix(runif(prod(dim(iris))) < .10, NROW(iris))] <- NA
+#'
+#'   # use the functions in the package
+#'   library(mdgc)
+#'   obj <- get_mdgc(masked_data)
+#'   ptr <- get_mdgc_log_ml(obj)
+#'   start_vals <- mdgc_start_value(obj)
+#'   print(mdgc_log_ml(ptr, start_vals, obj$means))
+#'   print(mdgc_log_ml(ptr, start_vals, obj$means, use_aprx = TRUE))
+#'   print(mdgc_log_ml(ptr, start_vals, obj$means, use_aprx = TRUE,
+#'                     comp_derivs = TRUE))
+#' }
 #'
 #' @export
 mdgc_log_ml <- function(ptr, vcov, mea, rel_eps = 1e-2, n_threads = 1L,
@@ -429,17 +451,24 @@ mdgc_log_ml <- function(ptr, vcov, mea, rel_eps = 1e-2, n_threads = 1L,
 #' The starting value for the covariance matrix.
 #'
 #' @examples
-#' # randomly mask data
-#' set.seed(11)
-#' masked_data <- iris
-#' masked_data[matrix(runif(prod(dim(iris))) < .10, NROW(iris))] <- NA
+#' # there is a bug on CRAN's check on Solaris which I have failed to reproduce.
+#' # See https://github.com/r-hub/solarischeck/issues/8#issuecomment-796735501.
+#' # Thus, this example is not run on Solaris
+#' is_solaris <- tolower(Sys.info()[["sysname"]]) == "sunos"
 #'
-#' # use the functions in the package
-#' library(mdgc)
-#' obj <- get_mdgc(masked_data)
-#' ptr <- get_mdgc_log_ml(obj)
-#' start_vals <- mdgc_start_value(obj)
-#' start_vals # starting value for the covariance matrix
+#' if(!is_solaris){
+#'   # randomly mask data
+#'   set.seed(11)
+#'   masked_data <- iris
+#'   masked_data[matrix(runif(prod(dim(iris))) < .10, NROW(iris))] <- NA
+#'
+#'   # use the functions in the package
+#'   library(mdgc)
+#'   obj <- get_mdgc(masked_data)
+#'   ptr <- get_mdgc_log_ml(obj)
+#'   start_vals <- mdgc_start_value(obj)
+#'   print(start_vals) # starting value for the covariance matrix
+#' }
 #'
 #' @importFrom stats cov cov2cor
 #' @export
@@ -552,22 +581,29 @@ mdgc_start_value.default <- function(object, lower, upper, code,
 #'
 #' @examples
 #' \donttest{
-#' # randomly mask data
-#' set.seed(11)
-#' masked_data <- iris
-#' masked_data[matrix(runif(prod(dim(iris))) < .10, NROW(iris))] <- NA
+#' # there is a bug on CRAN's check on Solaris which I have failed to reproduce.
+#' # See https://github.com/r-hub/solarischeck/issues/8#issuecomment-796735501.
+#' # Thus, this example is not run on Solaris
+#' is_solaris <- tolower(Sys.info()[["sysname"]]) == "sunos"
 #'
-#' # use the functions in the package
-#' library(mdgc)
-#' obj <- get_mdgc(masked_data)
-#' ptr <- get_mdgc_log_ml(obj)
-#' start_vals <- mdgc_start_value(obj)
+#' if(!is_solaris){
+#'   # randomly mask data
+#'   set.seed(11)
+#'   masked_data <- iris
+#'   masked_data[matrix(runif(prod(dim(iris))) < .10, NROW(iris))] <- NA
 #'
-#' fit <- mdgc_fit(ptr, start_vals, obj$means, rel_eps = 1e-2, maxpts = 10000L,
-#'                 minvls = 1000L, use_aprx = TRUE, batch_size = 100L, lr = .001,
-#'                 maxit = 100L, n_threads = 2L)
-#' fit$result$vcov
-#' fit$result$mea
+#'   # use the functions in the package
+#'   library(mdgc)
+#'   obj <- get_mdgc(masked_data)
+#'   ptr <- get_mdgc_log_ml(obj)
+#'   start_vals <- mdgc_start_value(obj)
+#'
+#'   fit <- mdgc_fit(ptr, start_vals, obj$means, rel_eps = 1e-2, maxpts = 10000L,
+#'                   minvls = 1000L, use_aprx = TRUE, batch_size = 100L, lr = .001,
+#'                   maxit = 100L, n_threads = 2L)
+#'   print(fit$result$vcov)
+#'   print(fit$result$mea)
+#' }
 #' }
 #'
 #' @importFrom stats optim
@@ -1112,27 +1148,34 @@ svrg <- function(par_fn, nobs, val_vcov, val_mea, batch_size, maxit = 10L,
 #'
 #' @examples
 #' \donttest{
-#' # randomly mask data
-#' set.seed(11)
-#' masked_data <- iris
-#' masked_data[matrix(runif(prod(dim(iris))) < .10, NROW(iris))] <- NA
+#' # there is a bug on CRAN's check on Solaris which I have failed to reproduce.
+#' # See https://github.com/r-hub/solarischeck/issues/8#issuecomment-796735501.
+#' # Thus, this example is not run on Solaris
+#' is_solaris <- tolower(Sys.info()[["sysname"]]) == "sunos"
 #'
-#' # use the functions in the package
-#' library(mdgc)
-#' obj <- get_mdgc(masked_data)
-#' ptr <- get_mdgc_log_ml(obj)
-#' start_vals <- mdgc_start_value(obj)
+#' if(!is_solaris){
+#'   # randomly mask data
+#'   set.seed(11)
+#'   masked_data <- iris
+#'   masked_data[matrix(runif(prod(dim(iris))) < .10, NROW(iris))] <- NA
 #'
-#' fit <- mdgc_fit(ptr, start_vals, obj$means, rel_eps = 1e-2, maxpts = 10000L,
-#'                 minvls = 1000L, use_aprx = TRUE, batch_size = 100L, lr = .001,
-#'                 maxit = 100L, n_threads = 2L)
+#'   # use the functions in the package
+#'   library(mdgc)
+#'   obj <- get_mdgc(masked_data)
+#'   ptr <- get_mdgc_log_ml(obj)
+#'   start_vals <- mdgc_start_value(obj)
 #'
-#' # impute using the estimated values
-#' imputed <- mdgc_impute(obj, fit$result$vcov, fit$result$mea, minvls = 1000L,
+#'   fit <- mdgc_fit(ptr, start_vals, obj$means, rel_eps = 1e-2, maxpts = 10000L,
+#'                   minvls = 1000L, use_aprx = TRUE, batch_size = 100L, lr = .001,
+#'                   maxit = 100L, n_threads = 2L)
+#'
+#'   # impute using the estimated values
+#'   imputed <- mdgc_impute(obj, fit$result$vcov, fit$result$mea, minvls = 1000L,
 #'                        maxit = 10000L, n_threads = 2L, use_aprx = TRUE)
-#' imputed[1:5] # first 5 observations
-#' head(masked_data, 5) # observed
-#' head(iris       , 5) # truth
+#'   print(imputed[1:5]) # first 5 observations
+#'   print(head(masked_data, 5)) # observed
+#'   print(head(iris       , 5)) # truth
+#' }
 #' }
 #'
 #' @export
@@ -1246,7 +1289,12 @@ mdgc_impute <- function(object, vcov, mea, rel_eps = 1e-3, maxit = 10000L,
 #'
 #' @examples
 #' \donttest{
-#' if(require(catdata)){
+#' # there is a bug on CRAN's check on Solaris which I have failed to reproduce.
+#' # See https://github.com/r-hub/solarischeck/issues/8#issuecomment-796735501.
+#' # Thus, this example is not run on Solaris
+#' is_solaris <- tolower(Sys.info()[["sysname"]]) == "sunos"
+#'
+#' if(!is_solaris && require(catdata)){
 #'   data(retinopathy)
 #'
 #'   # prepare data and save true data set

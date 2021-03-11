@@ -1,6 +1,7 @@
 context("testing examples in man files")
 
 test_that("mdgc examples gives the same", {
+  skip_on_os("solaris")
   skip_if_not_installed("catdata")
 
   data(retinopathy, envir = environment(), package = "catdata")
@@ -27,6 +28,7 @@ test_that("mdgc examples gives the same", {
 })
 
 test_that("iris examples give the same", {
+  skip_on_os("solaris")
   # # randomly mask data
   # set.seed(11)
   # masked_data <- iris

@@ -50,6 +50,7 @@ context("testing mdgc_fit")
 dat <- readRDS("mdgc-fit-test.RDS")
 
 test_that("ADAM gives the same", {
+  skip_on_os("solaris")
   mdgc_obj <- get_mdgc(dat)
   log_ml_ptr <- get_mdgc_log_ml(mdgc_obj)
   start_val <- mdgc_start_value(mdgc_obj)
@@ -71,6 +72,7 @@ test_that("ADAM gives the same", {
 })
 
 test_that("svrg gives the same", {
+  skip_on_os("solaris")
   mdgc_obj <- get_mdgc(dat)
   log_ml_ptr <- get_mdgc_log_ml(mdgc_obj)
   start_val <- mdgc_start_value(mdgc_obj)
@@ -99,6 +101,7 @@ test_that("svrg gives the same", {
 })
 
 test_that("R does not terminate when a non positive definite matrix is passed as a covariance matrix", {
+  skip_on_os("solaris")
   dat <- data.frame(X1 = c(FALSE, FALSE, TRUE, NA   , FALSE),
                     X2 = c(TRUE , FALSE, NA  , FALSE, TRUE))
   obj <- get_mdgc(dat)

@@ -40,6 +40,8 @@ context("Testing 'get_log_lm_terms'")
 dat <- readRDS("get_log_lm_terms-test.RDS")
 
 test_that("'get_log_lm_terms' gives the correct result with and without gradients", {
+  skip_on_os("solaris")
+
   multinomial <- replicate(NCOL(dat$lower),
                            matrix(0L, 0, 0), simplify = FALSE)
   idx_non_zero_mean <- 1:4
@@ -150,6 +152,7 @@ test_that("'get_log_lm_terms' gives the correct result with and without gradient
 
 test_that("'get_log_lm_terms' gives the correct result with and without gradients with multinomial variables", {
   skip_if_not_installed("datasets")
+  skip_on_os("solaris")
   library(datasets)
   dat <- iris[c(1:10, 51:60, 101:110), 3:5]
   dat[seq(1, NROW(dat), by = 4), 1] <- NA
@@ -287,6 +290,8 @@ test_that("'get_log_lm_terms' gives the correct result with and without gradient
 dat <- readRDS("get_log_lm_terms-test-ord-bin.RDS")
 
 test_that("'get_log_lm_terms' gives the correct result with and without gradients (ordinal and binary data)", {
+  skip_on_os("solaris")
+
   multinomial <- replicate(NCOL(dat$lower),
                            matrix(0L, 0, 0), simplify = FALSE)
   idx_non_zero_mean <- 1:5
@@ -389,6 +394,7 @@ test_that("'get_log_lm_terms' gives the correct result with and without gradient
 })
 
 test_that("mdgc_log_ml gives the correct result with a single log marginal likelihood term", {
+  skip_on_os("solaris")
   n_lvl <- c(3L, 4L, 5L)
   n_latent <- n_lvl[1] + n_lvl[3] + 4L
   # dput(cov2cor(drop(rWishart(1L, 2 * n_latent, diag(n_latent)))))

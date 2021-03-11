@@ -176,7 +176,7 @@ Rcpp::NumericVector eval_log_lm_terms(
   openmp_exception_ptr capture_err;
 
 #ifdef _OPENMP
-#pragma omp parallel
+#pragma omp parallel num_threads(n_threads)
 #endif
   {
     arma::mat my_derivs_vcov(comp_derivs ? p : 0L, comp_derivs ? p : 0L,
@@ -224,7 +224,7 @@ Rcpp::NumericVector eval_log_lm_terms(
 // [[Rcpp::export(rng = false)]]
 Rcpp::NumericMatrix get_z_hat
 (arma::mat const &lower, arma::mat const &upper, arma::imat const &code,
- unsigned const n_threads, Rcpp::List multinomial){
+ int const n_threads, Rcpp::List multinomial){
   size_t const p = lower.n_rows,
                n = upper.n_cols;
   if(upper.n_rows != p or upper.n_cols != n)
@@ -243,6 +243,10 @@ Rcpp::NumericMatrix get_z_hat
       any_cate = true;
       break;
     }
+
+#ifdef _OPENMP
+  omp_set_num_threads(n_threads);
+#endif
 
   Rcpp::NumericMatrix out(p, n);
   double * const o = &out[0];
@@ -690,7 +694,7 @@ Rcpp::List impute
   openmp_exception_ptr capture_err;
 
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static) \
+#pragma omp parallel for schedule(static) num_threads(n_threads) \
   firstprivate(w_idx_int, w_idx_obs, w_obs_val, w_upper, w_lower, \
                mu, w_idx_cat_obs, w_idx_cat_not_obs, known_objs) \
   private(a_idx_int, a_idx_obs, a_obs_val, a_upper, a_lower, \

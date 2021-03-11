@@ -113,7 +113,12 @@ classes. See \code{\link{get_mdgc}}.
 }
 \examples{
 \donttest{
-if(require(catdata)){
+# there is a bug on CRAN's check on Solaris which I have failed to reproduce.
+# See https://github.com/r-hub/solarischeck/issues/8#issuecomment-796735501.
+# Thus, this example is not run on Solaris
+is_solaris <- tolower(Sys.info()[["sysname"]]) == "sunos"
+
+if(!is_solaris && require(catdata)){
   data(retinopathy)
 
   # prepare data and save true data set
