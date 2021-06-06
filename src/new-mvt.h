@@ -4,6 +4,11 @@
 #include <algorithm>
 #include "threat-safe-random.h"
 #include "mdgc-mem.h"
+#include "kahan.h"
+
+constexpr int n_qmc_seqs() {
+  return 64;
+}
 
 template<class Func>
 class rand_Korobov {
@@ -19,7 +24,7 @@ public:
 
   static void alloc_mem
     (int const max_ndim, int const max_nf, int const max_threads) {
-    dmem.set_n_mem(5 * max_nf + 3 * max_ndim, max_threads);
+    dmem.set_n_mem(6 * max_nf + (2 + n_qmc_seqs()) * max_ndim, max_threads);
     imem.set_n_mem(max_ndim                 , max_threads);
   }
 
@@ -71,10 +76,11 @@ public:
            * const MDGC_RESTRICT M          = finval + nf,
            * const MDGC_RESTRICT finest_var = M + nf,
            * const MDGC_RESTRICT x          = finest_var + nf,
-           * const MDGC_RESTRICT r          = x + ndim,
+           * const MDGC_RESTRICT r          = x + ndim * n_qmc_seqs(),
            * const MDGC_RESTRICT vk         = r + ndim,
            * const MDGC_RESTRICT values     = vk + ndim,
-           * const MDGC_RESTRICT fs         = values + nf;
+           * const MDGC_RESTRICT fs         = values + nf,
+           * const MDGC_RESTRICT kahan_comp = fs + nf;
 
     // initalize
     std::fill(finest    , finest     + nf, 0.);
@@ -116,8 +122,9 @@ public:
         }
       }
 
-      std::fill(finval, finval + nf, 0.);
-      std::fill(M     , M      + nf, 0.);
+      std::fill(finval    , finval     + nf, 0.);
+      std::fill(kahan_comp, kahan_comp + nf, 0.);
+      std::fill(M         , M          + nf, 0.);
 
       auto mvkrsv =
         [&](double * MDGC_RESTRICT const values, int const prime,
@@ -125,7 +132,8 @@ public:
             double * MDGC_RESTRICT const x,
             double * MDGC_RESTRICT const r,
             int * MDGC_RESTRICT  const pr,
-            double * MDGC_RESTRICT  const fs){
+            double * MDGC_RESTRICT  const fs,
+            double * MDGC_RESTRICT kahan_comp){
           std::fill(values, values + nf, 0.);
 
           // random shift
@@ -145,38 +153,38 @@ public:
           }
 
           // apply latice rule
-          for(int k = 0; k < prime; ++k){
-            {
-              double * rj = r,
-                     * xj = x;
-              int const * prj = pr;
-              for(int j = 0; j < ndim; ++j, ++rj, ++xj, ++prj){
-                *rj += vk[*prj];
-                if(*rj > 1.)
-                  *rj -= 1.;
-                *xj = std::fabs(2 * *rj - 1);
+          for(int k = 0; k < prime;){
+            // compute the points
+            int i = 0;
+            double * x_odd  = x,
+                   * x_even = x_odd + ndim;
+            for(; i < n_qmc_seqs() / 2 and k < prime;
+                ++i, ++k, x_odd += 2 * ndim, x_even += 2 * ndim){
+              for(int j = 0; j < ndim; ++j){
+                r[j] += vk[pr[j]];
+                if(r[j] > 1.)
+                  r[j] -= 1.;
+                x_odd [j] = std::abs(2 * r[j] - 1);
+                x_even[j] = 1 - x_odd[j];
               }
             }
 
-            f(&ndim, x, &nf, fs);
-            auto update_val = [&](double const denom){
-              double *vj = values,
-                    *fsj = fs;
-              for(int j = 0; j < nf; ++j, ++vj, ++fsj)
-                *vj += (*fsj - *vj) / denom;
-            };
-            update_val(static_cast<double>(2 * (k + 1) - 1));
+            // evaluate the integrand
+            f(&ndim, x, &nf, fs, 2 * i);
 
-            double *xj = x;
-            for(int j = 0; j < ndim; ++j, ++xj)
-              *xj = 1. - *xj;
-            f(&ndim, x, &nf, fs);
-            update_val(static_cast<double>(2 * (k + 1)));
+            double *vj = values,
+                   *fsj = fs,
+                   *cmp = kahan_comp;
+            for(int j = 0; j < nf; ++j, ++vj, ++fsj, ++cmp)
+              kahan(*vj, *cmp, *fsj);
           }
+
+          for(int j = 0; j < nf; ++j)
+            values[j] /= static_cast<double>(2 * prime);
         };
 
       for(int i = 0; i < sampls; ++i){
-        mvkrsv(values, p[np], vk, x, r, pr, fs);
+        mvkrsv(values, p[np], vk, x, r, pr, fs, kahan_comp);
         // stable version of Welford's online algorithm
         for(int k = 0; k < nf; ++k){
           double const term_diff = values[k] - finval[k];

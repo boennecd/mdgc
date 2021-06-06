@@ -131,7 +131,7 @@ class cdf {
          * const upper = lower + ndim,
     * const sigma_chol = upper + ndim,
     * const draw       = sigma_chol + (ndim * (ndim + 1L)) / 2L,
-    * const dtmp_mem   = draw + ndim;
+    * const dtmp_mem   = draw + ndim * n_qmc_seqs();
   // memory that can be used
   int * const itmp_mem = indices.end();
 
@@ -144,8 +144,10 @@ public:
     int const n_up_tri = (max_ndim * (max_ndim + 1)) / 2;
     imem.set_n_mem(3 * max_ndim                                 ,
                    max_threads);
-    dmem.set_n_mem(7 * max_ndim + n_up_tri + max_ndim * max_ndim,
-                   max_threads);
+    dmem.set_n_mem(
+      (6 + n_qmc_seqs()) * max_ndim + n_up_tri + max_ndim * max_ndim +
+        2 * n_qmc_seqs(),
+      max_threads);
   }
 
   /**
@@ -300,10 +302,11 @@ public:
    * @param unifs (0, 1) variables.
    * @param n_integrands_in Passed dimension of the integrand.
    * @param integrand_val Passed integrand approximation to be updated.
+   * @param n_draws number of draws
    */
   void operator()(
       int const *ndim_in, double const * unifs, int const *n_integrands_in,
-      double * MDGC_RESTRICT integrand_val) MDGC_NOEXCEPT {
+      double * MDGC_RESTRICT integrand_val, int const n_draws) MDGC_NOEXCEPT {
 #ifdef DO_CHECKS
     if(*ndim_in         != ndim)
       throw std::invalid_argument("cdf::eval_integrand: invalid 'ndim_in'");
@@ -312,61 +315,65 @@ public:
 #endif
 
     double * const MDGC_RESTRICT out = integrand_val,
-           * const MDGC_RESTRICT dr  = draw;
+           * const MDGC_RESTRICT dr  = draw,
+           * const MDGC_RESTRICT su  = dr + n_draws * ndim,
+           * const MDGC_RESTRICT w   = su + n_draws;
 
-    double w(1.);
+    std::fill(w, w + n_draws, 1);
     double const * MDGC_RESTRICT sc   = sigma_chol,
                  * MDGC_RESTRICT lw   = lower,
-                 * MDGC_RESTRICT up   = upper,
-                 * MDGC_RESTRICT unif = unifs;
+                 * MDGC_RESTRICT up   = upper;
     int const *infin_j = infin.begin();
     /* loop over variables and transform them to truncated normal
      * variables */
-    for(int j = 0; j < ndim; ++j, ++sc, ++lw, ++up, ++infin_j, ++unif){
-      double su(0.);
-      double const *d = dr;
-      for(int i = 0; i < j; ++i, sc++, d++)
-        su += *sc * *d;
+    for(int j = 0; j < ndim; ++j, ++sc, ++lw, ++up, ++infin_j){
+      std::fill(su, su + n_draws, 0);
+      {
+        double const *d = dr;
+        for(int i = 0; i < j; ++i, sc++, d += n_draws)
+          for(int k = 0; k < n_draws; ++k)
+            su[k] += *sc * d[k];
+      }
 
       auto pnorm_use = [&](double const x){
         return use_aprx ? pnorm_approx(x) : pnorm_std(x, 1L, 0L);
       };
-      double lim_l(0.),
-             lim_u(1.);
-      if(*infin_j == 0L)
-        lim_u = pnorm_use(*up - su);
-      else if(*infin_j == 1L)
-        lim_l = pnorm_use(*lw - su);
-      else if(*infin_j == 2L){
-        lim_l = pnorm_use(*lw - su);
-        lim_u = pnorm_use(*up - su);
 
-      }
+      int const offset = j * n_draws;
+      for(int k = 0; k < n_draws; ++k){
+        double lim_l(0.),
+               lim_u(1.);
+        if(*infin_j == 0L)
+          lim_u = pnorm_use(*up - su[k]);
+        else if(*infin_j == 1L)
+          lim_l = pnorm_use(*lw - su[k]);
+        else if(*infin_j == 2L){
+          lim_l = pnorm_use(*lw - su[k]);
+          lim_u = pnorm_use(*up - su[k]);
 
-      if(lim_l < lim_u){
-        w *= lim_u - lim_l;
-        if(needs_last_unif() or j + 1 < ndim){
-          double const quant_val = lim_l + *unif * (lim_u - lim_l);
-          dr[j] =
-            use_aprx ?
-            safe_qnorm_aprx(quant_val) :
-            safe_qnorm_w   (quant_val);
         }
 
-      } else {
-        w = 0.;
-        std::fill(dr + j, dr + ndim, 0.);
-        break;
+        if(lim_l < lim_u){
+          w[k] *= lim_u - lim_l;
+          if(needs_last_unif() or j + 1 < ndim){
+            double const quant_val =
+              lim_l + unifs[k * ndim + j] * (lim_u - lim_l);
+            dr[offset + k] =
+              use_aprx ?
+              safe_qnorm_aprx(quant_val) :
+              safe_qnorm_w   (quant_val);
+          }
 
+        } else {
+          w[k] = 0.;
+
+        }
       }
     }
 
     /* evaluate the integrand and weight the result. */
-    functor(dr, out, indices.begin(), is_permutated);
-
-    double * o = out;
-    for(int i = 0; i < n_integrands; ++i, ++o)
-      *o *= w;
+    functor(dr, out, indices.begin(), is_permutated,
+            static_cast<double const*>(w), n_draws);
   }
 
   /**
@@ -460,13 +467,16 @@ public:
   }
 
   inline void operator()
-  (double const *, double * out, int const *, bool const)
+  (double const *, double * out, int const *, bool const,
+   double const *w, int const n_draws)
   MDGC_NOEXCEPT {
 #ifdef DO_CHECKS
     if(!out)
       throw std::invalid_argument("likelihood::operator(): invalid out");
 #endif
-    *out = 1;
+    *out = 0;
+    for(int k = 0; k < n_draws; ++k)
+      *out += w[k];
   }
 
   constexpr static bool needs_last_unif() {
@@ -522,14 +532,17 @@ class deriv {
   double * const sig_inv = sigma_chol_inv + (ndim * (ndim + 1)) / 2;
   /// working memory to be used by cdf
   double * const cdf_mem = sig_inv + (ndim * (ndim + 1)) / 2;
+  /// working memory for operator()
+  double * const internal_mem = cdf_mem + get_n_integrands(ndim);
 
   inline void deriv_integrand_inner_loop
-    (double * MDGC_RESTRICT o, double const * MDGC_RESTRICT lhs,
-     unsigned const c) MDGC_NOEXCEPT {
-    double const * const end = lhs + c + 1;
-    double const mult = *(lhs + c);
-    for(; lhs != end; ++o, ++lhs)
-      *o = mult * * lhs;
+    (double * MDGC_RESTRICT o, double const * MDGC_RESTRICT scaled_samp,
+     int const c, int const n_draws) MDGC_NOEXCEPT {
+
+    double const * mult = scaled_samp + c * n_draws;
+    for(int i = 0; i <= c; ++i, scaled_samp += n_draws)
+      for(int k = 0; k < n_draws; ++k)
+        o[i] += scaled_samp[k] * mult[k];
   }
 
 public:
@@ -543,7 +556,8 @@ public:
         max_dim, get_n_integrands(max_dim), max_threads);
     dmem.set_n_mem(
       2 * max_dim * max_dim + max_dim * (max_dim + 1) +
-        get_n_integrands(max_dim),
+        get_n_integrands(max_dim) +
+        2 * n_qmc_seqs() * max_dim + n_qmc_seqs(),
       max_threads);
     cdf<deriv>::alloc_mem(max_dim, max_threads);
   }
@@ -588,28 +602,54 @@ public:
 
   inline void operator()
   (double const * MDGC_RESTRICT draw, double * MDGC_RESTRICT out,
-   int const *indices, bool const is_permutated) {
+   int const *indices, bool const is_permutated, double const *w,
+   int const n_draws) {
     arma::uword const p = ndim;
 
-    int const n_elem = 1L + p + (p * (p + 1L)) / 2L;
-    *out = 1.;
-    std::fill(out + 1L, out + n_elem, 0.);
+    *out = 0;
+    for(int k = 0; k < n_draws; ++k)
+      *out += w[k];
 
-    double * const mean_part_begin = out + 1L;
+    int const n_elem = 1L + p + (p * (p + 1L)) / 2L;
+    double * MDGC_RESTRICT const scaled_samp      = internal_mem,
+           * MDGC_RESTRICT const scaled_samp_mult = scaled_samp + n_draws * ndim,
+           * MDGC_RESTRICT const wk_mem           = scaled_samp_mult + n_draws * ndim;
+
+    std::fill(out + 1L, out + n_elem, 0.);
+    std::fill(scaled_samp, scaled_samp + ndim * n_draws, 0);
     /* Multiplying by the inverse matrix is fast but not smart
      * numerically. */
     double const * sigma_chol_inv_ck = sigma_chol_inv;
     for(unsigned c = 0; c < p; ++c){
-      double const mult = *(draw + c),
-            * const end = mean_part_begin + c + 1L;
-      for(double *rhs = mean_part_begin; rhs != end;
-          ++rhs, ++sigma_chol_inv_ck)
-        *rhs += mult * *sigma_chol_inv_ck;
+      double const * const mult = draw + c * n_draws;
+      double * MDGC_RESTRICT sc_samp = scaled_samp;
+      for(unsigned i = 0; i <= c; ++i, ++sigma_chol_inv_ck, sc_samp += n_draws)
+        for(int k = 0; k < n_draws; ++k)
+          sc_samp[k] += mult[k] * *sigma_chol_inv_ck;
+    }
+
+    // compute the derivative w.r.t. the mean
+    {
+      double * sc_samp = scaled_samp;
+      for(int i = 0; i < ndim; ++i, sc_samp += n_draws)
+        for(int k = 0; k < n_draws; ++k)
+          out[1 + i] += w[k] * sc_samp[k];
+    }
+
+    // compute the square root of weights times sc_samp
+    for(int k = 0; k < n_draws; ++k)
+      wk_mem[k] = std::sqrt(w[k]);
+    {
+        double * MDGC_RESTRICT to = scaled_samp_mult;
+        double const * from = scaled_samp;
+        for(int i = 0; i < ndim; ++i, to += n_draws, from += n_draws)
+          for(int k = 0; k < n_draws; ++k)
+            to[k] = from[k] * wk_mem[k];
     }
 
     double * o = out + 1L + p;
     for(unsigned c = 0; c < p; c++){
-      deriv_integrand_inner_loop(o, mean_part_begin, c);
+      deriv_integrand_inner_loop(o, scaled_samp_mult, c, n_draws);
       o += c + 1L;
     }
   }
@@ -715,7 +755,8 @@ public:
   public:
     virtual int n_latent() const MDGC_NOEXCEPT = 0;
     virtual int n_ele() const MDGC_NOEXCEPT = 0;
-    virtual void set_val(double const *, double * MDGC_RESTRICT)
+    virtual void set_val(double const *, double * MDGC_RESTRICT,
+                         double const)
       const MDGC_NOEXCEPT = 0;
     virtual ~type_base() = default;
   };
@@ -729,7 +770,8 @@ public:
     inline int n_ele() const MDGC_NOEXCEPT {
       return 0L;
     };
-    inline void set_val(double const *, double * MDGC_RESTRICT)
+    inline void set_val(double const *, double * MDGC_RESTRICT,
+                        double const)
       const MDGC_NOEXCEPT { };
 
     known(int const n_latent_val = 1): n_latent_val(n_latent_val) { }
@@ -745,9 +787,10 @@ public:
       return 1L;
     }
 
-    inline void set_val(double const *v, double * MDGC_RESTRICT res)
+    inline void set_val(double const *v, double * MDGC_RESTRICT res,
+                        double const weight)
     const MDGC_NOEXCEPT {
-      *res = *v;
+      *res += weight * *v;
     }
   };
 
@@ -765,17 +808,13 @@ public:
       return 2L;
     }
 
-    inline void set_val(double const *v, double * MDGC_RESTRICT res)
+    inline void set_val(double const *v, double * MDGC_RESTRICT res,
+                        double const weight)
       const MDGC_NOEXCEPT {
-      if(*v < border){
-        *res++ = 1.;
-        *res   = 0.;
-
-      } else {
-        *res++ = 0.;
-        *res   = 1.;
-
-      }
+      if(*v < border)
+        res[0] += weight;
+      else
+        res[1] += weight;
     }
   };
 
@@ -812,24 +851,20 @@ public:
       return n_bs + 1L;
     }
 
-    inline void set_val(double const *v, double * MDGC_RESTRICT res)
+    inline void set_val(double const *v, double * MDGC_RESTRICT res,
+                        double const weight)
     const MDGC_NOEXCEPT {
       int i = 0L;
       double const *b = borders.get();
       for(; i < n_bs; ++i, ++b)
         if(*v < *b){
-          *res++ = 1.;
+          *res += weight;
           break;
         } else
-          *res++ = 0.;
+          ++res;
 
       if(i == n_bs)
-        *res++ = 1.;
-      else {
-        ++i;
-        for(; i <= n_bs; ++i)
-          *res++ = 0.;
-      }
+        *res += weight;
     }
   };
 
@@ -847,19 +882,18 @@ public:
     };
 
     void set_val
-      (double const *v, double * MDGC_RESTRICT res) const MDGC_NOEXCEPT {
+      (double const *v, double * MDGC_RESTRICT res,
+       double const weight) const MDGC_NOEXCEPT {
       int max_lvl(0);
       double max_val = *v;
-      res[0] = 1.;
 
       for(int i = 1; i < n_lvls; ++i)
         if(v[i] > max_val){
-          res[max_lvl] = 0;
           max_lvl = i;
           max_val = v[i];
-          res[i] = 1;
-        } else
-          res[i] = 0;
+        }
+
+      res[max_lvl] += weight;
     }
   };
 
@@ -889,12 +923,14 @@ public:
     rand_Korobov<cdf<imputation> >::alloc_mem(n_latent, n_ints, max_threads);
     cdf<imputation>::alloc_mem(n_latent, max_threads);
     dmem.set_n_mem(
-      // mu_vec, sig_chol, and an extra n_latent vector
+      // mu_vec and sig_chol, and an extra n_latent vector
       (n_latent * (n_latent + 5)) / 2 +
         // a full n_latent x n_latent matrix and one n_latent vector
         n_latent * (n_latent + 1) +
         // memory for cdf_mem
-        n_ints,
+        n_ints +
+        // two extra matrices of size n_latent * ndraws
+        2 * n_latent * n_qmc_seqs(),
       max_threads);
   }
 
@@ -944,41 +980,52 @@ public:
 
   inline void operator()
   (double const * MDGC_RESTRICT draw, double * MDGC_RESTRICT out,
-   int const *indices, bool const is_permutated){
-    double *scale_draw = xtr_mem;
-    std::fill(scale_draw, scale_draw + ndim, 0.);
+   int const *indices, bool const is_permutated, double const *w,
+   int const n_draws){
+    double * MDGC_RESTRICT scale_draw       = xtr_mem,
+           * MDGC_RESTRICT scale_draw_permu = scale_draw + ndim * n_draws;
+    std::fill(scale_draw, scale_draw + ndim * n_draws, 0.);
 
     {
       // re-scale
-      double const *sig_chol_rp = sig_chol;
-      double * scale_draw_c = scale_draw;
-      for(int c = 0; c < ndim; ++c, ++scale_draw_c){
-        double const * draw_r = draw;
-        for(int r = 0; r <= c; ++r, ++sig_chol_rp, ++draw_r)
-          *scale_draw_c += *sig_chol_rp * *draw_r;
+      double const * sig_chol_rp = sig_chol;
+      double * MDGC_RESTRICT sc_samp = scale_draw;
+      for(int c = 0; c < ndim; ++c, sc_samp += n_draws){
+        double const * mult = draw;
+        for(int r = 0; r <= c; ++r, ++sig_chol_rp, mult += n_draws)
+          for(int k = 0; k < n_draws; ++k)
+            sc_samp[k] += mult[k] * *sig_chol_rp;
       }
     }
 
     // re-locate
+    for(int i = 0; i < ndim; ++i){
+      double * MDGC_RESTRICT sc_samp = scale_draw + i * n_draws;
+      for(int k = 0; k < n_draws; ++k)
+        sc_samp[k] += mu_vec[i];
+    }
+
+    // permute and transpose
     for(int i = 0; i < ndim; ++i)
-      scale_draw[i] += mu_vec[i];
+      for(int k = 0; k < n_draws; ++k)
+        scale_draw_permu[k * ndim + indices[i]] =
+          scale_draw[k + i * n_draws];
 
-    // permute
-    double *scale_draw_permu = nullptr;
-    if(is_permutated){
-      scale_draw_permu = scale_draw + ndim;
-      for(int i = 0; i < ndim; ++i)
-        scale_draw_permu[indices[i]] = scale_draw[i];
-    } else
-      scale_draw_permu = scale_draw;
+    std::fill(out, out + get_n_integrands(), 0);
+    for(int k = 0; k < n_draws; ++k)
+      *out += w[k];
 
-    double * o = out;
-    *o++ = 1.;
     double const *scale_draw_i = scale_draw_permu;
-    for(int i = 0; i < static_cast<int>(cur_list.size()); ++i){
-      cur_list[i]->set_val(scale_draw_i, o);
-      o            += cur_list[i]->n_ele();
-      scale_draw_i += cur_list[i]->n_latent();
+    for(int k = 0; k < n_draws; ++k){
+      double * o = out + 1;
+
+      for(int i = 0; i < static_cast<int>(cur_list.size()); ++i){
+        cur_list[i]->set_val(scale_draw_i, o, w[k]);
+
+        // increment the pointers
+        o            += cur_list[i]->n_ele();
+        scale_draw_i += cur_list[i]->n_latent();
+      }
     }
   }
 

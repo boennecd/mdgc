@@ -1,0 +1,7 @@
+Changes in version 0.1.5
+ * better usage of Single instruction, multiple data (SIMD) when compiling with
+   e.g. -O3 -mtune=native.
+
+Changes in version 0.1.0 to 0.1.4
+ * first submission to CRAN.
+ * bug fixes of bugs found on CRAN's checks.

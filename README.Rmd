@@ -54,6 +54,10 @@ or from CRAN by calling:
 install.packages("mdgc")
 ```
 
+The code benefits from being build with automatic vectorization so having e.g.  
+`-O3 -mtune=native` in the `CXX11FLAGS` flags in your Makevars file may be 
+useful.
+
 ## The Model
 We observe four types of variables for each observation: continuous, 
 binary, ordinal, and multinomial variables. Let $\vec X_i$ be a K
