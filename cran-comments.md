@@ -21,31 +21,6 @@ clang-6.0.0 which I think are false positives (see below).
 
 There is a NOTE about the package size in some cases.
 
-I have attempted to closely follow the description of the Solaris setup on CRAN. 
-In particular, I build GCC 5.2.0 as the the archived version of OpenCSW do not 
-work with the math.h file that is updated on 27/02/16 (see 
-http://gcc.1065356.n8.nabble.com/the-mystery-of-math-h-in-lib-gcc-triple-name-gcc-version-include-fixed-td1524637.html). However, I still fail to reproduce any of the ERRORs 
-on CRAN. 
-
-My configurations for R are: 
-
-./configure \
-  CC="/opt/gcc-5.2.0/bin/gcc" \
-  CXX="/opt/gcc-5.2.0/bin/g++" \
-  CPPFLAGS="-I/opt/gcc-5.2.0/include -I/opt/csw/include -I/usr/local/include" \
-  FC="/opt/gcc-5.2.0/bin/gfortran" \
-  CFLAGS="-O2" \
-  FFLAGS="-O2" \
-  CXXFLAGS="-O2" \
-  LDFLAGS="-L/opt/gcc-5.2.0/lib -L/usr/local/lib -L/opt/csw/lib" \
-  --with-internal-tzcode \
-  R_LD_LIBRARY_PATH="/opt/gcc-5.2.0/lib:/usr/local/lib:/opt/csw/lib:/opt/developerstudio12.6/lib:/usr/openwin/lib" \
-  --prefix=/opt/R-gcc-5-2
-  
-where /opt/gcc-5.2.0 contains the GCC-5.2.0 I build. As I have failed again to 
-reproduce the errors on Solaris, I have removed the examples and tests on 
-Solaris.
-
 The ASAN and UBSAN checks with clang-6.0.0 yields a false positive I think. I 
 get the following:	
 

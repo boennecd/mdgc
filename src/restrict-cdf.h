@@ -524,12 +524,12 @@ class deriv {
 
   int const ndim;
   /**
-   * points to the upper triangular part of the inverse of the Cholesky
-   * decomposition.
+   * points to upper triangular matrix of the Cholesky decomposition as a full
+   * ndim x ndim matrix.
    */
-  double * const sigma_chol_inv = dmem.get_mem() + 2L * ndim * ndim;
+  double * const sigma_chol = dmem.get_mem();
   /// points to the upper triangular part of the inverse.
-  double * const sig_inv = sigma_chol_inv + (ndim * (ndim + 1)) / 2;
+  double * const sig_inv = sigma_chol + ndim * ndim;
   /// working memory to be used by cdf
   double * const cdf_mem = sig_inv + (ndim * (ndim + 1)) / 2;
   /// working memory for operator()
@@ -555,9 +555,9 @@ public:
     rand_Korobov<cdf<deriv> >::alloc_mem(
         max_dim, get_n_integrands(max_dim), max_threads);
     dmem.set_n_mem(
-      2 * max_dim * max_dim + max_dim * (max_dim + 1) +
+      max_dim * max_dim + (max_dim * (max_dim + 1)) / 2 +
         get_n_integrands(max_dim) +
-        2 * n_qmc_seqs() * max_dim + n_qmc_seqs(),
+        n_qmc_seqs() * max_dim + n_qmc_seqs() + 2 * max_dim * max_dim,
       max_threads);
     cdf<deriv>::alloc_mem(max_dim, max_threads);
   }
@@ -571,13 +571,10 @@ public:
   void prep_sim(arma::mat const &sigma_permu, int const *,
                 bool const is_permuted) {
     // need to re-compute the inverse of the Cholesky decomposition
-    arma::mat t1(dmem.get_mem(), ndim, ndim, false),
-              t2(t1.end()      , ndim, ndim, false);
-    if(!arma::chol(t1, sigma_permu))
+    arma::mat t1(internal_mem, ndim, ndim, false);
+    if(!arma::chol(t1, sigma_permu, "upper"))
       throw std::runtime_error("deriv::prep_sim: chol failed");
-    if(!arma::inv(t2, t1))
-      throw std::runtime_error("deriv::prep_sim: inv failed");
-    copy_upper_tri(t2, sigma_chol_inv);
+    std::copy(t1.begin(), t1.end(), sigma_chol);
 
     if(!arma::inv_sympd(t1, sigma_permu))
       throw std::runtime_error("deriv::prep_sim: inv_sympd failed");
@@ -611,29 +608,16 @@ public:
       *out += w[k];
 
     int const n_elem = 1L + p + (p * (p + 1L)) / 2L;
-    double * MDGC_RESTRICT const scaled_samp      = internal_mem,
-           * MDGC_RESTRICT const scaled_samp_mult = scaled_samp + n_draws * ndim,
+    double * MDGC_RESTRICT const scaled_samp_mult = internal_mem,
            * MDGC_RESTRICT const wk_mem           = scaled_samp_mult + n_draws * ndim;
 
     std::fill(out + 1L, out + n_elem, 0.);
-    std::fill(scaled_samp, scaled_samp + ndim * n_draws, 0);
-    /* Multiplying by the inverse matrix is fast but not smart
-     * numerically. */
-    double const * sigma_chol_inv_ck = sigma_chol_inv;
-    for(unsigned c = 0; c < p; ++c){
-      double const * const mult = draw + c * n_draws;
-      double * MDGC_RESTRICT sc_samp = scaled_samp;
-      for(unsigned i = 0; i <= c; ++i, ++sigma_chol_inv_ck, sc_samp += n_draws)
-        for(int k = 0; k < n_draws; ++k)
-          sc_samp[k] += mult[k] * *sigma_chol_inv_ck;
-    }
-
     // compute the derivative w.r.t. the mean
     {
-      double * sc_samp = scaled_samp;
-      for(int i = 0; i < ndim; ++i, sc_samp += n_draws)
+      double const * d = draw;
+      for(int i = 0; i < ndim; ++i, d += n_draws)
         for(int k = 0; k < n_draws; ++k)
-          out[1 + i] += w[k] * sc_samp[k];
+          out[1 + i] += w[k] * d[k];
     }
 
     // compute the square root of weights times sc_samp
@@ -641,7 +625,7 @@ public:
       wk_mem[k] = std::sqrt(w[k]);
     {
         double * MDGC_RESTRICT to = scaled_samp_mult;
-        double const * from = scaled_samp;
+        double const * from = draw;
         for(int i = 0; i < ndim; ++i, to += n_draws, from += n_draws)
           for(int k = 0; k < n_draws; ++k)
             to[k] = from[k] * wk_mem[k];
@@ -668,7 +652,7 @@ public:
                  d_lb = f_lb ? 0 : dnrm(lw),
               d_ub_ub = f_ub ? 0 : ub * d_ub,
               d_lb_lb = f_lb ? 0 : lw * d_lb,
-               sd_inv = *sigma_chol_inv;
+               sd_inv = 1 / *sigma_chol;
 
     out[0L] = p_ub - p_lb;
     out[1L] = -(d_ub - d_lb) * sd_inv;
@@ -697,6 +681,47 @@ public:
   out_type get_output(double * const res, int const minvls,
                       int const inform, double const abserr,
                       int const *indices){
+    // multiply by the inverse of the Cholesky factorization.
+    if(ndim > 1){
+      arma::mat c_mat(sigma_chol, ndim, ndim, false);
+
+      // start with the mean part
+      {
+        double * MDGC_RESTRICT const d_mu_tmp = internal_mem,
+               * MDGC_RESTRICT const d_mu     = res + 1;
+        std::copy(d_mu, d_mu + ndim, d_mu_tmp);
+
+        arma::mat lhs(d_mu      , ndim,    1, false),
+                  rhs(d_mu_tmp  , ndim,    1, false);
+
+        arma::solve(lhs, arma::trimatu(c_mat), rhs);
+      }
+
+      // then the covariance matrix part
+      {
+        arma::mat d_sig_res(internal_mem   , ndim, ndim, false),
+                  d_sig_tmp(d_sig_res.end(), ndim, ndim, false);
+        {
+          double const * MDGC_RESTRICT d_sig  = res + 1 + ndim;
+          for(int j = 0; j < ndim; ++j)
+            for(int i = 0; i <= j; ++i){
+              d_sig_res.at(i, j) = *d_sig;
+              d_sig_res.at(j, i) = *d_sig++;
+            }
+        }
+
+        arma::solve(d_sig_tmp, arma::trimatu(c_mat), d_sig_res);
+        arma::inplace_trans(d_sig_tmp);
+        arma::solve(d_sig_res, arma::trimatu(c_mat), d_sig_tmp);
+
+        // copy the result
+        double * MDGC_RESTRICT d_sig  = res + 1 + ndim;
+        for(int j = 0; j < ndim; ++j)
+          for(int i = 0; i <= j; ++i)
+            *d_sig++ = d_sig_res.at(i, j);
+      }
+    }
+
     // post process
     double const likelihood = *res;
     double *o = res + 1 + ndim;

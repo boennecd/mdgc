@@ -307,7 +307,7 @@ mark(`Setup time` = {
 #> # A tibble: 1 x 6
 #>   expression      min   median `itr/sec` mem_alloc `gc/sec`
 #>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 Setup time     16ms   16.8ms      58.9    9.57MB     23.5
+#> 1 Setup time   16.4ms   17.1ms      57.7    9.57MB     23.1
 
 # fit the model using three different methods
 set.seed(60941821)
@@ -317,7 +317,7 @@ system.time(
     n_threads = 4L, maxit = 100L, method = "aug_Lagran", rel_eps = 1e-3, 
     maxpts = 200L))
 #>    user  system elapsed 
-#>   136.6     0.0    34.2
+#>  134.24    0.02   33.58
 system.time(
   fit_Lagran <- mdgc_fit(
     ptr = log_ml_ptr, vcov = fit_Lagran_start$result$vcov, 
@@ -326,7 +326,7 @@ system.time(
     maxpts = 5000L, mu = fit_Lagran_start$mu, 
     lambda = fit_Lagran_start$lambda))
 #>    user  system elapsed 
-#>    32.9     0.0     8.3
+#>  31.887   0.016   8.113
 
 system.time(
   fit_adam <- mdgc_fit(
@@ -334,7 +334,7 @@ system.time(
     n_threads = 4L, lr = 1e-3, maxit = 25L, batch_size = 100L, 
     method = "adam", rel_eps = 1e-3, maxpts = 5000L))
 #>    user  system elapsed 
-#>   32.08    0.00    8.02
+#>  30.786   0.008   7.722
 
 set.seed(fit_seed <- 19570958L)
 system.time(
@@ -407,38 +407,38 @@ system.time(
 #> Previous approximate gradient norm was         248.55
 #> 
 #> End of iteration   17 with learning rate 0.00072380
-#> Log marginal likelihood approximation is    -23332.11
-#> Previous approximate gradient norm was         286.73
+#> Log marginal likelihood approximation is    -23332.12
+#> Previous approximate gradient norm was         281.80
 #> 
 #> End of iteration   18 with learning rate 0.00070932
-#> Log marginal likelihood approximation is    -23331.84
-#> Previous approximate gradient norm was         258.94
+#> Log marginal likelihood approximation is    -23331.85
+#> Previous approximate gradient norm was         256.66
 #> 
 #> End of iteration   19 with learning rate 0.00069514
 #> Log marginal likelihood approximation is    -23331.63
-#> Previous approximate gradient norm was         249.91
+#> Previous approximate gradient norm was         248.70
 #> 
 #> End of iteration   20 with learning rate 0.00068123
-#> Log marginal likelihood approximation is    -23331.45
-#> Previous approximate gradient norm was         245.01
+#> Log marginal likelihood approximation is    -23331.44
+#> Previous approximate gradient norm was         243.76
 #> 
 #> End of iteration   21 with learning rate 0.00066761
-#> Log marginal likelihood approximation is    -23331.32
-#> Previous approximate gradient norm was         253.90
+#> Log marginal likelihood approximation is    -23331.33
+#> Previous approximate gradient norm was         250.50
 #> 
 #> End of iteration   22 with learning rate 0.00065426
 #> Log marginal likelihood approximation is    -23331.19
-#> Previous approximate gradient norm was         237.19
+#> Previous approximate gradient norm was         236.98
 #> 
 #> End of iteration   23 with learning rate 0.00064117
-#> Log marginal likelihood approximation is    -23331.06
-#> Previous approximate gradient norm was         231.98
+#> Log marginal likelihood approximation is    -23331.07
+#> Previous approximate gradient norm was         232.90
 #> 
 #> End of iteration   24 with learning rate 0.00062835
 #> Log marginal likelihood approximation is    -23331.02
-#> Previous approximate gradient norm was         233.14
+#> Previous approximate gradient norm was         233.03
 #>    user  system elapsed 
-#>    56.5     0.0    14.1
+#>   54.85    0.02   13.75
 
 # compare the log marginal likelihood 
 print(rbind(
@@ -457,8 +457,8 @@ print(rbind(
   digits = 10)
 #>                              [,1]
 #> Augmented Lagrangian -23330.35309
-#> ADAM                 -23348.77931
-#> SVRG                 -23330.83777
+#> ADAM                 -23348.70873
+#> SVRG                 -23330.86030
 #> Truth                -23384.11648
 
 # we can use an approximation in the method
@@ -469,13 +469,13 @@ system.time(
     n_threads = 4L, lr = 1e-3, maxit = 25L, batch_size = 100L, 
     method = "svrg", rel_eps = 1e-3, maxpts = 5000L, use_aprx = TRUE))
 #>    user  system elapsed 
-#>   29.31    0.00    7.33
+#>   28.18    0.00    7.05
 
 # essentially the same estimates
 norm(fit_svrg_aprx$result$vcov - fit_svrg$result$vcov, "F") 
-#> [1] 9e-08
+#> [1] 8.98e-08
 sd(fit_svrg_aprx$result$mea - fit_svrg$result$mea)
-#> [1] 2.35e-09
+#> [1] 2.17e-09
 
 # compare the estimated correlation matrix with the true value
 do_plot <- function(est, truth, main){
@@ -522,7 +522,7 @@ system.time(imp_res <- mdgc_impute(
   mdgc_obj, fit_svrg$result$vcov, mea = fit_svrg$result$mea, rel_eps = 1e-3, 
   maxit = 10000L, n_threads = 4L))
 #>    user  system elapsed 
-#>   14.81    0.00    4.11
+#>   14.19    0.00    3.97
 
 # look at the result for one of the observations
 imp_res[2L]
@@ -634,12 +634,12 @@ thresh_dat <- threshold(dat$seen_obs, imp_res)
 # compare thresholded data with observed and true data
 head(thresh_dat)
 #>      C1    C2    C3     C4       C5    B1    B2    B3    B4    B5 O1 O2 O3 O4
-#> 1 0.237 0.693 0.798 0.0666 1.216453 FALSE FALSE FALSE FALSE  TRUE  E  C  B  B
+#> 1 0.237 0.693 0.798 0.0666 1.216658 FALSE FALSE FALSE FALSE  TRUE  E  C  B  B
 #> 2 0.142 2.083 0.249 0.0927 0.000152 FALSE  TRUE  TRUE FALSE  TRUE  E  B  A  A
-#> 3 1.301 0.748 0.629 0.4280 0.572416 FALSE  TRUE  TRUE  TRUE  TRUE  E  A  E  C
+#> 3 1.301 0.748 0.629 0.4280 0.572448 FALSE  TRUE  TRUE  TRUE  TRUE  E  A  E  C
 #> 4 2.702 0.775 1.128 2.1776 1.700870 FALSE  TRUE  TRUE  TRUE  TRUE  A  B  D  B
 #> 5 0.925 0.908 0.205 0.6046 0.171311  TRUE  TRUE FALSE FALSE FALSE  E  B  D  D
-#> 6 0.115 1.063 1.341 0.2399 0.238408 FALSE  TRUE  TRUE FALSE  TRUE  E  A  A  B
+#> 6 0.115 1.063 1.341 0.2399 0.238368 FALSE  TRUE  TRUE FALSE  TRUE  E  A  A  B
 #>   O5
 #> 1  D
 #> 2  C
@@ -689,7 +689,7 @@ get_classif_error <- function(impu_dat, truth = dat$truth_obs,
 }
 get_classif_error(thresh_dat)
 #>    B1    B2    B3    B4    B5    O1    O2    O3    O4    O5 
-#> 0.274 0.297 0.226 0.320 0.286 0.566 0.637 0.616 0.600 0.550
+#> 0.274 0.295 0.226 0.320 0.288 0.566 0.638 0.616 0.600 0.548
 
 # compute RMSE
 get_rmse <- function(impu_dat, truth = dat$truth_obs,
@@ -719,7 +719,7 @@ system.time(miss_res <- missForest(miss_forest_arg))
 #>   missForest iteration 8 in progress...done!
 #>   missForest iteration 9 in progress...done!
 #>    user  system elapsed 
-#>  45.164   0.047  45.213
+#>   44.58    0.06   44.64
 
 # turn binary variables back to logicals
 miss_res$ximp[, is_log] <- lapply(
@@ -728,7 +728,7 @@ miss_res$ximp[, is_log] <- lapply(
 rbind(mdgc       = get_classif_error(thresh_dat),
       missForest = get_classif_error(miss_res$ximp))
 #>               B1    B2    B3    B4    B5    O1    O2    O3    O4    O5
-#> mdgc       0.274 0.297 0.226 0.320 0.286 0.566 0.637 0.616 0.600 0.550
+#> mdgc       0.274 0.295 0.226 0.320 0.288 0.566 0.638 0.616 0.600 0.548
 #> missForest 0.315 0.340 0.304 0.371 0.319 0.651 0.726 0.680 0.673 0.612
 rbind(mdgc       = get_rmse(thresh_dat),
       missForest = get_rmse(miss_res$ximp))
@@ -823,7 +823,7 @@ system.time(res <- mdgc(dat$seen_obs, verbose = TRUE, maxpts = 5000L,
 #> 
 #> Performing imputation...
 #>    user  system elapsed 
-#>  12.121   0.004   3.483
+#>   11.91    0.00    3.43
 
 # compare the estimated correlation matrix with the truth
 norm(dat$Sigma - res$vcov, "F") / norm(dat$Sigma, "F")
@@ -849,7 +849,7 @@ dat_pass[, is_cat] <- lapply(dat_pass[, is_cat], as.integer)
 
 system.time(imp_apr_em <- impute_mixedgc(dat_pass, eps = 1e-4))
 #>    user  system elapsed 
-#>    19.7     0.0    19.7
+#>      20       0      20
 
 # compare the estimated correlation matrix with the truth
 get_rel_err <- function(est, keep = seq_len(NROW(truth)), truth = dat$Sigma)
@@ -1078,14 +1078,14 @@ show_sim_stats <- function(v1, v2, v3, what, sub_ele = NULL){
 show_sim_stats(1L, 2L, 3L, "times", "elapsed")
 #> Means and standard errors:
 #>             mean     SE
-#> mdgc        3.65 0.0653
-#> mixedgc    20.97 0.1459
-#> missForest 45.99 0.6190
+#> mdgc        3.68 0.0648
+#> mixedgc    21.06 0.1455
+#> missForest 46.71 0.6242
 #> 
 #> Difference:
 #>             mean    SE
-#> mixedgc    -17.3 0.153
-#> missForest -42.3 0.614
+#> mixedgc    -17.4 0.155
+#> missForest -43.0 0.620
 ```
 
 The summary stats for the relative Frobenius norm between the estimated
@@ -1097,7 +1097,7 @@ show_sim_stats("mixedgc_rel_err", "mdgc_rel_err", NULL, "vcov_res")
 #> Means and standard errors:
 #>                   mean       SE
 #> mixedgc_rel_err 0.1187 0.001230
-#> mdgc_rel_err    0.0866 0.000972
+#> mdgc_rel_err    0.0867 0.000972
 #> 
 #> Difference:
 #>               mean       SE
@@ -1117,9 +1117,9 @@ show_sim_stats("mdgc_bin", "mixedgc_bin", "missForest_bin", "err")
 #> missForest_bin 0.294 0.00188
 #> 
 #> Difference:
-#>                    mean      SE
-#> mixedgc_bin    -0.00741 0.00255
-#> missForest_bin -0.05003 0.00255
+#>                   mean      SE
+#> mixedgc_bin    -0.0074 0.00255
+#> missForest_bin -0.0500 0.00255
 
 # the ordinal variables
 show_sim_stats("mdgc_class", "mixedgc_class", "missForest_class", "err")
@@ -1131,7 +1131,7 @@ show_sim_stats("mdgc_class", "mixedgc_class", "missForest_class", "err")
 #> 
 #> Difference:
 #>                     mean      SE
-#> mixedgc_class    -0.0333 0.00317
+#> mixedgc_class    -0.0332 0.00317
 #> missForest_class -0.0680 0.00272
 
 # the continuous variables
@@ -1311,7 +1311,7 @@ system.time(
                    n_threads = 4L, rel_eps = 1e-2, maxpts = 1000L, 
                    minvls = 200L, use_aprx = TRUE, conv_crit = 1e-8))
 #>    user  system elapsed 
-#>   199.4     0.0    49.9
+#>   196.8     0.0    49.2
 
 # refine the estimates
 system.time(
@@ -1322,7 +1322,7 @@ system.time(
                    minvls = 1000L, mu = ests$mu, lambda = ests$lambda, 
                    use_aprx = TRUE, conv_crit = 1e-8))
 #>    user  system elapsed 
-#> 441.021   0.024 112.825
+#>     498       0     128
 
 # use ADAM
 system.time(
@@ -1332,7 +1332,7 @@ system.time(
     method = "adam", rel_eps = 1e-3, maxpts = 5000L, 
     use_aprx = TRUE))
 #>    user  system elapsed 
-#>   20.04    0.00    5.01
+#>   18.98    0.00    4.75
 
 # use SVRG
 system.time(
@@ -1399,49 +1399,49 @@ system.time(
 #> 
 #> End of iteration   15 with learning rate 0.00075364
 #> Log marginal likelihood approximation is    -13111.37
-#> Previous approximate gradient norm was         109.66
+#> Previous approximate gradient norm was         116.29
 #> 
 #> End of iteration   16 with learning rate 0.00073857
 #> Log marginal likelihood approximation is    -13111.26
-#> Previous approximate gradient norm was         101.81
+#> Previous approximate gradient norm was         108.67
 #> 
 #> End of iteration   17 with learning rate 0.00072380
 #> Log marginal likelihood approximation is    -13111.18
-#> Previous approximate gradient norm was          96.15
+#> Previous approximate gradient norm was         102.82
 #> 
 #> End of iteration   18 with learning rate 0.00070932
 #> Log marginal likelihood approximation is    -13111.11
-#> Previous approximate gradient norm was          91.63
+#> Previous approximate gradient norm was          98.91
 #> 
 #> End of iteration   19 with learning rate 0.00069514
-#> Log marginal likelihood approximation is    -13111.05
-#> Previous approximate gradient norm was          88.33
+#> Log marginal likelihood approximation is    -13111.04
+#> Previous approximate gradient norm was          95.78
 #> 
 #> End of iteration   20 with learning rate 0.00068123
-#> Log marginal likelihood approximation is    -13111.01
-#> Previous approximate gradient norm was          87.87
+#> Log marginal likelihood approximation is    -13111.00
+#> Previous approximate gradient norm was          91.77
 #> 
 #> End of iteration   21 with learning rate 0.00066761
-#> Log marginal likelihood approximation is    -13110.97
-#> Previous approximate gradient norm was          83.53
+#> Log marginal likelihood approximation is    -13110.96
+#> Previous approximate gradient norm was          88.01
 #> 
 #> End of iteration   22 with learning rate 0.00065426
-#> Log marginal likelihood approximation is    -13110.93
-#> Previous approximate gradient norm was          80.78
+#> Log marginal likelihood approximation is    -13110.94
+#> Previous approximate gradient norm was          85.42
 #> 
 #> End of iteration   23 with learning rate 0.00064117
-#> Log marginal likelihood approximation is    -13110.91
-#> Previous approximate gradient norm was          78.15
+#> Log marginal likelihood approximation is    -13110.90
+#> Previous approximate gradient norm was          83.17
 #> 
 #> End of iteration   24 with learning rate 0.00062835
-#> Log marginal likelihood approximation is    -13110.83
-#> Previous approximate gradient norm was          78.93
+#> Log marginal likelihood approximation is    -13110.84
+#> Previous approximate gradient norm was          83.19
 #> 
 #> End of iteration   25 with learning rate 0.00061578
-#> Log marginal likelihood approximation is    -13110.80
-#> Previous approximate gradient norm was          75.24
+#> Log marginal likelihood approximation is    -13110.82
+#> Previous approximate gradient norm was          80.33
 #>    user  system elapsed 
-#>    40.1     0.0    10.0
+#>  38.379   0.004   9.597
 
 # compare log marginal likelihood
 print(rbind(
@@ -1458,9 +1458,9 @@ print(rbind(
     mdgc_log_ml(ptr, dat$Sigma           , mea = numeric(length(obj$means)), 
                 n_threads = 1L)), digits = 10)
 #>                              [,1]
-#> Augmented Lagrangian -13111.08456
-#> ADAM                 -13113.05546
-#> SVRG                 -13110.74543
+#> Augmented Lagrangian -13111.01596
+#> ADAM                 -13112.96534
+#> SVRG                 -13110.74984
 #> Truth                -13140.31880
 
 # compare the estimated and the true values (should not match because of
@@ -1520,7 +1520,7 @@ system.time(
   imp_res <- mdgc_impute(obj, ests$result$vcov, mea = ests$result$mea, 
                          rel_eps = 1e-3, maxit = 10000L, n_threads = 4L))
 #>    user  system elapsed 
-#>   11.95    0.00    3.18
+#>   11.99    0.00    3.19
 
 # look at the result for one of the observations
 imp_res[1L]
@@ -1647,7 +1647,7 @@ get_classif_error <- function(impu_dat, truth = dat$truth_obs,
 }
 get_classif_error(thresh_dat)
 #>    B1    O1    M1    B2    O2    M2 
-#> 0.337 0.653 0.596 0.392 0.613 0.582
+#> 0.339 0.653 0.598 0.393 0.615 0.582
 
 # compute RMSE
 get_rmse <- function(impu_dat, truth = dat$truth_obs,
@@ -1676,7 +1676,7 @@ system.time(miss_res <- missForest(miss_forest_arg))
 #>   missForest iteration 7 in progress...done!
 #>   missForest iteration 8 in progress...done!
 #>    user  system elapsed 
-#>   9.846   0.024   9.870
+#>    9.86    0.02    9.88
 
 # turn binary variables back to logical variables
 miss_res$ximp[, is_log] <- lapply(
@@ -1686,7 +1686,7 @@ miss_res$ximp[, is_log] <- lapply(
 rbind(mdgc       = get_classif_error(thresh_dat),
       missForest = get_classif_error(miss_res$ximp))
 #>               B1    O1    M1    B2    O2    M2
-#> mdgc       0.337 0.653 0.596 0.392 0.613 0.582
+#> mdgc       0.339 0.653 0.598 0.393 0.615 0.582
 #> missForest 0.394 0.695 0.645 0.422 0.644 0.643
 rbind(mdgc       = get_rmse(thresh_dat),
       missForest = get_rmse(miss_res$ximp))
@@ -1749,7 +1749,7 @@ system.time(
                    iminvls = 2000L, imaxit = 20000L, irel_eps = 1e-3, 
                    lr = 1e-3))
 #>    user  system elapsed 
-#>   2.079   0.000   0.529
+#>   2.052   0.000   0.523
 
 # some of the imputed values
 head(mdgc_res$ximp)
@@ -1759,7 +1759,7 @@ head(mdgc_res$ximp)
 #> 3      -1.3807      0.3273        -1.39      -1.311  setosa
 #> 4      -1.5015      0.0979        -1.28      -1.311  setosa
 #> 5      -0.5354      1.2450        -1.28      -1.180  setosa
-#> 6       0.0429      1.9333        -1.17       0.126  setosa
+#> 6       0.0427      1.9333        -1.17       0.125  setosa
 
 # compare with missForest
 system.time(miss_res <- missForest(dat))
@@ -1772,7 +1772,7 @@ system.time(miss_res <- missForest(dat))
 #>   missForest iteration 7 in progress...done!
 #>   missForest iteration 8 in progress...done!
 #>    user  system elapsed 
-#>   0.465   0.000   0.466
+#>   0.445   0.012   0.457
 
 # the errors
 rbind(
@@ -1894,31 +1894,31 @@ show_res(res, iris)
 #> 
 #> Sepal.Length (continuous):
 #>            mdgc      missForest 
-#> 0.5547 (0.0128) 0.5219 (0.0288) 
+#> 0.5547 (0.0128) 0.5130 (0.0268) 
 #> 
 #> Sepal.Width (continuous):
 #>            mdgc      missForest 
-#> 0.8467 (0.0193) 0.7637 (0.0196) 
+#> 0.8467 (0.0193) 0.7319 (0.0222) 
 #> 
 #> Petal.Length (continuous):
 #>            mdgc      missForest 
-#> 0.2992 (0.0263) 0.2416 (0.0281) 
+#> 0.2992 (0.0263) 0.2380 (0.0256) 
 #> 
 #> Petal.Width (continuous):
 #>            mdgc      missForest 
-#> 0.4056 (0.0160) 0.3211 (0.0264) 
+#> 0.4056 (0.0160) 0.3271 (0.0276) 
 #> 
 #> Species (multinomial):
 #>            mdgc      missForest 
-#> 0.1664 (0.0140) 0.0791 (0.0093) 
+#> 0.1664 (0.0140) 0.0875 (0.0092) 
 #> 
 #> user.self (computation time):
 #>            mdgc      missForest 
-#> 1.7395 (0.2563) 1.1407 (0.0926) 
+#> 1.7445 (0.2599) 1.1443 (0.0592) 
 #> 
 #> elapsed (computation time):
 #>            mdgc      missForest 
-#> 0.4454 (0.0638) 4.2976 (0.3413)
+#> 0.4465 (0.0650) 4.1789 (0.2012)
 ```
 
 ### Chemotherapy for Stage B/C Colon Cancer
@@ -1972,7 +1972,7 @@ system.time(
                    iminvls = 2000L, imaxit = 20000L, irel_eps = 1e-3, 
                    lr = 1e-3))
 #>    user  system elapsed 
-#> 113.517   0.008  28.631
+#> 111.549   0.008  28.124
 
 # some of the imputed values
 head(mdgc_res$ximp)
@@ -1998,7 +1998,7 @@ system.time(miss_res <- missForest(miss_forest_arg))
 #>   missForest iteration 7 in progress...done!
 #>   missForest iteration 8 in progress...done!
 #>    user  system elapsed 
-#>  10.228   0.008  10.237
+#>   9.856   0.008   9.864
 
 # turn binary variables back to logicals
 miss_res$ximp[, is_log] <- lapply(
@@ -2011,7 +2011,7 @@ rbind(
   missForest = get_classif_error(
     impu_dat = miss_res$ximp, truth = colon_use, observed = dat))
 #>               rx   sex obstruct perfor adhere differ extent  surg
-#> mdgc       0.643 0.518    0.191 0.0300  0.122  0.260  0.160 0.257
+#> mdgc       0.641 0.520    0.191 0.0300  0.122  0.260  0.160 0.257
 #> missForest 0.588 0.427    0.239 0.0229  0.218  0.439  0.327 0.337
 
 rbind(
@@ -2035,51 +2035,51 @@ show_res(res, colon_use)
 #> 
 #> rx (multinomial):
 #>            mdgc      missForest 
-#> 0.6702 (0.0074) 0.6205 (0.0040) 
+#> 0.6693 (0.0077) 0.6238 (0.0075) 
 #> 
 #> sex (binary):
 #>            mdgc      missForest 
-#> 0.4784 (0.0075) 0.4454 (0.0054) 
+#> 0.4784 (0.0073) 0.4374 (0.0072) 
 #> 
 #> age (continuous):
 #>            mdgc      missForest 
-#> 1.0005 (0.0066) 1.0632 (0.0070) 
+#> 1.0005 (0.0066) 1.0595 (0.0073) 
 #> 
 #> obstruct (binary):
 #>            mdgc      missForest 
-#> 0.2059 (0.0044) 0.2868 (0.0070) 
+#> 0.2059 (0.0044) 0.2858 (0.0047) 
 #> 
 #> perfor (binary):
 #>            mdgc      missForest 
-#> 0.0297 (0.0017) 0.0406 (0.0032) 
+#> 0.0297 (0.0017) 0.0445 (0.0029) 
 #> 
 #> adhere (binary):
 #>            mdgc      missForest 
-#> 0.1510 (0.0037) 0.2365 (0.0081) 
+#> 0.1508 (0.0038) 0.2326 (0.0071) 
 #> 
 #> nodes (continuous):
 #>            mdgc      missForest 
-#> 1.0837 (0.0286) 1.0676 (0.0202) 
+#> 1.0836 (0.0286) 1.0804 (0.0151) 
 #> 
 #> differ (ordinal):
 #>            mdgc      missForest 
-#> 0.2636 (0.0037) 0.4565 (0.0103) 
+#> 0.2636 (0.0037) 0.4562 (0.0097) 
 #> 
 #> extent (ordinal):
 #>            mdgc      missForest 
-#> 0.1825 (0.0032) 0.3417 (0.0095) 
+#> 0.1825 (0.0032) 0.3489 (0.0093) 
 #> 
 #> surg (binary):
 #>            mdgc      missForest 
-#> 0.2652 (0.0041) 0.3585 (0.0107) 
+#> 0.2650 (0.0041) 0.3589 (0.0077) 
 #> 
 #> user.self (computation time):
 #>              mdgc        missForest 
-#> 122.4837 (0.8948)   2.7894 (0.2041) 
+#> 113.6367 (7.6928)   3.0040 (0.1383) 
 #> 
 #> elapsed (computation time):
 #>             mdgc       missForest 
-#> 30.8850 (0.2266) 11.4193 (0.8398)
+#> 28.6709 (1.9266) 11.7794 (0.4941)
 ```
 
 ### Cholesterol Data From a US Survey
@@ -2120,7 +2120,7 @@ system.time(
                    iminvls = 2000L, imaxit = 20000L, irel_eps = 1e-3, 
                    lr = 1e-3))
 #>    user  system elapsed 
-#>  57.432   0.032  14.797
+#>    58.1     0.0    14.9
 
 # some of the imputed values
 head(mdgc_res$ximp)
@@ -2142,7 +2142,7 @@ system.time(miss_res <- missForest(miss_forest_arg))
 #>   missForest iteration 3 in progress...done!
 #>   missForest iteration 4 in progress...done!
 #>    user  system elapsed 
-#>   2.635   0.068   2.702
+#>    2.69    0.04    2.73
 
 # turn binary variables back to logicals
 miss_res$ximp[, is_log] <- lapply(
@@ -2170,27 +2170,27 @@ show_res(res, nhanes_use)
 #> 
 #> HI_CHOL (binary):
 #>            mdgc      missForest 
-#> 0.0997 (0.0016) 0.3212 (0.0152) 
+#> 0.0997 (0.0016) 0.3075 (0.0060) 
 #> 
 #> race (multinomial):
 #>            mdgc      missForest 
-#> 0.5395 (0.0020) 0.7108 (0.0157) 
+#> 0.5395 (0.0020) 0.7118 (0.0136) 
 #> 
 #> agecat (ordinal):
 #>            mdgc      missForest 
-#> 0.6775 (0.0022) 0.6927 (0.0036) 
+#> 0.6775 (0.0022) 0.6946 (0.0039) 
 #> 
 #> RIAGENDR (binary):
 #>            mdgc      missForest 
-#> 0.4953 (0.0034) 0.4875 (0.0023) 
+#> 0.4956 (0.0033) 0.4863 (0.0033) 
 #> 
 #> user.self (computation time):
 #>             mdgc       missForest 
-#> 47.6087 (8.3370)  0.7712 (0.0617) 
+#> 47.4060 (8.2625)  0.8179 (0.0686) 
 #> 
 #> elapsed (computation time):
 #>             mdgc       missForest 
-#> 12.2925 (2.0852)  2.8639 (0.2147)
+#> 12.2692 (2.0692)  2.8193 (0.2150)
 ```
 
 ## References

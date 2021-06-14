@@ -305,7 +305,7 @@ context("restrictcdf unit tests") {
            << 0.00191440588268495 << 0.00196875385020239 << -0.00114337234043834;
 
     double const abs_eps = std::pow(
-      std::numeric_limits<double>::epsilon(), .4);
+      std::numeric_limits<double>::epsilon(), .25);
     {
       restrictcdf::deriv functor(mean, sigma);
       auto res = restrictcdf::cdf<restrictcdf::deriv>(
@@ -389,7 +389,7 @@ context("restrictcdf unit tests") {
            << -0.00150307105427825 << 0.000764221234825768 << -0.00178202876555804;
 
     double const abs_eps = std::pow(
-      std::numeric_limits<double>::epsilon(), .4);
+      std::numeric_limits<double>::epsilon(), .25);
     {
         restrictcdf::deriv functor(mean, sigma);
         auto res = restrictcdf::cdf<restrictcdf::deriv>(
@@ -398,9 +398,9 @@ context("restrictcdf unit tests") {
 
         expect_true(res.inform == 0L);
         expect_true(res.derivs.n_elem + 1 == expect.n_elem);
-        expect_true(std::fabs(res.likelihood - expect[0]) < 1e-5);
+        expect_true(std::fabs(res.likelihood - expect[0]) < 1e-4);
         for(unsigned i = 1; i < expect.n_elem; ++i)
-          expect_true(std::fabs(res.derivs[i - 1] - expect[i]) < 1e-5);
+          expect_true(std::fabs(res.derivs[i - 1] - expect[i]) < 1e-4);
     }
     {
       restrictcdf::deriv functor(mean, sigma);
@@ -410,11 +410,11 @@ context("restrictcdf unit tests") {
 
       expect_true(res.inform == 0L);
       expect_true(res.derivs.n_elem + 1 == expect.n_elem);
-      expect_true(std::fabs(res.likelihood - expect[0]) < 1e-5);
+      expect_true(std::fabs(res.likelihood - expect[0]) < 1e-4);
       for(unsigned i = 1; i < 5L; ++i)
-        expect_true(std::fabs(res.derivs[i - 1] - expect[i]) < 1e-5);
+        expect_true(std::fabs(res.derivs[i - 1] - expect[i]) < 1e-4);
       for(unsigned i = 5; i < expect.n_elem; ++i)
-        expect_true(std::fabs(res.derivs[i - 1] - expect[i]) < 1e-5);
+        expect_true(std::fabs(res.derivs[i - 1] - expect[i]) < 1e-4);
     }
   }
 }
