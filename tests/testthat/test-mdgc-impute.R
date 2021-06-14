@@ -37,6 +37,7 @@ threshold <- function(org_data, imputed){
 
 test_that("mdgc_impute gives the same as before and with and without reordering", {
   skip_on_os("solaris")
+  skip_on_cran()
   p <- 5L
   Sig <- diag(p)
   Sig[lower.tri(Sig)] <- Sig[upper.tri(Sig)] <- .5

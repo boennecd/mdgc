@@ -6,9 +6,9 @@
 * Ubuntu 18.04 LTS with gcc 10.1.0
   R version 3.6.3 with valgrind
 * Ubuntu 18.04 LTS with clang-6.0.0
-  R devel 2021-02-03 r79933 with ASAN and UBSAN
+  R devel 2021-04-12 r80161 with ASAN and UBSAN
 * Ubuntu 18.04 LTS with gcc 10.1.0
-  R devel 2021-02-05 r79941 with ASAN and UBSAN
+  R devel 2021-04-12 r80161 with ASAN and UBSAN
 * Github actions on windows-latest (release), macOS-latest (release), 
   ubuntu-20.04 (release), and ubuntu-20.04 (devel)
 * win-builder (devel, oldrelease, and release)
@@ -22,7 +22,8 @@ clang-6.0.0 which I think are false positives (see below).
 There is a NOTE about the package size in some cases.
 
 The ASAN and UBSAN checks with clang-6.0.0 yields a false positive I think. I 
-get the following:	
+get something like the following (this is from a previous submission but the 
+message I get with the new version is essentially the same):	
 
 > ==29904==ERROR: AddressSanitizer: stack-use-after-scope on address 0x7ffe86462b40 at pc 0x7fc45c2ea579 bp 0x7ffe86462950 sp 0x7ffe86462948	
 > WRITE of size 8 at 0x7ffe86462b40 thread T0	
