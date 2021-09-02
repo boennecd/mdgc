@@ -33,11 +33,11 @@ public:
      int const nf, double const abseps, double const releps,
      double * const MDGC_RESTRICT finest, parallelrng::unif_drawer &sampler){
     /* constants */
-    constexpr int const plim(28L),
+    constexpr int     plim(28L),
                         klim(100L),
                       minsmp(8L);
-    constexpr int const p[plim] = { 31L, 47L, 73L, 113L, 173L, 263L, 397L, 593L, 907L, 1361L, 2053L, 3079L, 4621L, 6947L, 10427L, 15641L, 23473L, 35221L, 52837L, 79259L, 118891L, 178349L, 267523L, 401287L, 601943L, 902933L, 1354471L, 2031713L };
-    constexpr int const C[plim][klim - 1L] = {
+    constexpr int p[plim] = { 31L, 47L, 73L, 113L, 173L, 263L, 397L, 593L, 907L, 1361L, 2053L, 3079L, 4621L, 6947L, 10427L, 15641L, 23473L, 35221L, 52837L, 79259L, 118891L, 178349L, 267523L, 401287L, 601943L, 902933L, 1354471L, 2031713L };
+    constexpr int C[plim][klim - 1L] = {
       { 12L, 9L, 9L, 13L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 3L, 3L, 3L, 12L, 7L, 7L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 3L, 3L, 3L, 12L, 7L, 7L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 3L, 3L, 3L, 12L, 7L, 7L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 3L, 3L, 3L, 12L, 7L, 7L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 12L, 7L, 3L, 3L, 3L, 7L, 7L, 7L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L, 3L },
       { 13L, 11L, 17L, 10L, 15L, 15L, 15L, 15L, 15L, 15L, 22L, 15L, 15L, 6L, 6L, 6L, 15L, 15L, 9L, 13L, 2L, 2L, 2L, 13L, 11L, 11L, 10L, 15L, 15L, 15L, 15L, 15L, 15L, 15L, 15L, 15L, 6L, 6L, 6L, 15L, 15L, 9L, 13L, 2L, 2L, 2L, 13L, 11L, 11L, 10L, 15L, 15L, 15L, 15L, 15L, 15L, 15L, 15L, 15L, 6L, 6L, 6L, 15L, 15L, 9L, 13L, 2L, 2L, 2L, 13L, 11L, 11L, 10L, 10L, 15L, 15L, 15L, 15L, 15L, 15L, 15L, 15L, 6L, 2L, 3L, 2L, 3L, 2L, 2L, 2L, 2L, 2L, 2L, 2L, 2L, 2L, 2L, 2L, 2L },
       { 27L, 28L, 10L, 11L, 11L, 20L, 11L, 11L, 28L, 13L, 13L, 28L, 13L, 13L, 13L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 31L, 31L, 5L, 5L, 5L, 31L, 13L, 11L, 11L, 11L, 11L, 11L, 11L, 13L, 13L, 13L, 13L, 13L, 13L, 13L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 14L, 31L, 31L, 5L, 5L, 5L, 11L, 13L, 11L, 11L, 11L, 11L, 11L, 11L, 11L, 13L, 13L, 11L, 13L, 5L, 5L, 5L, 5L, 14L, 13L, 5L, 5L, 5L, 5L, 5L, 5L, 5L, 5L },
@@ -98,7 +98,7 @@ public:
         sampls = std::max(minsmp, static_cast<int>(minvls / (2L * p[np])));
     }
 
-    constexpr size_t const maxit(1000L);
+    constexpr size_t maxit(1000L);
     size_t intvls(0L);
     int inform(1L);
     double abserr(std::numeric_limits<double>::infinity());

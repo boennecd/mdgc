@@ -6,6 +6,11 @@
 
 using namespace Rcpp;
 
+#ifdef RCPP_USE_GLOBAL_ROSTREAM
+Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
+Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
+#endif
+
 // get_log_lm_terms_cpp
 SEXP get_log_lm_terms_cpp(arma::mat const& lower, arma::mat const& upper, arma::imat const& code, Rcpp::List multinomial, arma::uvec const idx_non_zero_mean);
 RcppExport SEXP _mdgc_get_log_lm_terms_cpp(SEXP lowerSEXP, SEXP upperSEXP, SEXP codeSEXP, SEXP multinomialSEXP, SEXP idx_non_zero_meanSEXP) {

@@ -21,7 +21,7 @@ double qnorm_w(double const p, double const mu, double const sigma,
  *    ALGORITHM AS241 APPL. STATIST. (1988) VOL. 37, NO. 3
  */
 inline double qnorm_aprx(double const p) MDGC_NOEXCEPT {
-  constexpr double const split1 = .425,
+  constexpr double       split1 = .425,
                          split2 = 5,
                          const1 = .180625,
                          const2 = 1.6,

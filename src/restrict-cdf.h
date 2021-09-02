@@ -58,7 +58,7 @@ extern "C"
 }
 
 inline double safe_qnorm_w(double const x) MDGC_NOEXCEPT {
-  constexpr double const eps =
+  constexpr double eps =
     std::numeric_limits<double>::epsilon() *
     std::numeric_limits<double>::epsilon() *
     std::numeric_limits<double>::epsilon();
@@ -71,7 +71,7 @@ inline double safe_qnorm_w(double const x) MDGC_NOEXCEPT {
 }
 
 inline double safe_qnorm_aprx(double const x) MDGC_NOEXCEPT {
-  constexpr double const eps =
+  constexpr double eps =
     std::numeric_limits<double>::epsilon() *
     std::numeric_limits<double>::epsilon() *
     std::numeric_limits<double>::epsilon();
@@ -466,7 +466,7 @@ public:
     return 1L;
   }
 
-  inline void operator()
+  void operator()
   (double const *, double * out, int const *, bool const,
    double const *w, int const n_draws)
   MDGC_NOEXCEPT {
@@ -483,7 +483,7 @@ public:
     return false;
   }
 
-  inline static void univariate(double * out,
+  static void univariate(double * out,
                                 double const lw, double const ub) {
     double const p_ub = std::isinf(ub) ? 1 : pnorm_std(ub, 1L, 0L),
       p_lb = std::isinf(lw) ? 0 : pnorm_std(lw, 1L, 0L);
@@ -511,7 +511,7 @@ public:
                       int const *){
     return out_type { minvls, inform, abserr, *res };
   }
-  inline void prep_sim(arma::mat const&, int const *, bool const) { }
+  void prep_sim(arma::mat const&, int const *, bool const) { }
 };
 
 /**
@@ -535,7 +535,7 @@ class deriv {
   /// working memory for operator()
   double * const internal_mem = cdf_mem + get_n_integrands(ndim);
 
-  inline void deriv_integrand_inner_loop
+  void deriv_integrand_inner_loop
     (double * MDGC_RESTRICT o, double const * MDGC_RESTRICT scaled_samp,
      int const c, int const n_draws) MDGC_NOEXCEPT {
 
@@ -581,11 +581,11 @@ public:
     copy_upper_tri(t1, sig_inv);
   }
 
-  inline static int get_n_integrands(int const x) MDGC_NOEXCEPT {
+  static int get_n_integrands(int const x) MDGC_NOEXCEPT {
     return 1 + x + (x * (x + 1)) / 2L;
   }
 
-  inline int get_n_integrands() MDGC_NOEXCEPT {
+  int get_n_integrands() MDGC_NOEXCEPT {
     return get_n_integrands(ndim);
   }
 
@@ -597,7 +597,7 @@ public:
     return true;
   }
 
-  inline void operator()
+  void operator()
   (double const * MDGC_RESTRICT draw, double * MDGC_RESTRICT out,
    int const *indices, bool const is_permutated, double const *w,
    int const n_draws) {
@@ -638,8 +638,8 @@ public:
     }
   }
 
-  inline void univariate(double * out, double const lw, double const ub) {
-    constexpr double const sqrt_2_pi_inv = 0.398942280401433;
+  void univariate(double * out, double const lw, double const ub) {
+    constexpr double sqrt_2_pi_inv = 0.398942280401433;
     auto dnrm = [&](double const x){
       return std::exp(-x * x / 2.) * sqrt_2_pi_inv;
     };
@@ -789,13 +789,13 @@ public:
   class known final : public type_base {
     int const n_latent_val;
   public:
-    inline int n_latent() const MDGC_NOEXCEPT {
+    int n_latent() const MDGC_NOEXCEPT {
       return n_latent_val;
     }
-    inline int n_ele() const MDGC_NOEXCEPT {
+    int n_ele() const MDGC_NOEXCEPT {
       return 0L;
     };
-    inline void set_val(double const *, double * MDGC_RESTRICT,
+    void set_val(double const *, double * MDGC_RESTRICT,
                         double const)
       const MDGC_NOEXCEPT { };
 
@@ -804,15 +804,15 @@ public:
 
   class contin final : public type_base {
   public:
-    inline int n_latent() const MDGC_NOEXCEPT {
+    int n_latent() const MDGC_NOEXCEPT {
       return 1L;
     }
 
-    inline int n_ele() const MDGC_NOEXCEPT {
+    int n_ele() const MDGC_NOEXCEPT {
       return 1L;
     }
 
-    inline void set_val(double const *v, double * MDGC_RESTRICT res,
+    void set_val(double const *v, double * MDGC_RESTRICT res,
                         double const weight)
     const MDGC_NOEXCEPT {
       *res += weight * *v;
@@ -825,15 +825,15 @@ public:
 
     binary(double const border): border(border) { }
 
-    inline int n_latent() const MDGC_NOEXCEPT {
+    int n_latent() const MDGC_NOEXCEPT {
       return 1L;
     }
 
-    inline int n_ele() const MDGC_NOEXCEPT {
+    int n_ele() const MDGC_NOEXCEPT {
       return 2L;
     }
 
-    inline void set_val(double const *v, double * MDGC_RESTRICT res,
+    void set_val(double const *v, double * MDGC_RESTRICT res,
                         double const weight)
       const MDGC_NOEXCEPT {
       if(*v < border)
@@ -868,15 +868,15 @@ public:
       return out;
     })()) { }
 
-    inline int n_latent() const MDGC_NOEXCEPT {
+    int n_latent() const MDGC_NOEXCEPT {
       return 1L;
     }
 
-    inline int n_ele() const MDGC_NOEXCEPT {
+    int n_ele() const MDGC_NOEXCEPT {
       return n_bs + 1L;
     }
 
-    inline void set_val(double const *v, double * MDGC_RESTRICT res,
+    void set_val(double const *v, double * MDGC_RESTRICT res,
                         double const weight)
     const MDGC_NOEXCEPT {
       int i = 0L;
@@ -983,7 +983,7 @@ public:
     std::copy(cdf_mem, cdf_mem + ndim, mu_vec);
   }
 
-  static inline int
+  static int
   get_n_integrands(std::vector<type_base const *> const &ls) MDGC_NOEXCEPT {
     int out(1L);
     for(auto &x : ls)
@@ -991,7 +991,7 @@ public:
     return out;
   }
 
-  inline int get_n_integrands() MDGC_NOEXCEPT {
+  int get_n_integrands() MDGC_NOEXCEPT {
     return n_integrands_val;
   }
 
@@ -1003,7 +1003,7 @@ public:
     return true;
   }
 
-  inline void operator()
+  void operator()
   (double const * MDGC_RESTRICT draw, double * MDGC_RESTRICT out,
    int const *indices, bool const is_permutated, double const *w,
    int const n_draws){
@@ -1054,7 +1054,7 @@ public:
     }
   }
 
-  inline void univariate(double * out, double const lw, double const ub) {
+  void univariate(double * out, double const lw, double const ub) {
     throw std::runtime_error("imputation::univariate: not implemented");
   }
 

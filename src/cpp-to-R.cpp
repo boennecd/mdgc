@@ -711,7 +711,7 @@ Rcpp::List impute
              k      (0L),
              n_D_col(0L);
       arma::imat const &cate_mat_i = cate_mat[i];
-      constexpr double const inf =
+      constexpr double inf =
         std::numeric_limits<double>::infinity();
       D.zeros(n_vars, cate_mat_i.n_cols);
 

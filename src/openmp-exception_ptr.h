@@ -11,7 +11,7 @@ class openmp_exception_ptr {
   // std::exception_ptr Ptr = nullptr;
   bool is_set = false;
 public:
-  inline void rethrow_if_error(){
+  void rethrow_if_error(){
 #ifdef _OPENMP
     // if(this->Ptr)
     //   std::rethrow_exception(this->Ptr);

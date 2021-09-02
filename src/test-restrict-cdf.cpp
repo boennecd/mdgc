@@ -40,7 +40,7 @@ context("restrictcdf unit tests") {
 
     double const abs_eps = std::pow(std::numeric_limits<double>::epsilon(),
                                    .33);
-    double constexpr const E_prop(0.0181507102495727);
+    double constexpr E_prop(0.0181507102495727);
     {
       restrictcdf::likelihood functor;
       auto res = restrictcdf::cdf<restrictcdf::likelihood>(
@@ -83,7 +83,7 @@ context("restrictcdf unit tests") {
      */
     std::vector<unsigned> seeds = { 1L };
     parallelrng::set_rng_seeds(seeds);
-    constexpr double const Inf = std::numeric_limits<double>::infinity();
+    constexpr double Inf = std::numeric_limits<double>::infinity();
 
     arma::vec lower, upper, mean;
     arma::mat sigma;
@@ -137,7 +137,7 @@ context("restrictcdf unit tests") {
  }, l = lbs, u = ubs))
  */
     arma::vec lbs, ubs, expect;
-    constexpr double const Inf = std::numeric_limits<double>::infinity();
+    constexpr double Inf = std::numeric_limits<double>::infinity();
     lbs << -1  << -Inf << -.5;
     ubs << Inf << 1    << 2;
     expect << 0.953233743655453 << 0.711924938984711 << 0.821457505013967;
@@ -199,7 +199,7 @@ context("restrictcdf unit tests") {
    */
     arma::vec lbs, ubs;
     arma::mat expect;
-    constexpr double const Inf = std::numeric_limits<double>::infinity();
+    constexpr double Inf = std::numeric_limits<double>::infinity();
     lbs << -1  << -Inf << -.5;
     ubs << Inf << 1    << 2;
     expect << 0.953233743655453 << 0.109304604505804  << -0.102473066720416
@@ -369,7 +369,7 @@ context("restrictcdf unit tests") {
 
     arma::vec lower, upper, mean;
     arma::mat sigma;
-    constexpr double const Inf = std::numeric_limits<double>::infinity();
+    constexpr double Inf = std::numeric_limits<double>::infinity();
 
     lower << -Inf  << -1    << 1     << -Inf;
     upper << 1     << Inf   << 3     << 2;
