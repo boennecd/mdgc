@@ -34,16 +34,11 @@ context("pmvnorm unit tests") {
     parallelrng::set_rng_seeds(1L);
     constexpr double Inf = std::numeric_limits<double>::infinity();
 
-    arma::vec lower, upper, mean;
-    arma::mat sigma;
-
-    lower << -Inf << 0.184 << -Inf << 1.595;
-    upper << 1.004 << Inf << Inf << 2.334;
-    mean << 0.576 << -0.305 << 1.512 << 0.39;
-
-    sigma << 4.869 << -0.099 << 0.961 << 1.726 << -0.099 << 5.01 << -2.789
-          << 0.132 << 0.961 << -2.789 << 6.67 << -4.177 << 1.726 << 0.132
-          << -4.177 << 7.966;
+    arma::vec lower({ -Inf, 0.184, -Inf, 1.595 }),
+      upper( { 1.004, Inf, Inf, 2.334 }),
+      mean( {  0.576,-0.305, 1.512, 0.39 });
+    arma::mat sigma( { 4.869, -0.099, 0.961, 1.726, -0.099, 5.01, -2.789,
+	0.132, 0.961, -2.789, 6.67, -4.177, 1.726, 0.132, -4.177, 7.966 } );
     sigma.reshape(4L, 4L);
 
     double const abs_eps = std::sqrt(std::numeric_limits<double>::epsilon());
