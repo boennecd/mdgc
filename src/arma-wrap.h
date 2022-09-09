@@ -12,7 +12,10 @@
 #define ARMA_NO_DEBUG
 #endif
 
-#define ARMA_DONT_PRINT_ERRORS
+#ifdef ARMA_WARN_LEVEL
+#undef ARMA_WARN_LEVEL
+#endif
+#define ARMA_WARN_LEVEL 1
 
 #include <RcppArmadillo.h>
 
