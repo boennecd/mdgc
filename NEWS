@@ -1,3 +1,6 @@
+Changes in version 0.1.6
+* deal with a deprecated `<<` operator for `arma` objects in version 11.2.3.
+
 Changes in version 0.1.5
  * better usage of single instruction, multiple data (SIMD) when compiling with
    e.g. -O3 -mtune=native.
