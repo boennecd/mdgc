@@ -55,7 +55,7 @@ extern "C"
 /**
  * samples from a standard normal distribution.
  */
-double rngnorm_wrapper ();
+double rngnorm_wrapper (void);
 /**
  * samples from a beta distribution.
  */
@@ -67,7 +67,7 @@ double rnggamma_wrapper(double const);
 /**
  * samples from a uniform distribution.
  */
-double rngunif_wrapper ();
+double rngunif_wrapper (void);
 
 #ifdef __cplusplus
 }

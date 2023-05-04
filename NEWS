@@ -1,3 +1,6 @@
+Changes in version 0.1.7
+* Fixed a C warning.
+
 Changes in version 0.1.6
 * deal with a deprecated `<<` operator for `arma` objects in version 11.2.3.
 
