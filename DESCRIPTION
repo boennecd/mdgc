@@ -42,4 +42,3 @@ Imports:
 Suggests: 
     testthat,
     catdata
-SystemRequirements: C++14
