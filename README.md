@@ -62,22 +62,20 @@ $\mathcal B$, $\mathcal O$, and $\mathcal M$ are mutually exclusive.
 We assume that there is a latent variable $\vec Z_i$ which is
 multivariate normally distributed as follows.
 
-$$
-\begin{aligned}
+$$\begin{aligned}
 \vec Z_i & \sim N\left(\vec\mu, \Sigma\right) \\
 X_{ij} &= f_j(Z_{ih(j)}) & j &\in \mathcal C \\
 X_{ij} &= 1_{\lbrace Z_{ih(j)} > \underbrace{-\Phi^{-1}(p_{j})}_{\mu_{h(j)}}\rbrace} & j &\in \mathcal B \\
 X_{ij} &= k\Leftrightarrow \alpha_{jk} < Z_{ih(j)} \leq \alpha_{j,k + 1} & j &\in \mathcal O\wedge k = 0,\dots m_j -1 \\
 X_{ij} &= k \Leftrightarrow Z_{i,h(j) + k} \geq
   \max(Z_{ih(j)},\cdots,Z_{i,h(j) + m_j - 1}) & j&\in \mathcal M \wedge k = 0,\dots m_j -1
-\end{aligned}
-$$
+\end{aligned}$$
 
-where $1_{\lbrace\cdot\rbrace}$ is one if the condition in the subscript is true
-and zero otherwise, $h(j)$ is a map to the index of the first latent
-variable associated with the j’th variable in $\vec X_i$ and $f_j$ is a
-bijective function. We only estimate some of the means, the $\vec\mu$,
-and some of the covariance parameters. Furthermore, we set
+where $1_{\lbrace\cdot\rbrace}$ is one if the condition in the subscript
+is true and zero otherwise, $h(j)$ is a map to the index of the first
+latent variable associated with the j’th variable in $\vec X_i$ and
+$f_j$ is a bijective function. We only estimate some of the means, the
+$\vec\mu$, and some of the covariance parameters. Furthermore, we set
 $Z_{ih(j)} = 0$ if $j\in\mathcal M$ and assume that the variable is
 uncorrelated with all the other $\vec Z_i$’s.
 
