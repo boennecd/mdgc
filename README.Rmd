@@ -1,7 +1,7 @@
 ---
 output:
   github_document:
-    pandoc_args: --webtex=https://render.githubusercontent.com/render/math?math=
+    math_method: default
 bibliography: ref.bib
 ---
 
@@ -16,10 +16,9 @@ options(digits = 3)
 
 # mdgc
 
-[![R-CMD-check](https://github.com/boennecd/mdgc/workflows/R-CMD-check/badge.svg)](https://github.com/boennecd/mdgc/actions) 
-[![](https://www.r-pkg.org/badges/version/mdgc)](http://cran.rstudio.com/web/packages/mdgc/index.html) 
-[![CRAN RStudio mirror
-downloads](http://cranlogs.r-pkg.org/badges/mdgc)](http://cran.rstudio.com/web/packages/mdgc/index.html)
+[![R-CMD-check](https://github.com/boennecd/mdgc/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/boennecd/mdgc/actions/workflows/R-CMD-check.yaml)
+[![CRAN version](https://www.r-pkg.org/badges/version/mdgc)](https://CRAN.R-project.org/package=mdgc)
+[![CRAN downloads](https://cranlogs.r-pkg.org/badges/last-month/mdgc)](https://cranlogs.r-pkg.org/)
 
 This package contains a marginal likelihood approach to estimating the 
 model discussed by @hoff07, @zhao20, and @zhao20Mat. That is, a missing data approach
@@ -70,29 +69,20 @@ multinomial if $j\in\mathcal M$ with $m_j$ levels. $\mathcal C$,
 $\mathcal B$, $\mathcal O$, and $\mathcal M$ are mutually exclusive.
 
 We assume that there is
-a latent variable $\vec Z_i$ which is multivariate normally distributed such 
-that:
+a latent variable $\vec Z_i$ which is multivariate normally distributed as follows.
 
-<!-- $$ -->
-<!-- \begin{align*} -->
-<!-- \vec Z_i & \sim N\left(\vec\mu, -->
-<!--   \Sigma\right) \nonumber\\ -->
-<!-- X_{ij} &= f_j(Z_{ih(j)}) & j &\in \mathcal C \\ -->
-<!-- X_{ij} &= \begin{cases} -->
-<!--   1 & Z_{ij} > \underbrace{-\Phi^{-1}(p_{j})}_{\mu_{h(j)}} \\ -->
-<!--   0 & \text{otherwise}   -->
-<!-- \end{cases} & j &\in \mathcal B \\ -->
-<!-- X_{ij} &= k\Leftrightarrow \alpha_{jk} < Z_{ih(j)} \leq \alpha_{j,k + 1} -->
-<!--   & j &\in \mathcal O\wedge k = 0,\dots m_j -1 \\ -->
-<!-- X_{ij} &= k \Leftrightarrow Z_{i,h(j) + k} \geq -->
-<!--   \max(Z_{ih(j)},\cdots,Z_{i,h(j) + m_j - 1}) -->
-<!--   & j&\in \mathcal M \wedge k = 0,\dots m_j -1 -->
-<!-- \end{align*} -->
-<!-- $$ -->
+$$
+\begin{aligned}
+\vec Z_i & \sim N\left(\vec\mu, \Sigma\right) \\
+X_{ij} &= f_j(Z_{ih(j)}) & j &\in \mathcal C \\
+X_{ij} &= 1_{\lbrace Z_{ih(j)} > \underbrace{-\Phi^{-1}(p_{j})}_{\mu_{h(j)}}\rbrace} & j &\in \mathcal B \\
+X_{ij} &= k\Leftrightarrow \alpha_{jk} < Z_{ih(j)} \leq \alpha_{j,k + 1} & j &\in \mathcal O\wedge k = 0,\dots m_j -1 \\
+X_{ij} &= k \Leftrightarrow Z_{i,h(j) + k} \geq
+  \max(Z_{ih(j)},\cdots,Z_{i,h(j) + m_j - 1}) & j&\in \mathcal M \wedge k = 0,\dots m_j -1
+\end{aligned}
+$$
 
-$$\begin{align*}  \vec Z_i & \sim N\left(\vec\mu,    \Sigma\right) \nonumber\\  X_{ij} &= f_j(Z_{ih(j)}) & j &\in \mathcal C \\  X_{ij} &= 1_{\{Z_{ih(j)} > \underbrace{-\Phi^{-1}(p_{j})}_{\mu_{h(j)}}\}} & j &\in \mathcal B \\  X_{ij} &= k\Leftrightarrow \alpha_{jk} < Z_{ih(j)} \leq \alpha_{j,k + 1}    & j &\in \mathcal O\wedge k = 0,\dots m_j -1 \\  X_{ij} &= k \Leftrightarrow Z_{i,h(j) + k} \geq    \max(Z_{ih(j)},\cdots,Z_{i,h(j) + m_j - 1})    & j&\in \mathcal M \wedge k = 0,\dots m_j -1  \end{align*}$$
-
-where $1_{\{\cdot\}}$ is one if the condition in the subscript is true and zero 
+where $1_{\lbrace\cdot\rbrace}$ is one if the condition in the subscript is true and zero
 otherwise, $h(j)$ is a map to the index of the first latent variable associated with 
 the j'th variable in $\vec X_i$ and $f_j$ is a bijective function. We only 
 estimate some of the means, the $\vec\mu$, and some of the covariance 

@@ -115,9 +115,9 @@ test_that("imputation with ordinal variables yields the correct probabilities", 
   code  <- rbind(c(2L, 2L, 2L, 2L), c(2L, 2L, 2L, 2L),
                  c(1L, 1L, 1L, 1L))
 
-  margs <- list(structure(list(), borders = c(-Inf, 0, Inf), mean = 10),
-                structure(list(), borders = c(-Inf, 0, Inf), mean = -90),
-                structure(list(), levels = letters[1:4], borders = bs))
+  margs <- list(structure(identity, borders = c(-Inf, 0, Inf), mean = 10),
+                structure(identity, borders = c(-Inf, 0, Inf), mean = -90),
+                structure(identity, levels = letters[1:4], borders = bs))
 
   passed_names <- list(c("FALSE", "TRUE"), c("FALSE", "TRUE"), letters[1:4])
   outer_names <- c("B1", "B2", "O1")
@@ -188,9 +188,9 @@ test_that("imputation with ordinal variables yields the correct probabilities", 
                  rep(b2[-1], 3))
   code  <- rbind(rep(0L, 9), rep(1L, 9), rep(2L, 9))
 
-  margs <- list(list(),
-                structure(list(), levels = letters[1:4], borders = b1),
-                structure(list(), levels = letters[1:3], borders = b2))
+  margs <- list(identity,
+                structure(identity, levels = letters[1:4], borders = b1),
+                structure(identity, levels = letters[1:3], borders = b2))
 
   passed_names <- list("", letters[1:4], letters[1:3])
   outer_names <- c("C1", "O1", "O2")
